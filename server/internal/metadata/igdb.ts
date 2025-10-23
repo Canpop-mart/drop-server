@@ -246,7 +246,11 @@ export class IGDBProvider implements MetadataProvider {
     return <T[]>response.data;
   }
 
-  private async _getMediaInternal(mediaID: IGDBID, type: string, size: string = "t_thumb" ) {
+  private async _getMediaInternal(
+    mediaID: IGDBID,
+    type: string,
+    size: string = "t_thumb",
+  ) {
     if (mediaID === undefined)
       throw new Error(
         `IGDB mediaID when getting item of type ${type} was undefined`,
@@ -371,7 +375,7 @@ export class IGDBProvider implements MetadataProvider {
     } else {
       context?.logger.info("Missing cover URL, using fallback...");
       iconRaw = jdenticon.toPng(id, 512);
-      coverRaw = iconRaw
+      coverRaw = iconRaw;
     }
 
     const icon = createObject(iconRaw);
@@ -469,7 +473,10 @@ export class IGDBProvider implements MetadataProvider {
 
     if (currentGame.summary.length > (currentGame.storyline?.length ?? 0)) {
       description = currentGame.summary;
-      shortDescription = this.trimMessage(currentGame.storyline ?? currentGame.summary, 280);
+      shortDescription = this.trimMessage(
+        currentGame.storyline ?? currentGame.summary,
+        280,
+      );
     } else {
       description = currentGame.storyline ?? currentGame.summary;
       shortDescription = this.trimMessage(currentGame.summary, 280);
