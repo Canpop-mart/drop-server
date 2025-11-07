@@ -1,5 +1,6 @@
 import type { GameVersionModel } from "~/prisma/client/models";
 import prisma from "../db/database";
+import { sum } from "~/utils/array";
 
 export type DropChunk = {
   permissions: number;
@@ -101,6 +102,14 @@ class ManifestGenerator {
     );
 
     return manifest;
+  }
+
+  calculateManifestSize(manifest: DropManifest) {
+    return sum(
+      Object.values(manifest)
+        .map((chunk) => chunk.lengths)
+        .flat(),
+    );
   }
 }
 

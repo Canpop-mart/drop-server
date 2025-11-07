@@ -15,6 +15,8 @@ import { GameNotFoundError, type LibraryProvider } from "./provider";
 import { logger } from "../logging";
 import type { GameModel } from "~/prisma/client/models";
 import { createHash } from "node:crypto";
+import type { WorkingLibrarySource } from "~/server/api/v1/admin/library/sources/index.get";
+import gameSizeManager from "~/server/internal/gamesize";
 
 export function createGameImportTaskId(libraryId: string, libraryPath: string) {
   return createHash("md5")
@@ -39,13 +41,19 @@ class LibraryManager {
     this.libraries.delete(id);
   }
 
-  async fetchLibraries() {
+  async fetchLibraries(): Promise<WorkingLibrarySource[]> {
     const libraries = await prisma.library.findMany({});
-    const libraryWithMetadata = libraries.map((e) => ({
-      ...e,
-      working: this.libraries.has(e.id),
-    }));
-    return libraryWithMetadata;
+
+    const libraryWithMetadata = libraries.map(async (library) => {
+      const theLibrary = this.libraries.get(library.id);
+      const working = this.libraries.has(library.id);
+      return {
+        ...library,
+        working,
+        fsStats: working ? theLibrary?.fsStats() : undefined,
+      };
+    });
+    return await Promise.all(libraryWithMetadata);
   }
 
   async fetchGamesByLibrary() {
@@ -334,6 +342,8 @@ class LibraryManager {
           acls: ["system:import:version:read"],
         });
 
+        await libraryManager.cacheCombinedGameSize(gameId);
+        await libraryManager.cacheGameVersionSize(gameId, versionName);
         progress(100);
       },
     });
@@ -362,6 +372,68 @@ class LibraryManager {
     const library = this.libraries.get(libraryId);
     if (!library) return undefined;
     return await library.readFile(game, version, filename, options);
+  }
+
+  async deleteGameVersion(gameId: string, version: string) {
+    await prisma.gameVersion.delete({
+      where: {
+        gameId_versionName: {
+          gameId: gameId,
+          versionName: version,
+        },
+      },
+    });
+
+    await gameSizeManager.deleteGameVersion(gameId, version);
+  }
+
+  async deleteGame(gameId: string) {
+    await prisma.game.delete({
+      where: {
+        id: gameId,
+      },
+    });
+    gameSizeManager.deleteGame(gameId);
+  }
+
+  async getGameVersionSize(
+    gameId: string,
+    versionName?: string,
+  ): Promise<number | null> {
+    return gameSizeManager.getGameVersionSize(gameId, versionName);
+  }
+
+  async getBiggestGamesCombinedVersions(top: number) {
+    if (await gameSizeManager.isGameSizesCacheEmpty()) {
+      await gameSizeManager.cacheAllCombinedGames();
+    }
+    return gameSizeManager.getBiggestGamesAllVersions(top);
+  }
+
+  async getBiggestGamesLatestVersions(top: number) {
+    if (await gameSizeManager.isGameVersionsSizesCacheEmpty()) {
+      await gameSizeManager.cacheAllGameVersions();
+    }
+    return gameSizeManager.getBiggestGamesLatestVersion(top);
+  }
+
+  async cacheCombinedGameSize(gameId: string) {
+    const game = await prisma.game.findFirst({ where: { id: gameId } });
+    if (!game) {
+      return;
+    }
+    await gameSizeManager.cacheCombinedGame(game);
+  }
+
+  async cacheGameVersionSize(gameId: string, versionName: string) {
+    const game = await prisma.game.findFirst({
+      where: { id: gameId },
+      include: { versions: true },
+    });
+    if (!game) {
+      return;
+    }
+    await gameSizeManager.cacheGameVersion(game, versionName);
   }
 }
 
