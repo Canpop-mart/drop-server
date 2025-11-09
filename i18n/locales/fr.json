@@ -3,16 +3,16 @@
     "devices": {
       "capabilities": "Capacités",
       "lastConnected": "Dernière Connexion",
-      "noDevices": "Aucun appareil n'est connecté à vôtre compte.",
+      "noDevices": "Aucun appareil connecté à vôtre compte.",
       "platform": "Plateforme",
       "revoke": "Révoquer",
       "subheader": "Gérer les appareils authorisés à accéder à votre compte Drop.",
       "title": "Appareils"
     },
     "notifications": {
-      "all": "Tout voir {arrow}",
+      "all": "Voir tout {arrow}",
       "desc": "Voir et gérer vos notifications.",
-      "markAllAsRead": "Tout marqué comme lu",
+      "markAllAsRead": "Marquer tout comme lu",
       "markAsRead": "Marquer comme lu",
       "none": "Pas de notification",
       "notifications": "Notifications",
@@ -62,6 +62,7 @@
       "description": "Utiliser un code pour vous connecter à votre client Drop si vous ne pouvez pas ouvrir un navigateur web sur votre appareil.",
       "title": "Connecter votre client Drop"
     },
+    "confirmPassword": "Confirmez @:auth.password",
     "displayName": "Nom d'Affichage",
     "email": "Email",
     "password": "Mot de passe",
@@ -147,6 +148,7 @@
     "auth": {
       "disabled": "Compte invalide or désactivé. Merci de contacter l'administrateur du serveur.",
       "invalidInvite": "Invitation invalide ou expirée",
+      "invalidPassState": "Le mot de passe enregistré est invalide. Merci de contacter l'administrateur du serveur.",
       "invalidUserOrPass": "Nom d'utilisateur ou password invalide.",
       "inviteIdRequired": "id est requis pour récupérer l'invitation",
       "method": {
@@ -155,6 +157,10 @@
       "usernameTaken": "Nom d'utilisateur déjà pris."
     },
     "backHome": "{arrow} Retour a l'accueil",
+    "externalUrl": {
+      "subtitle": "Ce message n'est visible qu'aux administrateurs.",
+      "title": "Accès via une EXTERNAL_URL différente. Veuillez consulter la documentation."
+    },
     "game": {
       "banner": {
         "description": "Drop a échoué a mettre à jour l'image de la bannière : {0}",
@@ -215,6 +221,7 @@
     "revokeClient": "Échec de la révocation du client",
     "revokeClientFull": "Échec de la revocation du client {0}",
     "signIn": "Se connecter {arrow}",
+    "support": "Assistance Discord",
     "unknown": "Une erreur inconnue est survenue",
     "upload": {
       "description": "Drop n'a pas pu uploader le fichier : {0}",
@@ -254,7 +261,11 @@
     "admin": {
       "admin": "Administration",
       "metadata": "Méta",
-      "settings": "Paramètres",
+      "settings": {
+        "store": "Store",
+        "title": "Paramètres",
+        "tokens": "API tokens"
+      },
       "tasks": "Tâches",
       "users": "Utilisateurs"
     },
@@ -327,6 +338,8 @@
         },
         "withoutMetadata": "Importer sans les données méta"
       },
+      "libraryHint": "Pas de bibliothèque configurée.",
+      "libraryHintDocsLink": "Qu'est-ce que cela veut dire ? {arrow}",
       "metadata": {
         "companies": {
           "action": "Gérer {arrow}",
@@ -340,15 +353,25 @@
           "description": "Les sociétés organisent les jeux par qui les a développer ou éditer.",
           "editor": {
             "action": "Ajouter un jeu {plus}",
+            "descriptionPlaceholder": "{'<'}description{'>'}",
             "developed": "Développé",
             "libraryDescription": "Ajouter, supprimer ou personnaliser ce que cette société a développé et/ou publié.",
             "libraryTitle": "Bibliothèque de jeux",
             "noDescription": "(pas de description)",
             "published": "Publié",
             "uploadBanner": "Uploader bannière",
-            "uploadIcon": "Uplader icône"
+            "uploadIcon": "Uplader icône",
+            "websitePlaceholder": "{'<'}site web{'>'}"
           },
           "modals": {
+            "createDescription": "Créez une société pour mieux organizer vos jeux.",
+            "createFieldDescription": "Description de la Société",
+            "createFieldDescriptionPlaceholder": "Un petit studio indépendant qui...",
+            "createFieldName": "Nom de la société",
+            "createFieldNamePlaceholder": "Ma nouvelle société...",
+            "createFieldWebsite": "Site web de la société",
+            "createFieldWebsitePlaceholder": "https://exemple com/",
+            "createTitle": "Créer une société",
             "nameDescription": "Éditer le nom de la société. Ce nom est utilisé pour trouver les jeux nouvellement importés.",
             "nameTitle": "Éditer le nom de la société",
             "shortDeckDescription": "Éditer la description de la company. Cela n'affecte pas la description longue (markdown).",
@@ -384,12 +407,15 @@
         "create": "Créer une source",
         "createDesc": "Drop va utiliser cette source pour accéder à votre bibliothèque de jeux, et les rendre disponible.",
         "desc": "Configurer vos sources de bibliothèques où Drop va regarder pour les nouveaux jeux et versions à importer.",
+        "documentationLink": "Documentation {arrow}",
         "edit": "Éditer la source",
         "fsDesc": "Importe les jeux à partir d'un chemin d'accès sur le disque. Cela requière une structure des dossiers basées sur la version, et qui supporte les jeux archivés.",
         "fsFlatDesc": "Importe les jeux à partir d'un chemin d’accès sur le disque, mais sans le sous-dossier version séparé. Utile pour migrer une bibliothèque vers Drop.",
+        "fsFlatTitle": "Compatibilité",
         "fsPath": "Chemin d’accès",
         "fsPathDesc": "Un chemin d’accès absolu à votre bibliothèque de jeux.",
         "fsPathPlaceholder": "/mnt/jeux",
+        "fsTitle": "Drop-style",
         "link": "Sources {arrow}",
         "nameDesc": "Le nom de votre source, pour référence.",
         "namePlaceholder": "Mes Nouvelle Source",
@@ -447,6 +473,7 @@
     "checkLater": "Vérifier plus tard pour les mises à jour.",
     "delete": "Supprimer l'Article",
     "filter": {
+      "all": "Tous les temps",
       "month": "Ce mois",
       "week": "Cette semaine",
       "year": "Cette année"
@@ -509,15 +536,19 @@
   "store": {
     "about": "À propos",
     "commingSoon": "prochainement",
+    "developers": "Développeurs | Développeur | Développeurs",
     "exploreMore": "Explorer plus {arrow}",
     "featured": "Mis en avant",
     "images": "Images de Jeux",
+    "lookAt": "Découvrez le maintenant",
     "noDevelopers": "Pas de développeur",
-    "noGame": "pas de jeu",
+    "noFeatured": "PAS DE JEU MIS EN AVANT",
+    "noGame": "PAS DE JEU",
     "noImages": "Pas d'image",
     "noPublishers": "Pas d'éditeur.",
     "noTags": "Pas de tag",
     "openAdminDashboard": "Ouvrir dans le Tableau de Bord d'Administration",
+    "openFeatured": "Mettez des étoiles aux jeux dans l'administration de la bibliothèque {arrow}",
     "platform": "Plateforme | Plateforme | Plateformes",
     "publishers": "Éditeurs | Éditeur | Éditeurs",
     "rating": "Note",
@@ -544,7 +575,9 @@
       "back": "{arrow} Retour aux Tâches",
       "completedTasksTitle": "Tâches complétées",
       "dailyScheduledTitle": "Tâches quotidiennes planifiées",
+      "execute": "{arrow} Exécuter",
       "noTasksRunning": "Pas de tâche en cours",
+      "progress": "{0]%",
       "runningTasksTitle": "Tâches en cours d'exécution",
       "scheduled": {
         "checkUpdateDescription": "Vérifier si Drop a une mise à jour.",
@@ -588,6 +621,7 @@
         "description": "Drop supporte une variété de \"mécanismes d'authentification\". Lorsque vous les activez ou les désactivez, ils sont affichés sur la page de connection pour que les utilisateurs puissent les sélectionner. Cliquer sur le menu à points pour configurer le mécanisme d'authentification.",
         "disabled": "Désactivé",
         "enabled": "Activé",
+        "enabledKey": "Activée ?",
         "oidc": "OpenID Connect",
         "simple": "Simple (nom d'utilisateur/mot de passe)",
         "srOpenOptions": "Ouvrir les options",
@@ -605,7 +639,7 @@
         "createInvitation": "Créer invitation",
         "description": "L'authentification simple utilise un système d'invitations pour créer les utilisateurs. Tu peux créer une invitation et optionnellement spécifier le nom d'utilisateur ou email de cet utilisateur, et un lien magique sera généré un lien magique qui peut être utilisé pour créer le compte.",
         "expires": "Expire : {expiry}",
-        "invitationTitle": "invitations",
+        "invitationTitle": "Invitations",
         "invite3Days": "3 jours",
         "invite6Months": "6 mois",
         "inviteAdminSwitchDescription": "Créer cet utilisateur en tant qu'adminstrateur",
