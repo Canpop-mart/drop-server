@@ -50,7 +50,7 @@ RUN pnpm install prisma@6.11.1
 # init prisma to download all required files
 RUN pnpm prisma init
 
-COPY --from=build-system /app/package.json ./
+COPY --from=build-system /app/prisma.config.ts ./
 COPY --from=build-system /app/.output ./app
 COPY --from=build-system /app/prisma ./prisma
 COPY --from=build-system /app/build ./startup
