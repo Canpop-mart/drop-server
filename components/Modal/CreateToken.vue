@@ -119,10 +119,10 @@
                 <div class="flex h-6 shrink-0 items-center">
                   <div class="group grid size-4 grid-cols-1">
                     <input
-                      id="acl"
+                      :id="`acl-${acl}`"
                       v-model="currentACLs[acl]"
                       aria-describedby="acl-description"
-                      name="acl"
+                      :name="`acl-${acl}`"
                       type="checkbox"
                       class="col-start-1 row-start-1 appearance-none rounded-sm border checked:border-blue-600 checked:bg-blue-600 indeterminate:border-blue-600 indeterminate:bg-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:border-gray-300 disabled:bg-gray-100 disabled:checked:bg-gray-100 border-white/10 bg-white/5 dark:checked:border-blue-500 dark:checked:bg-blue-500 dark:indeterminate:border-blue-500 dark:indeterminate:bg-blue-500 dark:focus-visible:outline-blue-500 dark:disabled:border-white/5 dark:disabled:bg-white/10 dark:disabled:checked:bg-white/10 forced-colors:appearance-auto"
                     />
@@ -150,7 +150,7 @@
                 </div>
                 <div class="text-sm/6">
                   <label
-                    for="acl"
+                    :for="`acl-${acl}`"
                     class="font-display font-medium text-white"
                     >{{ acl }}</label
                   >
