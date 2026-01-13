@@ -2,7 +2,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { execSync } from "node:child_process";
 import { cpSync, readFileSync, existsSync } from "node:fs";
 import path from "node:path";
-import module from "module";
+import { findPackageJSON } from "node:module";
 import { viteStaticCopy } from "vite-plugin-static-copy";
 import { type } from "arktype";
 
@@ -10,14 +10,6 @@ const packageJsonSchema = type({
   name: "string",
   version: "string",
 });
-
-const twemojiJson = module.findPackageJSON(
-  "@discordapp/twemoji",
-  import.meta.url,
-);
-if (!twemojiJson) {
-  throw new Error("Could not find @discordapp/twemoji package.");
-}
 
 // get drop version
 const dropVersion = getDropVersion();
@@ -64,7 +56,7 @@ export default defineNuxtConfig({
 
   experimental: {
     buildCache: true,
-    viewTransition: true,
+    viewTransition: false,
     componentIslands: true,
   },
 
@@ -92,6 +84,13 @@ export default defineNuxtConfig({
 
   hooks: {
     "nitro:build:public-assets": (nitro) => {
+      const twemojiJson = findPackageJSON(
+        "@discordapp/twemoji",
+        import.meta.url,
+      );
+      if (!twemojiJson) {
+        throw new Error("Could not find @discordapp/twemoji package.");
+      }
       // this is only run during build, not dev server
       // https://github.com/nuxt/nuxt/issues/18918#issuecomment-1925774964
       // copy emojis to .output/public/twemoji
@@ -140,7 +139,6 @@ export default defineNuxtConfig({
 
     scheduledTasks: {
       "0 * * * *": ["dailyTasks"],
-      "*/30 * * * *": ["downloadCleanup"],
     },
 
     storage: {
