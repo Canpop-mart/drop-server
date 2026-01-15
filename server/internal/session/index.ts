@@ -55,17 +55,20 @@ export class SessionHandler {
       data: {},
     };
     const wasAuthenticated = !!session.authenticated;
+
     session.authenticated = {
       userId,
       level: session.authenticated?.level ?? 10,
       requiredLevel: mfaCount > 0 ? 20 : 10,
       superleveledExpiry: undefined,
     };
+
     if (
-      !wasAuthenticated &&
+      wasAuthenticated &&
       session.authenticated.level >= session.authenticated.requiredLevel
-    )
+    ) {
       session.authenticated.superleveledExpiry = Date.now() + SUPERLEVEL_LENGTH;
+    }
     const success = await this.sessionProvider.setSession(token, session);
     if (!success) return "fail";
 
@@ -123,7 +126,6 @@ export class SessionHandler {
       expiresAt,
       data: {},
     };
-    console.log(session);
     session.data[key] = value;
     await this.sessionProvider.setSession(token, session);
     return true;
