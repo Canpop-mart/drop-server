@@ -65,6 +65,7 @@ export default defineNuxtConfig({
   experimental: {
     buildCache: true,
     viewTransition: false,
+    appManifest: false,
     componentIslands: true,
   },
 

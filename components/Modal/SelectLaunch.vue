@@ -3,7 +3,7 @@
     <template #default>
       <div>
         <h1 as="h3" class="text-lg font-medium leading-6 text-white">
-          Pick a launch option
+          Select a launch option
         </h1>
         <p class="mt-1 text-zinc-400 text-sm">
           Select a launch option as an executor for your new launch option.
@@ -28,14 +28,14 @@
         </div>
       </div>
       <div class="mt-2 space-y-4">
-        <div
-          class="inline-flex items-center w-full gap-x-2 text-zinc-100 font-bold"
-        >
-          Game:
+        <div>
+          <h1 class="block text-sm font-medium leading-6 text-zinc-100">
+            Search for an executor
+          </h1>
           <SelectorGame
             :search="search"
             :model-value="game"
-            class="w-full"
+            class="w-full mt-2"
             @update:model-value="(value) => updateGame(value)"
           />
         </div>
@@ -45,28 +45,27 @@
         >
           No versions imported.
         </div>
-        <div
-          v-else-if="versions !== undefined"
-          class="inline-flex items-center w-full gap-x-2 text-zinc-100 font-bold"
-        >
-          Version:
+        <div v-else-if="versions !== undefined">
+          <h1 class="block text-sm font-medium leading-6 text-zinc-100">
+            Select a version
+          </h1>
           <SelectorCombox
             :search="
               (v) =>
                 Object.values(versions!)
                   .filter((k) =>
-                    (k.displayName || k.versionPath)
+                    (k.displayName || k.versionPath)!
                       .toLowerCase()
                       .includes(v.toLowerCase()),
                   )
                   .map((v) => ({
                     id: v.versionId,
-                    name: v.displayName ?? v.versionPath,
+                    name: (v.displayName ?? v.versionPath)!,
                   }))
             "
             :display="(v) => v.name"
             :model-value="version"
-            class="w-full"
+            class="w-full mt-2"
             @update:model-value="updateVersion"
           >
             <template #default="{ value }">
@@ -74,11 +73,10 @@
             </template>
           </SelectorCombox>
         </div>
-        <div
-          v-if="versions && version"
-          class="inline-flex items-center w-full gap-x-2 text-zinc-100 font-bold"
-        >
-          Launch:
+        <div v-if="versions && version">
+          <h1 class="block text-sm font-medium leading-6 text-zinc-100">
+            Select a launch command
+          </h1>
           <SelectorCombox
             :search="
               (v) =>
@@ -99,7 +97,7 @@
             "
             :display="(v) => v.name"
             :model-value="launchId"
-            class="w-full"
+            class="w-full mt-2"
             @update:model-value="(v) => (launchId = v)"
           >
             <template #default="{ value }">
@@ -169,7 +167,7 @@ const versions = ref<
           platform: Platform;
         }[];
         versionId: string;
-        versionPath: string;
+        versionPath: string | null;
       };
     }
   | undefined
@@ -180,7 +178,9 @@ const emit = defineEmits<{
 }>();
 
 async function search(query: string) {
-  return await $dropFetch("/api/v1/admin/search/game", { query: { q: query } });
+  return await $dropFetch("/api/v1/admin/search/game", {
+    query: { q: query, type: "Executor" },
+  });
 }
 
 function updateGame(value: GameMetadataSearchResult | undefined) {

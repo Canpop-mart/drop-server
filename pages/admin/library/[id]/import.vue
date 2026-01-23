@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col gap-y-4 max-w-[35vw]">
+  <div class="flex flex-col gap-y-4 sm:max-w-[40rem]">
     <Listbox
       as="div"
       :model-value="currentlySelectedVersion"
@@ -13,7 +13,7 @@
           class="relative w-full cursor-default rounded-md bg-zinc-950 py-1.5 pl-3 pr-10 text-left text-zinc-100 shadow-sm ring-1 ring-inset ring-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-600 sm:text-sm sm:leading-6"
         >
           <span v-if="currentlySelectedVersion != -1" class="block truncate">{{
-            versions[currentlySelectedVersion]
+            versions[currentlySelectedVersion].name
           }}</span>
           <span v-else class="block truncate text-zinc-600">{{
             $t("library.admin.import.selectDir")
@@ -38,7 +38,7 @@
           >
             <ListboxOption
               v-for="(version, versionIdx) in versions"
-              :key="version"
+              :key="version.identifier"
               v-slot="{ active, selected }"
               as="template"
               :value="versionIdx"
@@ -54,7 +54,7 @@
                     selected ? 'font-semibold' : 'font-normal',
                     'block truncate',
                   ]"
-                  >{{ version }}</span
+                  >{{ version.name }}</span
                 >
 
                 <span
@@ -92,7 +92,7 @@
           <li
             v-for="(launch, launchIdx) in versionSettings.setups"
             :key="launchIdx"
-            class="py-2 inline-flex items-start gap-x-1"
+            class="py-2 inline-flex items-start gap-x-1 w-full"
           >
             <ImportVersionLaunchRow
               v-model="versionSettings.setups[launchIdx]"
@@ -122,37 +122,43 @@
         >
       </div>
       <!-- setup mode -->
-      <SwitchGroup
-        as="div"
-        class="bg-zinc-800 p-4 rounded-xl flex items-center justify-between gap-4"
-      >
-        <span class="flex flex-grow flex-col">
-          <SwitchLabel
-            as="span"
-            class="text-sm font-medium leading-6 text-zinc-100"
-            passive
-            >{{ $t("library.admin.import.version.setupMode") }}</SwitchLabel
-          >
-          <SwitchDescription as="span" class="text-sm text-zinc-400">{{
-            $t("library.admin.import.version.setupModeDesc")
-          }}</SwitchDescription>
-        </span>
-        <Switch
-          v-model="versionSettings.onlySetup"
-          :class="[
-            versionSettings.onlySetup ? 'bg-blue-600' : 'bg-zinc-900',
-            'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2',
-          ]"
+      <div class="relative">
+        <SwitchGroup
+          as="div"
+          class="bg-zinc-800 p-4 rounded-xl flex items-center justify-between gap-4"
         >
-          <span
-            aria-hidden="true"
+          <span class="flex flex-grow flex-col">
+            <SwitchLabel
+              as="span"
+              class="text-sm font-medium leading-6 text-zinc-100"
+              passive
+              >{{ $t("library.admin.import.version.setupMode") }}</SwitchLabel
+            >
+            <SwitchDescription as="span" class="text-sm text-zinc-400">{{
+              $t("library.admin.import.version.setupModeDesc")
+            }}</SwitchDescription>
+          </span>
+          <Switch
+            v-model="versionSettings.onlySetup"
             :class="[
-              versionSettings.onlySetup ? 'translate-x-5' : 'translate-x-0',
-              'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+              versionSettings.onlySetup ? 'bg-blue-600' : 'bg-zinc-900',
+              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2',
             ]"
-          />
-        </Switch>
-      </SwitchGroup>
+          >
+            <span
+              aria-hidden="true"
+              :class="[
+                versionSettings.onlySetup ? 'translate-x-5' : 'translate-x-0',
+                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+              ]"
+            />
+          </Switch>
+        </SwitchGroup>
+        <div
+          v-if="type === GameType.Redist"
+          class="absolute inset-0 bg-zinc-900/50"
+        />
+      </div>
       <!-- launch executables -->
       <div class="relative flex flex-col gap-y-2 bg-zinc-800 p-4 rounded-xl">
         <div>
@@ -172,19 +178,48 @@
             :key="launchIdx"
             class="py-2 inline-flex items-start gap-x-1 w-full"
           >
-            <ImportVersionLaunchRow
-              v-model="versionSettings.launches[launchIdx]"
-              :version-guesses="versionGuesses"
-              :needs-name="true"
-            />
-            <button
-              class="transition rounded p-1 bg-zinc-900/30 group hover:bg-red-600/30"
-              @click="() => versionSettings.launches.splice(launchIdx, 1)"
+            <Disclosure
+              v-slot="{ open }"
+              :default-open="true"
+              as="div"
+              class="py-2 px-3 w-full bg-zinc-900 rounded-lg"
             >
-              <TrashIcon
-                class="transition size-5 text-zinc-700 group-hover:text-red-700"
-              />
-            </button>
+              <dt>
+                <DisclosureButton
+                  class="flex w-full items-center text-left text-white"
+                >
+                  <span v-if="launch.name" class="text-sm font-semibold">{{
+                    launch.name
+                  }}</span>
+                  <span v-else class="text-sm text-zinc-500 italic"
+                    >No name provided.</span
+                  >
+                  <span class="ml-auto flex h-7 items-center">
+                    <PlusIcon v-if="!open" class="size-6" aria-hidden="true" />
+                    <MinusIcon v-else class="size-6" aria-hidden="true" />
+                  </span>
+                  <button
+                    class="ml-1 transition rounded p-1 bg-zinc-900/30 group hover:bg-red-600/30"
+                    @click.prevent="
+                      () => versionSettings.launches.splice(launchIdx, 1)
+                    "
+                  >
+                    <TrashIcon
+                      class="transition size-5 text-zinc-700 group-hover:text-red-700"
+                    />
+                  </button>
+                </DisclosureButton>
+              </dt>
+              <DisclosurePanel as="dd" class="mt-2">
+                <ImportVersionLaunchRow
+                  v-model="versionSettings.launches[launchIdx]"
+                  :version-guesses="versionGuesses"
+                  :needs-name="true"
+                  :allow-executor="true"
+                  :type="type"
+                />
+              </DisclosurePanel>
+            </Disclosure>
           </li>
         </ol>
         <span
@@ -295,15 +330,21 @@ import {
   SwitchDescription,
   SwitchGroup,
   SwitchLabel,
+  Disclosure,
+  DisclosureButton,
+  DisclosurePanel,
 } from "@headlessui/vue";
 import { XCircleIcon } from "@heroicons/vue/16/solid";
 import {
   CheckIcon,
   ChevronUpDownIcon,
   TrashIcon,
+  MinusIcon,
+  PlusIcon,
 } from "@heroicons/vue/20/solid";
-import type { Platform } from "~/prisma/client/enums";
+import { GameType } from "~/prisma/client/enums";
 import type { ImportVersion } from "~/server/api/v1/admin/import/version/index.post";
+import type { VersionGuess } from "~/server/internal/library";
 
 definePageMeta({
   layout: "admin",
@@ -313,20 +354,21 @@ const router = useRouter();
 const { t } = useI18n();
 const route = useRoute();
 const gameId = route.params.id.toString();
-const versions = await $dropFetch(
+const { versions, type } = await $dropFetch(
   `/api/v1/admin/import/version?id=${encodeURIComponent(gameId)}`,
 );
 const currentlySelectedVersion = ref(-1);
-const versionSettings = ref<typeof ImportVersion.infer>({
-  id: gameId,
-  version: "",
-  delta: false,
-  onlySetup: false,
-  launches: [],
-  setups: [],
-});
+const versionSettings = ref<Omit<typeof ImportVersion.infer, "version" | "id">>(
+  {
+    delta: false,
+    onlySetup: type === GameType.Redist,
+    launches: [],
+    setups: [],
+    requiredContent: [],
+  },
+);
 
-const versionGuesses = ref<Array<{ platform: Platform; filename: string }>>();
+const versionGuesses = ref<Array<VersionGuess>>();
 
 const importLoading = ref(false);
 const importError = ref<string | undefined>();
@@ -336,14 +378,14 @@ async function updateCurrentlySelectedVersion(value: number) {
   currentlySelectedVersion.value = value;
   const version = versions[currentlySelectedVersion.value];
   try {
-    const results = await $dropFetch(
-      `/api/v1/admin/import/version/preload?id=${encodeURIComponent(
-        gameId,
-      )}&version=${encodeURIComponent(version)}`,
-      {
-        failTitle: "Failed to fetch version information",
+    const results = await $dropFetch(`/api/v1/admin/import/version/preload`, {
+      failTitle: "Failed to fetch version information",
+      query: {
+        id: gameId,
+        type: version.type,
+        version: version.identifier,
       },
-    );
+    });
     versionGuesses.value = results as typeof versionGuesses.value;
   } catch {
     currentlySelectedVersion.value = -1;
