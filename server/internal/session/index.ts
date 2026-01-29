@@ -161,7 +161,6 @@ export class SessionHandler {
     };
     const session =
       (await this.sessionProvider.getSession(token)) ?? defaultSession;
-    console.log(session);
     session.data[key] = value;
     await this.sessionProvider.setSession(token, session);
     return true;

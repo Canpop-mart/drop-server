@@ -291,7 +291,6 @@ function updateLaunchCommand(command: string) {
       if (autosetGuess.type === "platform") {
         launchConfiguration.value.platform = autosetGuess.platform;
       } else if (autosetGuess.type === "executor") {
-        console.log(autosetGuess.executorId);
         executor.value = {
           launchId: autosetGuess.executorId,
           gameName: autosetGuess.gameName,
