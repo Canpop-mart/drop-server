@@ -39,7 +39,7 @@
             <AddLibraryButton :game-id="game.id" />
           </div>
           <NuxtLink
-            v-if="user?.admin"
+            v-if="user?.admin && !isClient"
             :href="`/admin/library/${game.id}`"
             type="button"
             class="inline-flex items-center gap-x-2 rounded-md bg-zinc-800 px-3 py-1 text-sm font-semibold font-display text-white shadow-sm hover:bg-zinc-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 duration-200 hover:scale-105 active:scale-95"
@@ -93,10 +93,26 @@
                   {{ $t("store.size") }}
                 </td>
                 <td
-                  v-if="size"
+                  v-if="size.versions.length > 0"
                   class="whitespace-nowrap inline-flex gap-x-4 px-3 py-4 text-sm text-zinc-400"
                 >
-                  {{ formatBytes(size) }}
+                  <ul class="flex flex-col">
+                    <ol
+                      v-for="version in size.versions"
+                      :key="version.versionId"
+                      class="inline-flex items-center gap-x-1"
+                    >
+                      <ServerIcon class="size-4" />
+                      {{
+                        formatBytes(version.installSize)
+                      }}
+
+                      <CloudIcon class="size-4 ml-3" />
+                      {{
+                        formatBytes(version.downloadSize)
+                      }}
+                    </ol>
+                  </ul>
                 </td>
                 <td
                   v-else
@@ -243,7 +259,7 @@
 
 <script setup lang="ts">
 import { ArrowTopRightOnSquareIcon } from "@heroicons/vue/24/outline";
-import { StarIcon } from "@heroicons/vue/24/solid";
+import { StarIcon, ServerIcon, CloudIcon } from "@heroicons/vue/24/solid";
 import { micromark } from "micromark";
 import { formatBytes } from "~/server/internal/utils/files";
 
@@ -254,10 +270,15 @@ const user = useUser();
 
 const { game, rating, size } = await $dropFetch(`/api/v1/games/${gameId}`);
 
+const isClient = isClientRequest();
+
 const descriptionHTML = micromark(game.mDescription);
 
 const platforms = game.versions
-  .map((e) => e.launches.map((v) => v.platform))
+  .map((e) => [
+    ...e.launches.map((v) => v.platform),
+    ...e.setups.map((v) => v.platform),
+  ])
   .flat()
   .flat()
   .filter((e, i, u) => u.indexOf(e) === i);

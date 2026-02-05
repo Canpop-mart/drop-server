@@ -1,21 +1,13 @@
 import { APITokenMode } from "~/prisma/client/enums";
 import { DateTime } from "luxon";
-import type { UserACL } from "~/server/internal/acls";
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
+import { CLIENT_WEBTOKEN_ACLS } from "~/server/plugins/04.auth-init";
 
 export default defineClientEventHandler(
   async (h3, { fetchUser, fetchClient, clientId }) => {
     const user = await fetchUser();
     const client = await fetchClient();
-
-    const acls: UserACL = [
-      "read",
-      "store:read",
-      "collections:read",
-      "object:read",
-      "settings:read",
-    ];
 
     const token = await prisma.aPIToken.create({
       data: {
@@ -23,7 +15,7 @@ export default defineClientEventHandler(
         clientId,
         userId: user.id,
         mode: APITokenMode.Client,
-        acls,
+        acls: CLIENT_WEBTOKEN_ACLS,
       },
     });
 

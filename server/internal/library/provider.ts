@@ -44,8 +44,8 @@ export abstract class LibraryProvider<CFG> {
   abstract generateDropletManifest(
     game: string,
     version: string,
-    progress: (err: Error | null, v: number) => void,
-    log: (err: Error | null, v: string) => void,
+    progress: (v: number) => void,
+    log: (v: string) => void,
   ): Promise<string>;
 
   abstract peekFile(
@@ -53,13 +53,6 @@ export abstract class LibraryProvider<CFG> {
     version: string,
     filename: string,
   ): Promise<{ size: number } | undefined>;
-
-  abstract readFile(
-    game: string,
-    version: string,
-    filename: string,
-    options?: { start?: number; end?: number },
-  ): Promise<ReadableStream | undefined>;
 
   abstract fsStats(): { freeSpace: number; totalSpace: number } | undefined;
 }

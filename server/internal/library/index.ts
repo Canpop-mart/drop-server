@@ -16,10 +16,9 @@ import type { GameModel } from "~/prisma/client/models";
 import { createHash } from "node:crypto";
 import type { WorkingLibrarySource } from "~/server/api/v1/admin/library/sources/index.get";
 import gameSizeManager from "~/server/internal/gamesize";
-import { TORRENTIAL_SERVICE } from "../services/services/torrential";
 import type { ImportVersion } from "~/server/api/v1/admin/import/version/index.post";
 import { GameType, type Platform } from "~/prisma/client/enums";
-import { castManifest } from "./manifest";
+import { castManifest } from "./manifest/utils";
 
 export function createGameImportTaskId(libraryId: string, libraryPath: string) {
   return createHash("md5")
@@ -417,12 +416,10 @@ class LibraryManager {
           manifest = await library.generateDropletManifest(
             game.libraryPath,
             versionPath,
-            (err, value) => {
-              if (err) throw err;
+            (value) => {
               progress(value * 0.9);
             },
-            (err, value) => {
-              if (err) throw err;
+            (value) => {
               logger.info(value);
             },
           );
@@ -500,13 +497,12 @@ class LibraryManager {
           acls: ["system:import:version:read"],
         });
 
-        await libraryManager.cacheCombinedGameSize(gameId);
-        await libraryManager.cacheGameVersionSize(gameId, newVersion.versionId);
-
-        await TORRENTIAL_SERVICE.utils().invalidate(
-          gameId,
-          newVersion.versionId,
-        );
+        // Ensure cache is filled (also pre-caches the manifest)
+        try {
+          await gameSizeManager.getVersionSize(newVersion.versionId);
+        } catch (e) {
+          logger.warn(`Failed to pre-cache game size and manifest: ${e}`);
+        }
 
         if (version.type === "depot") {
           // SAFETY: we can only reach this if the type is depot and identifier is valid
@@ -533,18 +529,6 @@ class LibraryManager {
     return await library.peekFile(game, version, filename);
   }
 
-  async readFile(
-    libraryId: string,
-    game: string,
-    version: string,
-    filename: string,
-    options?: { start?: number; end?: number },
-  ) {
-    const library = this.libraries.get(libraryId);
-    if (!library) return undefined;
-    return await library.readFile(game, version, filename, options);
-  }
-
   async deleteGameVersion(gameId: string, version: string) {
     await prisma.gameVersion.deleteMany({
       where: {
@@ -552,8 +536,6 @@ class LibraryManager {
         versionId: version,
       },
     });
-
-    await gameSizeManager.deleteGameVersion(gameId, version);
   }
 
   async deleteGame(gameId: string) {
@@ -562,7 +544,6 @@ class LibraryManager {
         id: gameId,
       },
     });
-    await gameSizeManager.deleteGame(gameId);
     // Delete all game versions that depended on this game
     await prisma.gameVersion.deleteMany({
       where: {
@@ -577,46 +558,6 @@ class LibraryManager {
         },
       },
     });
-  }
-
-  async getGameVersionSize(
-    gameId: string,
-    versionName?: string,
-  ): Promise<number | null> {
-    return gameSizeManager.getGameVersionSize(gameId, versionName);
-  }
-
-  async getBiggestGamesCombinedVersions(top: number) {
-    if (await gameSizeManager.isGameSizesCacheEmpty()) {
-      await gameSizeManager.cacheAllCombinedGames();
-    }
-    return gameSizeManager.getBiggestGamesAllVersions(top);
-  }
-
-  async getBiggestGamesLatestVersions(top: number) {
-    if (await gameSizeManager.isGameVersionsSizesCacheEmpty()) {
-      await gameSizeManager.cacheAllGameVersions();
-    }
-    return gameSizeManager.getBiggestGamesLatestVersion(top);
-  }
-
-  async cacheCombinedGameSize(gameId: string) {
-    const game = await prisma.game.findFirst({ where: { id: gameId } });
-    if (!game) {
-      return;
-    }
-    await gameSizeManager.cacheCombinedGame(game);
-  }
-
-  async cacheGameVersionSize(gameId: string, versionId: string) {
-    const game = await prisma.game.findFirst({
-      where: { id: gameId },
-      include: { versions: true },
-    });
-    if (!game) {
-      return;
-    }
-    await gameSizeManager.cacheGameVersion(game, versionId);
   }
 }
 

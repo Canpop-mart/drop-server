@@ -1,6 +1,7 @@
 import type { Platform } from "~/prisma/client/enums";
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
+import type { GameVersionSize } from "~/server/internal/gamesize";
 import gameSizeManager from "~/server/internal/gamesize";
 
 type VersionDownloadOption = {
@@ -8,24 +9,23 @@ type VersionDownloadOption = {
   displayName?: string | undefined;
   versionPath?: string | undefined;
   platform: Platform;
-  size: number;
+  size: GameVersionSize;
   requiredContent: Array<{
     gameId: string;
     versionId: string;
     name: string;
     iconObjectId: string;
     shortDescription: string;
-    size: number;
+    size: GameVersionSize;
   }>;
 };
 
 export default defineClientEventHandler(async (h3) => {
-  const query = getQuery(h3);
-  const id = query.id?.toString();
+  const id = getRouterParam(h3, "id")!;
   if (!id)
     throw createError({
       statusCode: 400,
-      statusMessage: "No ID in request query",
+      statusMessage: "No ID in router params",
     });
 
   const rawVersions = await prisma.gameVersion.findMany({
@@ -62,6 +62,7 @@ export default defineClientEventHandler(async (h3) => {
           },
         },
       },
+      setups: true,
     },
   });
 
@@ -73,11 +74,11 @@ export default defineClientEventHandler(async (h3) => {
           VersionDownloadOption["requiredContent"]
         > = new Map();
 
-        for (const launch of v.launches) {
+        for (const launch of [...v.launches, ...v.setups]) {
           if (!platformOptions.has(launch.platform))
             platformOptions.set(launch.platform, []);
 
-          if (launch.executor) {
+          if ("executor" in launch && launch.executor) {
             const old = platformOptions.get(launch.platform)!;
             old.push({
               gameId: launch.executor.gameVersion.game.id,
@@ -86,19 +87,14 @@ export default defineClientEventHandler(async (h3) => {
               iconObjectId: launch.executor.gameVersion.game.mIconObjectId,
               shortDescription:
                 launch.executor.gameVersion.game.mShortDescription,
-              size:
-                (await gameSizeManager.getGameVersionSize(
-                  launch.executor.gameVersion.game.id,
-                  launch.executor.gameVersion.versionId,
-                )) ?? 0,
+              size: (await gameSizeManager.getVersionSize(
+                launch.executor.gameVersion.versionId,
+              ))!,
             });
           }
         }
 
-        const size = await gameSizeManager.getGameVersionSize(
-          v.gameId,
-          v.versionId,
-        );
+        const size = await gameSizeManager.getVersionSize(v.versionId);
 
         return platformOptions
           .entries()

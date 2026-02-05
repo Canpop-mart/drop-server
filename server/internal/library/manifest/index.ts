@@ -1,14 +1,27 @@
+import cacheHandler from "../../cache";
 import prisma from "../../db/database";
-import { castManifest, type DropletManifest } from "../manifest";
+import { castManifest, type DropletManifest } from "./utils";
 
 export type DownloadManifestDetails = {
+  /***
+   * Version ID to manifest
+   */
   manifests: { [key: string]: DropletManifest };
+  /***
+   * File name to version ID
+   */
   fileList: { [key: string]: string };
+  /// Size on disk after download
+  installSize: number;
+  /// Size of download
+  downloadSize: number;
 };
 
 function convertMap<T>(map: Map<string, T>): { [key: string]: T } {
   return Object.fromEntries(map.entries().toArray());
 }
+const manifestCache =
+  cacheHandler.createCache<DownloadManifestDetails>("manifestCache");
 
 /**
  *
@@ -17,7 +30,10 @@ function convertMap<T>(map: Map<string, T>): { [key: string]: T } {
  */
 export async function createDownloadManifestDetails(
   versionId: string,
+  refresh = false,
 ): Promise<DownloadManifestDetails> {
+  if ((await manifestCache.has(versionId)) && !refresh)
+    return (await manifestCache.get(versionId))!;
   const mainVersion = await prisma.gameVersion.findUnique({
     where: { versionId },
     select: {
@@ -35,7 +51,7 @@ export async function createDownloadManifestDetails(
 
   const collectedVersions = [];
   let versionIndex = mainVersion.versionIndex;
-  while (true) {
+  while (mainVersion.delta) {
     const nextVersion = await prisma.gameVersion.findFirst({
       where: { gameId: mainVersion.gameId, versionIndex: { lt: versionIndex } },
       orderBy: {
@@ -75,6 +91,9 @@ export async function createDownloadManifestDetails(
     }
   }
 
+  let installSize = 0;
+  let downloadSize = 0;
+
   // Now that we have our file list, filter the manifests
   const manifests = new Map<string, DropletManifest>();
   for (const version of versionOrder) {
@@ -86,9 +105,22 @@ export async function createDownloadManifestDetails(
     const fileNames = Object.fromEntries(files);
     const manifest = castManifest(version.dropletManifest);
     const filteredChunks = Object.fromEntries(
-      Object.entries(manifest.chunks).filter(([, chunkData]) =>
-        chunkData.files.some((fileEntry) => !!fileNames[fileEntry.filename]),
-      ),
+      Object.entries(manifest.chunks).filter(([, chunkData]) => {
+        let flag = false;
+        chunkData.files.forEach((fileEntry) => {
+          if (fileNames[fileEntry.filename]) {
+            flag = true;
+            installSize += fileEntry.length;
+          }
+        });
+        // If we have to download this chunk, add it's length
+        if (flag) {
+          downloadSize += chunkData.files
+            .map((v) => v.length)
+            .reduce((a, b) => a + b, 0);
+        }
+        return flag;
+      }),
     );
     manifests.set(version.versionId, {
       ...manifest,
@@ -96,5 +128,13 @@ export async function createDownloadManifestDetails(
     });
   }
 
-  return { fileList: convertMap(fileList), manifests: convertMap(manifests) };
+  const result = {
+    fileList: convertMap(fileList),
+    manifests: convertMap(manifests),
+    installSize,
+    downloadSize,
+  };
+  await manifestCache.set(versionId, result);
+
+  return result;
 }
