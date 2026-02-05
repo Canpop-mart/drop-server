@@ -24,6 +24,7 @@ FROM rustlang/rust:nightly-alpine AS torrential-build
 RUN apk add musl-dev
 WORKDIR /build
 COPY torrential .
+RUN apk add protoc
 RUN cargo build --release
 
 ### BUILD APP
