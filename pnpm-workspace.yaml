@@ -1,4 +1,5 @@
 onlyBuiltDependencies:
+  - "@bufbuild/buf"
   - "@parcel/watcher"
   - "@prisma/client"
   - "@prisma/engines"
@@ -8,8 +9,5 @@ onlyBuiltDependencies:
   - prisma
   - sharp
   - unrs-resolver
-
-# overrides:
-#   droplet: link:../../.local/share/pnpm/global/5/node_modules/@drop-oss/droplet
 
 shamefullyHoist: true

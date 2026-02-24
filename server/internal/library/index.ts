@@ -8,6 +8,7 @@
 import path from "path";
 import prisma from "../db/database";
 import { fuzzy } from "fast-fuzzy";
+import type { TaskRunContext } from "../tasks";
 import taskHandler from "../tasks";
 import notificationSystem from "../notifications";
 import { GameNotFoundError, type LibraryProvider } from "./provider";
@@ -20,6 +21,7 @@ import type { ImportVersion } from "~/server/api/v1/admin/import/version/index.p
 import { GameType, type Platform } from "~/prisma/client/enums";
 import { castManifest } from "./manifest/utils";
 import { Shescape } from "shescape";
+import type { Prisma } from "~/prisma/client/client";
 
 export function createGameImportTaskId(libraryId: string, libraryPath: string) {
   return createHash("md5")
@@ -125,42 +127,33 @@ class LibraryManager {
   async fetchUnimportedGameVersions(
     libraryId: string,
     libraryPath: string,
+    noFetchParams?: {
+      gameId: string;
+      versions: string[];
+      depotVersions: { id: string; versionName: string }[];
+    },
   ): Promise<UnimportedVersionInformation[] | undefined> {
     const provider = this.libraries.get(libraryId);
     if (!provider) return undefined;
-    const game = await prisma.game.findUnique({
-      where: {
-        libraryKey: {
-          libraryId,
-          libraryPath,
+    let params = noFetchParams;
+    if (!params) {
+      const game = await prisma.game.findUnique({
+        where: {
+          libraryKey: {
+            libraryId,
+            libraryPath,
+          },
         },
-      },
-      select: {
-        id: true,
-        versions: true,
-      },
-    });
-    if (!game) return undefined;
-
-    try {
-      const versions = await provider.listVersions(
-        libraryPath,
-        game.versions.map((v) => v.versionPath).filter((v) => v !== null),
-      );
-      const unimportedVersions = versions
-        .filter(
-          (e) =>
-            game.versions.findIndex((v) => v.versionPath == e) == -1 &&
-            !taskHandler.hasTaskKey(createVersionImportTaskKey(game.id, e)),
-        )
-        .map(
-          (v) =>
-            ({
-              type: "local",
-              name: v,
-              identifier: v,
-            }) satisfies UnimportedVersionInformation,
-        );
+        select: {
+          id: true,
+          versions: {
+            select: {
+              versionPath: true,
+            },
+          },
+        },
+      });
+      if (!game) return undefined;
       const depotVersions = await prisma.unimportedGameVersion.findMany({
         where: {
           gameId: game.id,
@@ -170,7 +163,38 @@ class LibraryManager {
           id: true,
         },
       });
-      const mappedDepotVersions = depotVersions.map(
+
+      params = {
+        gameId: game.id,
+        versions: game.versions
+          .map((v) => v.versionPath)
+          .filter((v) => v !== null),
+        depotVersions: depotVersions,
+      };
+    }
+
+    try {
+      const versions = await provider.listVersions(
+        libraryPath,
+        params.versions,
+      );
+      const unimportedVersions = versions
+        .filter(
+          (e) =>
+            params.versions.findIndex((v) => v == e) == -1 &&
+            !taskHandler.hasTaskKey(
+              createVersionImportTaskKey(params.gameId, e),
+            ),
+        )
+        .map(
+          (v) =>
+            ({
+              type: "local",
+              name: v,
+              identifier: v,
+            }) satisfies UnimportedVersionInformation,
+        );
+      const mappedDepotVersions = params.depotVersions.map(
         (v) =>
           ({
             type: "depot",
@@ -188,29 +212,37 @@ class LibraryManager {
     }
   }
 
-  async fetchGamesWithStatus() {
+  async fetchGamesWithStatus(
+    where: Partial<Omit<Prisma.GameFindManyArgs, "include">>,
+  ) {
     const games = await prisma.game.findMany({
+      ...where,
       include: {
         library: true,
         versions: true,
-      },
-      orderBy: {
-        mName: "asc",
+        unimportedGameVersions: true,
       },
     });
 
     return await Promise.all(
       games.map(async (e) => {
-        const versions = await this.fetchUnimportedGameVersions(
+        const unimportedVersions = await this.fetchUnimportedGameVersions(
           e.libraryId ?? "",
           e.libraryPath,
+          {
+            gameId: e.id,
+            versions: e.versions
+              .map((v) => v.versionPath)
+              .filter((v) => v !== null),
+            depotVersions: e.unimportedGameVersions,
+          },
         );
         return {
           game: e,
-          status: versions
+          status: unimportedVersions
             ? {
                 noVersions: e.versions.length == 0,
-                unimportedVersions: versions,
+                unimportedVersions: unimportedVersions,
               }
             : ("offline" as const),
         };
@@ -375,8 +407,50 @@ class LibraryManager {
     gameId: string,
     version: UnimportedVersionInformation,
     metadata: typeof ImportVersion.infer,
+    parentTask?: TaskRunContext,
   ) {
     const taskKey = createVersionImportTaskKey(gameId, version.identifier);
+
+    if (metadata.delta) {
+      for (const platformObject of [
+        ...metadata.launches,
+        ...metadata.setups,
+      ].filter(
+        (v, i, a) => a.findIndex((k) => k.platform === v.platform) == i,
+      )) {
+        const validOverlayVersions = await prisma.gameVersion.count({
+          where: {
+            gameId: metadata.id,
+            delta: false,
+            OR: [
+              { launches: { some: { platform: platformObject.platform } } },
+              {
+                setups: { some: { platform: platformObject.platform } },
+              },
+            ],
+          },
+        });
+        if (validOverlayVersions == 0)
+          throw createError({
+            statusCode: 400,
+            message: `Update mode requires a pre-existing version for platform: ${platformObject.platform}`,
+          });
+      }
+    }
+
+    if (metadata.onlySetup) {
+      if (metadata.setups.length == 0)
+        throw createError({
+          statusCode: 400,
+          message: 'Setup required in "setup mode".',
+        });
+    } else {
+      if (metadata.launches.length == 0)
+        throw createError({
+          statusCode: 400,
+          message: "Launch executable is required.",
+        });
+    }
 
     const game = await prisma.game.findUnique({
       where: { id: gameId },
@@ -400,124 +474,134 @@ class LibraryManager {
           })
         : undefined;
 
-    return await taskHandler.create({
-      key: taskKey,
-      taskGroup: "import:game",
-      name: `Importing version ${version.name} for ${game.mName}`,
-      acls: ["system:import:version:read"],
-      async run({ progress, logger }) {
-        let versionPath: string | null = null;
-        let manifest;
-        let fileList;
+    return await taskHandler.create(
+      {
+        key: taskKey,
+        taskGroup: "import:version",
+        name: `Importing version ${version.name} for ${game.mName}`,
+        acls: ["system:import:version:read"],
+        async run({ progress, logger }) {
+          let versionPath: string | null = null;
+          let manifest;
+          let fileList;
 
-        if (version.type === "local") {
-          versionPath = version.identifier;
-          // First, create the manifest via droplet.
-          // This takes up 90% of our progress, so we wrap it in a *0.9
+          if (version.type === "local") {
+            versionPath = version.identifier;
+            // First, create the manifest via droplet.
+            // This takes up 90% of our progress, so we wrap it in a *0.9
 
-          manifest = await library.generateDropletManifest(
-            game.libraryPath,
-            versionPath,
-            (value) => {
-              progress(value * 0.9);
-            },
-            (value) => {
-              logger.info(value);
-            },
-          );
-          fileList = await library.versionReaddir(
-            game.libraryPath,
-            versionPath,
-          );
-          logger.info("Created manifest successfully!");
-        } else if (version.type === "depot" && unimportedVersion) {
-          manifest = castManifest(unimportedVersion.manifest);
-          fileList = unimportedVersion.fileList;
-          progress(90);
-        } else {
-          throw "Could not find or create manifest for this version.";
-        }
-
-        const currentIndex = await prisma.gameVersion.count({
-          where: { gameId: gameId },
-        });
-
-        // Then, create the database object
-        const newVersion = await prisma.gameVersion.create({
-          data: {
-            game: {
-              connect: {
-                id: gameId,
+            manifest = await library.generateDropletManifest(
+              game.libraryPath,
+              versionPath,
+              (value) => {
+                progress(value * 0.9);
               },
-            },
-
-            displayName: metadata.displayName ?? null,
-
-            versionPath,
-            dropletManifest: manifest,
-            fileList,
-            versionIndex: currentIndex,
-            delta: metadata.delta,
-
-            onlySetup: metadata.onlySetup,
-            setups: {
-              createMany: {
-                data: metadata.setups.map((v) => ({
-                  command: v.launch,
-                  platform: v.platform,
-                })),
+              (value) => {
+                logger.info(value);
               },
+            );
+            fileList = await library.versionReaddir(
+              game.libraryPath,
+              versionPath,
+            );
+            logger.info("Created manifest successfully!");
+          } else if (version.type === "depot" && unimportedVersion) {
+            manifest = castManifest(unimportedVersion.manifest);
+            fileList = unimportedVersion.fileList;
+            progress(90);
+          } else {
+            throw "Could not find or create manifest for this version.";
+          }
+
+          const largestIndex = await prisma.gameVersion.findFirst({
+            where: { gameId: gameId },
+            orderBy: {
+              versionIndex: "desc",
             },
-
-            launches: {
-              createMany: !metadata.onlySetup
-                ? {
-                    data: metadata.launches.map((v) => ({
-                      name: v.name,
-                      command: v.launch,
-                      platform: v.platform,
-                      ...(v.emulatorId && game.type === "Game"
-                        ? {
-                            emulatorId: v.emulatorId,
-                          }
-                        : undefined),
-                      emulatorSuggestions:
-                        game.type === "Emulator" ? (v.suggestions ?? []) : [],
-                    })),
-                  }
-                : { data: [] },
-            },
-          },
-        });
-        logger.info("Successfully created version!");
-
-        notificationSystem.systemPush({
-          nonce: `version-create-${gameId}-${version}`,
-          title: `'${game.mName}' ('${version.name}') finished importing.`,
-          description: `Drop finished importing version ${version.name} for ${game.mName}.`,
-          actions: [`View|/admin/library/${gameId}`],
-          acls: ["system:import:version:read"],
-        });
-
-        // Ensure cache is filled (also pre-caches the manifest)
-        try {
-          await gameSizeManager.getVersionSize(newVersion.versionId);
-        } catch (e) {
-          logger.warn(`Failed to pre-cache game size and manifest: ${e}`);
-        }
-
-        if (version.type === "depot") {
-          // SAFETY: we can only reach this if the type is depot and identifier is valid
-          // eslint-disable-next-line drop/no-prisma-delete
-          await prisma.unimportedGameVersion.delete({
-            where: {
-              id: version.identifier,
+            select: {
+              versionIndex: true,
             },
           });
-        }
-        progress(100);
+          const currentIndex = largestIndex ? largestIndex.versionIndex + 1 : 0;
+
+          // Then, create the database object
+          const newVersion = await prisma.gameVersion.create({
+            data: {
+              game: {
+                connect: {
+                  id: gameId,
+                },
+              },
+
+              displayName: metadata.displayName ?? null,
+
+              versionPath,
+              dropletManifest: manifest,
+              fileList,
+              versionIndex: currentIndex,
+              delta: metadata.delta,
+
+              onlySetup: metadata.onlySetup,
+              setups: {
+                createMany: {
+                  data: metadata.setups.map((v) => ({
+                    command: v.launch,
+                    platform: v.platform,
+                  })),
+                },
+              },
+
+              launches: {
+                createMany: !metadata.onlySetup
+                  ? {
+                      data: metadata.launches.map((v) => ({
+                        name: v.name,
+                        command: v.launch,
+                        platform: v.platform,
+                        ...(v.emulatorId && game.type === "Game"
+                          ? {
+                              emulatorId: v.emulatorId,
+                            }
+                          : undefined),
+                        emulatorSuggestions:
+                          game.type === "Emulator" ? (v.suggestions ?? []) : [],
+                      })),
+                    }
+                  : { data: [] },
+              },
+            },
+          });
+          logger.info("Successfully created version!");
+
+          notificationSystem.systemPush({
+            nonce: `version-create-${gameId}-${version}`,
+            title: `'${game.mName}' ('${version.name}') finished importing.`,
+            description: `Drop finished importing version ${version.name} for ${game.mName}.`,
+            actions: [`View|/admin/library/${gameId}`],
+            acls: ["system:import:version:read"],
+          });
+
+          // Ensure cache is filled (also pre-caches the manifest)
+          try {
+            await gameSizeManager.getVersionSize(newVersion.versionId);
+          } catch (e) {
+            logger.warn(`Failed to pre-cache game size and manifest: ${e}`);
+          }
+
+          if (version.type === "depot") {
+            // SAFETY: we can only reach this if the type is depot and identifier is valid
+            // eslint-disable-next-line drop/no-prisma-delete
+            await prisma.unimportedGameVersion.delete({
+              where: {
+                id: version.identifier,
+              },
+            });
+          }
+          progress(100);
+        },
       },
-    });
+      parentTask,
+    );
   }
 
   async peekFile(

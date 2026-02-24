@@ -452,6 +452,7 @@
       },
       "libraryHint": "No libraries configured.",
       "libraryHintDocsLink": "What does this mean? {arrow}",
+      "massImportTool": "Mass Import Tool",
       "metadata": {
         "companies": {
           "action": "Manage {arrow}",
@@ -507,6 +508,27 @@
         }
       },
       "metadataProvider": "Metadata provider",
+      "nav": {
+        "backPagination": "Previous",
+        "clearAllFilters": "Clear all",
+        "filterCount": "{0} filters",
+        "filterLabel": "Filters",
+        "filters": {
+          "metadata": {
+            "emptyDescription": "Empty description",
+            "featured": "Featured",
+            "noCarousel": "No images in carousel",
+            "title": "Metadata"
+          },
+          "version": {
+            "available": "Available to import",
+            "none": "No versions imported",
+            "title": "Versions"
+          }
+        },
+        "nextPagination": "Next",
+        "sortLabel": "Sort"
+      },
       "noGames": "No games imported",
       "offline": "Drop couldn't access this game.",
       "offlineTitle": "Game offline",
@@ -544,6 +566,7 @@
         "noVersions": "You have no versions of this game available.",
         "setupOnly": "Version configured as in setup-only mode.",
         "table": {
+          "delta": "Update mode",
           "launch": "Launch Configurations",
           "name": "Name (ID)",
           "path": "Path",

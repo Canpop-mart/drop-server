@@ -50,6 +50,12 @@
                   scope="col"
                   class="px-3 py-3 text-left text-xs font-medium tracking-wide text-gray-400 uppercase"
                 >
+                  {{ $t("library.admin.version.table.delta") }}
+                </th>
+                <th
+                  scope="col"
+                  class="px-3 py-3 text-left text-xs font-medium tracking-wide text-gray-400 uppercase"
+                >
                   {{ $t("library.admin.version.table.setup") }}
                 </th>
                 <th
@@ -91,6 +97,10 @@
                   <td class="px-3 py-4 text-sm whitespace-nowrap text-gray-400">
                     {{ version.versionPath }}
                   </td>
+                  <td class="px-3 py-4 text-sm whitespace-nowrap text-gray-400">
+                    {{ version.delta }}
+                  </td>
+
                   <td class="px-3 py-4 text-sm whitespace-nowrap text-gray-400">
                     <ul class="space-y-2">
                       <GameEditorVersionConfig
