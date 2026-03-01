@@ -12,28 +12,22 @@ import * as jose from "jose";
 // import { inspect } from "util";
 import sessionHandler from "../../session";
 import type { SessionSearchTerms } from "../../session/types";
+import { queryParamBuilder } from "../../utils/query";
 
 // TODO: monitor https://github.com/goauthentik/authentik/issues/8751 for easier?? OIDC setup by end users
 
 // Schema for OIDC well-known configuration
 const OIDCWellKnownV1 = type({
-  issuer: "string.url.parse",
+  issuer: "string",
   authorization_endpoint: "string.url.parse",
   token_endpoint: "string.url.parse",
-  userinfo_endpoint: "string.url.parse?",
+  userinfo_endpoint: "string.url.parse",
   jwks_uri: "string.url.parse",
-  scopes_supported: "string[]?",
+  scopes_supported: "string[]",
 });
 
 // Represents required OIDC configuration
-interface OIDCConfiguration {
-  issuer: URL;
-  authorization_endpoint: URL;
-  token_endpoint: URL;
-  userinfo_endpoint: URL;
-  jwks_uri: URL;
-  scopes_supported: string[];
-}
+type OIDCConfiguration = typeof OIDCWellKnownV1.infer;
 
 interface OIDCAuthSessionOptions {
   redirect: string | undefined;
@@ -241,7 +235,7 @@ export class OIDCManager {
         token_endpoint: new URL(tokenEndpoint),
         userinfo_endpoint: new URL(userinfoEndpoint),
         scopes_supported: scopes.split(","),
-        issuer: new URL(issuer),
+        issuer: issuer,
         jwks_uri: new URL(jwksEndpoint),
       };
     }
@@ -294,7 +288,15 @@ export class OIDCManager {
       this.oidcConfiguration.authorization_endpoint,
     ).toString();
 
-    const finalUrl = `${normalisedUrl}?client_id=${this.clientId}&redirect_uri=${encodeURIComponent(this.redirectUrl.toString())}&state=${stateKey}&response_type=code&scope=${encodeURIComponent(this.oidcConfiguration.scopes_supported.join(" "))}`;
+    const queryParams = queryParamBuilder({
+      client_id: this.clientId,
+      redirect_uri: this.redirectUrl.toString(),
+      state: stateKey,
+      response_type: "code",
+      scope: this.oidcConfiguration.scopes_supported.join(" "),
+    });
+
+    const finalUrl = `${normalisedUrl}?${queryParams}`;
 
     const session: OIDCAuthSession = {
       redirectUrl: finalUrl,
@@ -549,7 +551,8 @@ export class OIDCManager {
   }
 }
 
-function isHttps(url: URL): boolean {
-  if (url.protocol === "https:") return true;
+function isHttps(url: URL | string): boolean {
+  const parsedUrl = typeof url === "string" ? new URL(url) : url;
+  if (parsedUrl.protocol === "https:") return true;
   else return false;
 }
