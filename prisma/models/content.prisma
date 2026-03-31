@@ -53,11 +53,16 @@ model Game {
   saves       SaveSlot[]
   screenshots Screenshot[]
   tags        GameTag[]
-  playtime    Playtime[]
+  playtime      Playtime[]
+  playSessions  PlaySession[]
 
   developers             Company[]               @relation(name: "developers")
   publishers             Company[]               @relation(name: "publishers")
   unimportedGameVersions UnimportedGameVersion[]
+  gameRequests           GameRequest[]
+  favoritedBy            FavoriteGame[]
+  achievements           Achievement[]
+  externalLinks          GameExternalLink[]
 
   @@unique([metadataSource, metadataId], name: "metadataKey")
   @@unique([libraryId, libraryPath], name: "libraryKey")
@@ -211,6 +216,22 @@ model Playtime {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@id([gameId, userId])
+  @@index([userId])
+}
+
+model PlaySession {
+  id String @id @default(uuid())
+
+  gameId String
+  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  startedAt       DateTime @default(now()) @db.Timestamptz(6)
+  endedAt         DateTime? @db.Timestamptz(6)
+  durationSeconds Int?
+
+  @@index([gameId, userId])
   @@index([userId])
 }
 

@@ -1,0 +1,34 @@
+enum RequestStatus {
+  Pending
+  Approved
+  Denied
+  Withdrawn
+}
+
+model GameRequest {
+  id          String        @id @default(uuid())
+  title       String
+  description String        @default("")
+  igdbUrl     String?
+  steamUrl    String?
+
+  status      RequestStatus @default(Pending)
+  reviewNotes String?
+
+  requesterId String
+  requester   User          @relation(fields: [requesterId], references: [id], onDelete: Cascade, name: "requestsCreated")
+
+  reviewerId  String?
+  reviewer    User?         @relation(fields: [reviewerId], references: [id], onDelete: SetNull, name: "requestsReviewed")
+
+  gameId      String?
+  game        Game?         @relation(fields: [gameId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  reviewedAt  DateTime?
+
+  @@index([status])
+  @@index([requesterId])
+  @@index([createdAt])
+}

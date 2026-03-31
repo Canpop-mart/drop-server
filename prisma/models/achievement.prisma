@@ -1,0 +1,58 @@
+enum ExternalAccountProvider {
+    Steam
+    RetroAchievements
+    Goldberg
+}
+
+model UserExternalAccount {
+    id         String                  @id @default(uuid())
+    userId     String
+    user       User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+    provider   ExternalAccountProvider
+    externalId String
+
+    @@unique([userId, provider])
+    @@index([provider, externalId])
+}
+
+model GameExternalLink {
+    id             String                  @id @default(uuid())
+    gameId         String
+    game           Game                    @relation(fields: [gameId], references: [id], onDelete: Cascade)
+    provider       ExternalAccountProvider
+    externalGameId String
+
+    @@unique([gameId, provider])
+}
+
+model Achievement {
+    id            String                  @id @default(uuid())
+    gameId        String
+    game          Game                    @relation(fields: [gameId], references: [id], onDelete: Cascade)
+    externalId    String
+    provider      ExternalAccountProvider
+    title         String
+    description   String
+    iconUrl       String                  @default("")
+    iconLockedUrl String                  @default("")
+    displayOrder  Int                     @default(0)
+
+    unlocks UserAchievement[]
+
+    @@unique([gameId, provider, externalId])
+    @@index([gameId])
+}
+
+model UserAchievement {
+    id            String      @id @default(uuid())
+    userId        String
+    user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+    achievementId String
+    achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+    unlockedAt    DateTime
+    syncedAt      DateTime    @default(now())
+
+    @@unique([userId, achievementId])
+    @@index([userId])
+    @@index([achievementId])
+}

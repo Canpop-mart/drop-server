@@ -19,6 +19,9 @@ export default defineEventHandler(async (h3) => {
       username: true,
       displayName: true,
       profilePictureObjectId: true,
+      bannerObjectId: true,
+      bio: true,
+      profileTheme: true,
     },
   });
 

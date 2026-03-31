@@ -7,6 +7,11 @@ model User {
     email                  String
     displayName            String
     profilePictureObjectId String // Object
+    bannerObjectId         String  @default("")
+    bio                    String  @default("")
+    profileTheme           String  @default("default")
+
+    favoriteGames FavoriteGame[]
 
     authMecs LinkedAuthMec[]
     mfas     LinkedMFAMec[]
@@ -21,7 +26,31 @@ model User {
 
     saves       SaveSlot[]
     screenshots Screenshot[]
-    playtime    Playtime[]
+    playtime      Playtime[]
+    playSessions  PlaySession[]
+
+    gameRequests         GameRequest[] @relation(name: "requestsCreated")
+    reviewedGameRequests GameRequest[] @relation(name: "requestsReviewed")
+
+    externalAccounts UserExternalAccount[]
+    achievements     UserAchievement[]
+}
+
+model FavoriteGame {
+    id String @id @default(uuid())
+
+    userId String
+    user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    gameId String
+    game   Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+    position Int @default(0)
+
+    createdAt DateTime @default(now())
+
+    @@unique([userId, gameId])
+    @@index([userId])
 }
 
 model Notification {
