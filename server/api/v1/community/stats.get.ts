@@ -11,7 +11,7 @@ export default defineEventHandler(async (h3) => {
     totalUsers,
     totalPlaySessions,
     totalAchievementUnlocks,
-    totalPlaytimeRecords,
+    _totalPlaytimeRecords,
     totalRequests,
     pendingRequests,
   ] = await Promise.all([

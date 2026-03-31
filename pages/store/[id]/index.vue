@@ -325,8 +325,8 @@ const similarLoading = ref(true);
 const achievements = await $dropFetch(`/api/v1/games/${gameId}/achievements`).catch(() => []);
 achievementsLoading.value = false;
 
-const reviewStats = ref(null);
-const reviews = ref([]);
+const reviewStats = ref<{ averageRating: number; totalReviews: number } | null>(null);
+const reviews = ref<{ id: string; rating: number; body: string; user: { profilePictureObjectId: string; displayName: string; username: string } }[]>([]);
 const reviewData = await $dropFetch(`/api/v1/games/${gameId}/reviews`).catch(() => null);
 if (reviewData) { reviewStats.value = reviewData.stats; reviews.value = reviewData.reviews; }
 

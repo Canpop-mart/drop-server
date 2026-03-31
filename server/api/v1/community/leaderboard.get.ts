@@ -23,7 +23,7 @@ export default defineEventHandler(async (h3) => {
   });
 
   // Get top users by games owned
-  const gamesByUser = await prisma.collectionEntry.groupBy({
+  const _gamesByUser = await prisma.collectionEntry.groupBy({
     by: ["collection"],
     _count: true,
     take: 20,

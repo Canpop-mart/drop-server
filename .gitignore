@@ -42,3 +42,4 @@ local-data/
 /prisma/validate
 
 /server/internal/proto
+drop-image.tar
