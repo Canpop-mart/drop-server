@@ -27,6 +27,7 @@ model GameRequest {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   reviewedAt  DateTime?
+  votes       RequestVote[]
 
   @@index([status])
   @@index([requesterId])

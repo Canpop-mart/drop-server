@@ -234,6 +234,27 @@
           <div class="grid grid-cols-1 gap-x-8 gap-y-10 lg:grid-cols-5">
             <!-- Filters -->
             <form class="hidden lg:block">
+              <!-- Text search -->
+              <div class="border-b border-zinc-700 pb-6">
+                <label
+                  for="store-search"
+                  class="block font-medium text-zinc-100 mb-3"
+                  >{{ $t("store.view.search") }}</label
+                >
+                <div
+                  class="flex items-center gap-x-2 rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/50 transition-colors"
+                >
+                  <MagnifyingGlassIcon class="size-4 text-zinc-500 shrink-0" />
+                  <input
+                    id="store-search"
+                    v-model="searchText"
+                    type="text"
+                    :placeholder="$t('store.search.placeholder')"
+                    class="flex-1 bg-transparent text-sm text-zinc-100 placeholder-zinc-500 outline-none"
+                    @keydown.enter.prevent
+                  />
+                </div>
+              </div>
               <Disclosure
                 v-for="section in options"
                 :key="section.param"
@@ -374,6 +395,7 @@ import {
   PlusIcon,
   Squares2X2Icon,
 } from "@heroicons/vue/20/solid";
+import { MagnifyingGlassIcon } from "@heroicons/vue/24/outline";
 import type { SerializeObject } from "nitropack";
 import type { GameModel, GameTagModel } from "~/prisma/client/models";
 import { Platform } from "~/prisma/client/enums";
@@ -382,6 +404,15 @@ const {
 } = await $dropFetch(`/api/v1/settings`);
 
 const mobileFiltersOpen = ref(false);
+const searchText = ref("");
+let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+const debouncedSearch = ref("");
+watch(searchText, (val) => {
+  if (searchDebounce) clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    debouncedSearch.value = val.trim();
+  }, 300);
+});
 
 const props = defineProps<{
   params?: { [key: string]: string };
@@ -394,25 +425,19 @@ const props = defineProps<{
 const tags =
   await $dropFetch<Array<SerializeObject<GameTagModel>>>("/api/v1/store/tags");
 
-const sorts: Array<StoreSortOption> = [
-  {
-    name: "Default",
-    param: "default",
-  },
-  {
-    name: "Newest",
-    param: "newest",
-  },
-  {
-    name: "Recently Added",
-    param: "recent",
-  },
-  {
-    name: "Name",
-    param: "name",
-  },
-];
-const currentSort = ref(sorts[0].param);
+const sorts = computed<Array<StoreSortOption>>(() => {
+  const base: Array<StoreSortOption> = [
+    { name: "Default", param: "default" },
+    { name: "Newest", param: "newest" },
+    { name: "Recently Added", param: "recent" },
+    { name: "Name", param: "name" },
+  ];
+  if (debouncedSearch.value.length > 0) {
+    base.unshift({ name: "Relevance", param: "relevance" });
+  }
+  return base;
+});
+const currentSort = ref(sorts.value[0].param);
 const sortOrder = ref<"asc" | "desc">("desc");
 
 const options: Array<StoreFilterOption> = [
@@ -462,7 +487,13 @@ const filterQuery = computed(() => {
         .map(([k, v]) => `${k}=${v}`)
         .join("&")
     : props.params;
-  return `${query}${extraFilters ? (query ? "&" : "") + extraFilters : ""}`;
+  const searchParam = debouncedSearch.value
+    ? `q=${encodeURIComponent(debouncedSearch.value)}`
+    : "";
+  const parts = [query, extraFilters, searchParam]
+    .filter((p) => p && p.length > 0)
+    .join("&");
+  return parts;
 });
 
 const games = ref<Array<SerializeObject<GameModel>>>();

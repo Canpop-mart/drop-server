@@ -63,6 +63,9 @@ model Game {
   favoritedBy            FavoriteGame[]
   achievements           Achievement[]
   externalLinks          GameExternalLink[]
+  reviews                GameReview[]          @relation(name: "GameReviews")
+  leaderboards           Leaderboard[]
+  showcases              ProfileShowcase[]
 
   @@unique([metadataSource, metadataId], name: "metadataKey")
   @@unique([libraryId, libraryPath], name: "libraryKey")
@@ -165,6 +168,7 @@ model LaunchConfiguration {
   gameVersion GameVersion @relation(fields: [versionId], references: [versionId], onDelete: Cascade, onUpdate: Cascade)
 
   emulations LaunchConfiguration[] @relation("emulator")
+  deckVerified DeckStatus @default(Unknown)
 }
 
 // A save slot for a game

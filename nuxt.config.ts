@@ -62,10 +62,7 @@ export default defineNuxtConfig({
   },
   css: ["~/assets/tailwindcss.css", "~/assets/core.scss"],
 
-  sourcemap: {
-    server: true,
-    client: true,
-  },
+  sourcemap: false,
 
   experimental: {
     buildCache: true,

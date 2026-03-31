@@ -13,13 +13,15 @@ const StoreRead = type({
     .pipe((s) => Number.parseInt(s))
     .default("10"),
 
+  q: "string?",
+
   tags: "string?",
   platform: "string?",
 
   company: "string?",
   companyActions: "string = 'published,developed'",
 
-  sort: "'default' | 'newest' | 'recent' | 'name' = 'default'",
+  sort: "'default' | 'newest' | 'recent' | 'name' | 'relevance' = 'default'",
   order: "'asc' | 'desc' = 'desc'",
 });
 
@@ -113,8 +115,61 @@ export default defineEventHandler(async (h3) => {
     : undefined;
 
   /**
+   * Text search filter (uses PostgreSQL trigram similarity)
+   */
+  const searchTerm = options.q?.trim();
+  const hasSearch = searchTerm && searchTerm.length > 0;
+
+  /**
    * Query
    */
+
+  // If there's a text search, use safe Prisma queries with parameterized LIKE
+  if (hasSearch) {
+    const effectiveSort =
+      options.sort === "default" ? "relevance" : options.sort;
+
+    const baseFilter: Prisma.GameWhereInput = {
+      ...tagFilter,
+      ...platformFilter,
+      ...companyFilter,
+      type: GameType.Game,
+    };
+
+    // Use parameterized Prisma queries - no SQL interpolation
+    const [results, count] = await prisma.$transaction([
+      prisma.game.findMany({
+        skip: options.skip,
+        take: Math.min(options.take, 50),
+        where: {
+          ...baseFilter,
+          OR: [
+            { mName: { contains: searchTerm, mode: "insensitive" as const } },
+            { mShortDescription: { contains: searchTerm, mode: "insensitive" as const } },
+          ],
+        },
+        orderBy:
+          effectiveSort === "name"
+            ? { mName: options.order }
+            : effectiveSort === "newest"
+              ? { mReleased: options.order }
+              : effectiveSort === "recent"
+                ? { created: options.order }
+                : { mName: "asc" },
+      }),
+      prisma.game.count({
+        where: {
+          ...baseFilter,
+          OR: [
+            { mName: { contains: searchTerm, mode: "insensitive" as const } },
+            { mShortDescription: { contains: searchTerm, mode: "insensitive" as const } },
+          ],
+        },
+      }),
+    ]);
+
+    return { results, count };
+  }
 
   const finalFilter: Prisma.GameWhereInput = {
     ...tagFilter,
@@ -127,6 +182,7 @@ export default defineEventHandler(async (h3) => {
   switch (options.sort) {
     case "default":
     case "newest":
+    case "relevance":
       sort.mReleased = options.order;
       break;
     case "recent":

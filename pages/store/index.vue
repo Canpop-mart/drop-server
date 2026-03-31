@@ -1,8 +1,8 @@
 <template>
   <div class="w-full flex flex-col overflow-x-hidden">
-    <!-- Hero section -->
+    <!-- Hero section with featured games -->
     <VueCarousel
-      v-if="recent.length > 0"
+      v-if="featured.length > 0"
       :wrap-around="true"
       :items-to-show="1"
       :autoplay="15 * 1000"
@@ -10,7 +10,7 @@
       :pause-autoplay-on-hover="true"
       class="store-carousel"
     >
-      <VueSlide v-for="game in recent" :key="game.id">
+      <VueSlide v-for="game in featured" :key="game.id">
         <div class="w-full h-full relative">
           <div class="absolute inset-0">
             <img
@@ -54,7 +54,7 @@
       </VueSlide>
 
       <template #addons>
-        <CarouselPagination class="py-2" :items="recent" />
+        <CarouselPagination class="py-2" :items="featured" />
       </template>
     </VueCarousel>
     <div
@@ -85,20 +85,125 @@
       </NuxtLink>
     </div>
 
-    <StoreView />
+    <!-- Search bar -->
+    <div class="w-full bg-zinc-950/80 border-b border-zinc-800/50">
+      <div class="max-w-7xl mx-auto px-4 sm:px-8 py-5">
+        <StoreSearch />
+      </div>
+    </div>
+
+    <!-- Discovery sections -->
+    <div class="max-w-7xl mx-auto w-full px-4 sm:px-8 py-8 flex flex-col gap-y-10">
+      <!-- Trending: games with recent play activity -->
+      <StoreSection
+        :title="$t('store.sections.trending')"
+        :subtitle="$t('store.sections.trendingSub')"
+        :icon="FireIcon"
+        :items="trendingGames"
+        :loading="trendingLoading"
+      />
+
+      <!-- Most Popular: all-time most played -->
+      <StoreSection
+        :title="$t('store.sections.popular')"
+        :subtitle="$t('store.sections.popularSub')"
+        :icon="ChartBarIcon"
+        :items="popularGames"
+        :loading="popularLoading"
+      />
+
+      <!-- Recommended for you -->
+      <StoreSection
+        v-if="user"
+        :title="$t('store.sections.recommended')"
+        :subtitle="$t('store.sections.recommendedSub')"
+        :icon="SparklesIcon"
+        :items="recommendedGames"
+        :loading="recommendedLoading"
+      />
+
+      <!-- Recently Added -->
+      <StoreSection
+        :title="$t('store.sections.recentlyAdded')"
+        :icon="ClockIcon"
+        :items="recentlyAdded"
+        :loading="recentlyAddedLoading"
+      />
+    </div>
+
+    <!-- Full store browser -->
+    <div class="border-t border-zinc-800/50">
+      <StoreView />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ArrowTopRightOnSquareIcon } from "@heroicons/vue/24/outline";
+import {
+  ArrowTopRightOnSquareIcon,
+  FireIcon,
+  ChartBarIcon,
+  SparklesIcon,
+  ClockIcon,
+} from "@heroicons/vue/24/outline";
 
-const recent = await $dropFetch("/api/v1/store/featured");
-
+const featured = await $dropFetch("/api/v1/store/featured");
 const user = useUser();
-
 const { t } = useI18n();
 
 useHead({
   title: t("store.title"),
 });
+
+// Trending games (recent play activity)
+const trendingLoading = ref(true);
+const trendingGames = ref<any[]>([]);
+$fetch("/api/v1/store/trending", { query: { take: 10, days: 7 } })
+  .then((data) => {
+    trendingGames.value = data.results;
+  })
+  .catch(() => {})
+  .finally(() => {
+    trendingLoading.value = false;
+  });
+
+// Popular games (most total playtime)
+const popularLoading = ref(true);
+const popularGames = ref<any[]>([]);
+$fetch("/api/v1/store/popular", { query: { take: 10 } })
+  .then((data) => {
+    popularGames.value = data.results;
+  })
+  .catch(() => {})
+  .finally(() => {
+    popularLoading.value = false;
+  });
+
+// Recommended for current user
+const recommendedLoading = ref(true);
+const recommendedGames = ref<any[]>([]);
+if (user.value) {
+  $fetch("/api/v1/store/recommended", { query: { take: 10 } })
+    .then((data) => {
+      recommendedGames.value = data.results;
+    })
+    .catch(() => {})
+    .finally(() => {
+      recommendedLoading.value = false;
+    });
+} else {
+  recommendedLoading.value = false;
+}
+
+// Recently added games
+const recentlyAddedLoading = ref(true);
+const recentlyAdded = ref<any[]>([]);
+$fetch("/api/v1/store", { query: { take: 10, sort: "recent", order: "desc" } })
+  .then((data) => {
+    recentlyAdded.value = data.results;
+  })
+  .catch(() => {})
+  .finally(() => {
+    recentlyAddedLoading.value = false;
+  });
 </script>

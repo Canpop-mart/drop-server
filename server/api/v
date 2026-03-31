@@ -1,0 +1,21 @@
+import aclManager from "~/server/internal/acls";
+import prisma from "~/server/internal/db/database";
+
+export default defineEventHandler(async (h3) => {
+  const userId = await aclManager.getUserIdACL(h3, ["store:read"]);
+  if (!userId) throw createError({ statusCode: 403 });
+  const gameId = getRouterParam(h3, "id");
+  if (!gameId) throw createError({ statusCode: 400 });
+  const targetGame = await prisma.game.findUnique({
+    where: { id: gameId },
+    select: { tags: { select: { id: true } } },
+  });
+  if (!targetGame) throw createError({ statusCode: 404 });
+  const tagIds = targetGame.tags.map((t) => t.id);
+  const similar = await prisma.game.findMany({
+    where: { id: { not: gameId }, tags: { some: { id: { in: tagIds } } } },
+    take: 8,
+    select: { id: true, mName: true, mIconObjectId: true, mCoverObjectId: true, mBannerObjectId: true },
+  });
+  return similar;
+});

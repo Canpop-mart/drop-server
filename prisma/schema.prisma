@@ -22,3 +22,142 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+// ─── New models for Phase 1 ───
+// These models are added to the schema and reference existing models from prisma/models/
+
+enum AchieveMode {
+  Gameplay
+  Sync
+}
+
+enum ShowcaseType {
+  FavoriteGame
+  Achievement
+  Review
+  GameStats
+  Custom
+}
+
+enum LeaderboardType {
+  Playtime
+  AchievementCount
+  Speedrun
+  Score
+}
+
+enum SortOrder {
+  Asc
+  Desc
+}
+
+enum VoteType {
+  Up
+  Down
+}
+
+enum BadgeType {
+  Achievement
+  Playtime
+  Collection
+  Review
+  Admin
+}
+
+enum DeckStatus {
+  Verified
+  Playable
+  Unsupported
+  Unknown
+}
+
+model GameReview {
+  id        String   @id @default(uuid())
+  gameId    String
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade, name: "GameReviews")
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, name: "UserReviews")
+  rating    Int
+  body      String?  @default("")
+  helpful   Int      @default(0)
+  unhelpful Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([gameId, userId])
+  @@index([gameId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([rating])
+}
+
+model Leaderboard {
+  id        String           @id @default(uuid())
+  gameId    String
+  game      Game             @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  name      String
+  type      LeaderboardType
+  sortOrder SortOrder        @default(Desc)
+  createdAt DateTime         @default(now())
+
+  entries   LeaderboardEntry[]
+
+  @@unique([gameId, name])
+  @@index([gameId])
+}
+
+model LeaderboardEntry {
+  id           String   @id @default(uuid())
+  leaderboardId String
+  leaderboard  Leaderboard @relation(fields: [leaderboardId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  score        Float
+  submittedAt  DateTime @default(now())
+  data         Json?
+  rank         Int?
+
+  @@unique([leaderboardId, userId])
+  @@index([leaderboardId])
+  @@index([userId])
+  @@index([score])
+}
+
+model ProfileShowcase {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       ShowcaseType
+  gameId     String?
+  game       Game?    @relation(fields: [gameId], references: [id], onDelete: SetNull)
+  itemId     String?
+  title      String   @default("")
+  data       Json?
+  sortOrder  Int      @default(0)
+
+  @@index([userId])
+  @@index([sortOrder])
+}
+
+model UserBadge {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      BadgeType
+  data      Json?
+  unlockedAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model RequestVote {
+  requestId String
+  request   GameRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vote      VoteType
+  createdAt DateTime    @default(now())
+  @@id([requestId, userId])
+  @@index([requestId])
+  @@index([userId])
+}
