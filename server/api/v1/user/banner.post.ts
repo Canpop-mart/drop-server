@@ -17,10 +17,11 @@ export default defineEventHandler(async (h3) => {
     throw createError({ statusCode: 400, statusMessage: "No image provided." });
   }
 
-  await prisma.user.update({
+  const updated = await prisma.user.updateMany({
     where: { id: userId },
     data: { bannerObjectId: bannerId },
   });
+  if (updated.count === 0) throw createError({ statusCode: 404, statusMessage: "User not found." });
 
   await pull();
 

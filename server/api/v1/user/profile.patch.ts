@@ -24,10 +24,12 @@ export default defineEventHandler(async (h3) => {
     throw createError({ statusCode: 400, statusMessage: "No fields to update." });
   }
 
-  const updated = await prisma.user.update({
+  const updated = (await prisma.user.updateManyAndReturn({
     where: { id: userId },
     data,
-  });
+  })).at(0);
+
+  if (!updated) throw createError({ statusCode: 404, statusMessage: "User not found." });
 
   return {
     id: updated.id,

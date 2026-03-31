@@ -1,5 +1,6 @@
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
+import type { Prisma } from "~/prisma/client/client";
 
 export default defineEventHandler(async (h3) => {
   const userId = await aclManager.getUserIdACL(h3, ["store:read"]);
@@ -8,7 +9,7 @@ export default defineEventHandler(async (h3) => {
   const query = getQuery(h3);
   const gameId = query.gameId as string | undefined;
 
-  const where: any = { userId };
+  const where: Prisma.UserAchievementWhereInput = { userId };
 
   const userAchievements = await prisma.userAchievement.findMany({
     where,
