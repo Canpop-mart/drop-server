@@ -6,7 +6,8 @@ export default defineEventHandler(async (h3) => {
   if (!allowed) throw createError({ statusCode: 403 });
 
   const gameId = getRouterParam(h3, "id");
-  if (!gameId) throw createError({ statusCode: 400, statusMessage: "No game ID." });
+  if (!gameId)
+    throw createError({ statusCode: 400, statusMessage: "No game ID." });
 
   // Delete all user achievements for this game's achievements
   const achievements = await prisma.achievement.findMany({

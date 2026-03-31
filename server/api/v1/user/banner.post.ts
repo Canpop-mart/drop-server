@@ -8,7 +8,10 @@ export default defineEventHandler(async (h3) => {
 
   const uploadResult = await handleFileUpload(h3, {}, ["internal:read"], 1);
   if (!uploadResult) {
-    throw createError({ statusCode: 400, statusMessage: "Failed to upload banner." });
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Failed to upload banner.",
+    });
   }
 
   const [imageIds, _options, pull, _dump] = uploadResult;
@@ -21,7 +24,8 @@ export default defineEventHandler(async (h3) => {
     where: { id: userId },
     data: { bannerObjectId: bannerId },
   });
-  if (updated.count === 0) throw createError({ statusCode: 404, statusMessage: "User not found." });
+  if (updated.count === 0)
+    throw createError({ statusCode: 404, statusMessage: "User not found." });
 
   await pull();
 

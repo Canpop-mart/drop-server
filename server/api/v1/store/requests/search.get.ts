@@ -27,7 +27,12 @@ export default defineEventHandler(async (h3) => {
   const userIds = [...new Set(requests.map((r) => r.requesterId))];
   const users = await prisma.user.findMany({
     where: { id: { in: userIds } },
-    select: { id: true, username: true, displayName: true, profilePictureObjectId: true },
+    select: {
+      id: true,
+      username: true,
+      displayName: true,
+      profilePictureObjectId: true,
+    },
   });
   const userMap = Object.fromEntries(users.map((u) => [u.id, u]));
 

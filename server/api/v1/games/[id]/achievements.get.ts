@@ -6,7 +6,8 @@ export default defineEventHandler(async (h3) => {
   if (!userId) throw createError({ statusCode: 403 });
 
   const gameId = getRouterParam(h3, "id");
-  if (!gameId) throw createError({ statusCode: 400, statusMessage: "No game ID." });
+  if (!gameId)
+    throw createError({ statusCode: 400, statusMessage: "No game ID." });
 
   const achievements = await prisma.achievement.findMany({
     where: { gameId },
@@ -22,7 +23,7 @@ export default defineEventHandler(async (h3) => {
     },
   });
   const unlockedMap = Object.fromEntries(
-    userAchievements.map((ua) => [ua.achievementId, ua.unlockedAt])
+    userAchievements.map((ua) => [ua.achievementId, ua.unlockedAt]),
   );
 
   return achievements.map((a) => ({

@@ -6,17 +6,25 @@ export default defineEventHandler(async (h3) => {
   if (!requestingUser) throw createError({ statusCode: 403 });
 
   const userId = getRouterParam(h3, "id");
-  if (!userId) throw createError({ statusCode: 400, statusMessage: "No userId in route." });
+  if (!userId)
+    throw createError({
+      statusCode: 400,
+      statusMessage: "No userId in route.",
+    });
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) throw createError({ statusCode: 404, statusMessage: "User not found." });
+  if (!user)
+    throw createError({ statusCode: 404, statusMessage: "User not found." });
 
   // Total playtime
   const playtimeRecords = await prisma.playtime.findMany({
     where: { userId },
     select: { seconds: true },
   });
-  const totalPlaytimeSeconds = playtimeRecords.reduce((sum, p) => sum + p.seconds, 0);
+  const totalPlaytimeSeconds = playtimeRecords.reduce(
+    (sum, p) => sum + p.seconds,
+    0,
+  );
 
   // Games played count
   const gamesPlayed = playtimeRecords.length;
@@ -43,7 +51,12 @@ export default defineEventHandler(async (h3) => {
   const gameIds = [...new Set(recentSessions.map((s) => s.gameId))];
   const games = await prisma.game.findMany({
     where: { id: { in: gameIds } },
-    select: { id: true, mName: true, mIconObjectId: true, mCoverObjectId: true },
+    select: {
+      id: true,
+      mName: true,
+      mIconObjectId: true,
+      mCoverObjectId: true,
+    },
   });
   const gameMap = Object.fromEntries(games.map((g) => [g.id, g]));
 

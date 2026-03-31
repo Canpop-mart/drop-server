@@ -27,7 +27,10 @@ export default defineEventHandler(async (h3) => {
   return { synced: totalSynced };
 });
 
-async function syncRetroAchievements(userId: string, raUsername: string): Promise<number> {
+async function syncRetroAchievements(
+  userId: string,
+  raUsername: string,
+): Promise<number> {
   try {
     // Fetch all games that have RA external links
     const gameLinks = await prisma.gameExternalLink.findMany({
@@ -42,7 +45,7 @@ async function syncRetroAchievements(userId: string, raUsername: string): Promis
       // Fetch user's unlocks from RA API
       const raGameId = link.externalGameId;
       const response = await fetch(
-        `https://retroachievements.org/API/API_GetGameInfoAndUserProgress.php?z=${raUsername}&y=${process.env.RA_API_KEY}&g=${raGameId}&u=${raUsername}`
+        `https://retroachievements.org/API/API_GetGameInfoAndUserProgress.php?z=${raUsername}&y=${process.env.RA_API_KEY}&g=${raGameId}&u=${raUsername}`,
       );
 
       if (!response.ok) continue;
@@ -50,7 +53,10 @@ async function syncRetroAchievements(userId: string, raUsername: string): Promis
       const data = await response.json();
       if (!data.Achievements) continue;
 
-      for (const [achId, achData] of Object.entries(data.Achievements) as [string, Record<string, unknown>][]) {
+      for (const [achId, achData] of Object.entries(data.Achievements) as [
+        string,
+        Record<string, unknown>,
+      ][]) {
         if (achData.DateEarned) {
           // Find matching achievement in our DB
           const achievement = await prisma.achievement.findUnique({

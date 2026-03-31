@@ -6,10 +6,12 @@ export default defineEventHandler(async (h3) => {
   if (!allowed) throw createError({ statusCode: 403 });
 
   const id = getRouterParam(h3, "id");
-  if (!id) throw createError({ statusCode: 400, statusMessage: "No request ID." });
+  if (!id)
+    throw createError({ statusCode: 400, statusMessage: "No request ID." });
 
   const deleted = await prisma.gameRequest.deleteMany({ where: { id } });
-  if (deleted.count === 0) throw createError({ statusCode: 404, statusMessage: "Request not found." });
+  if (deleted.count === 0)
+    throw createError({ statusCode: 404, statusMessage: "Request not found." });
 
   return {};
 });

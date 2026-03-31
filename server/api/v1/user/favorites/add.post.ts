@@ -15,7 +15,8 @@ export default defineEventHandler(async (h3) => {
 
   // Check game exists
   const game = await prisma.game.findUnique({ where: { id: body.gameId } });
-  if (!game) throw createError({ statusCode: 404, statusMessage: "Game not found." });
+  if (!game)
+    throw createError({ statusCode: 404, statusMessage: "Game not found." });
 
   // Get next position
   const maxPos = await prisma.favoriteGame.findFirst({

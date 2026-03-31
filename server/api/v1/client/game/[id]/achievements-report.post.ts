@@ -15,7 +15,8 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const user = await fetchUser();
 
   const gameId = getRouterParam(h3, "id");
-  if (!gameId) throw createError({ statusCode: 400, statusMessage: "No game ID." });
+  if (!gameId)
+    throw createError({ statusCode: 400, statusMessage: "No game ID." });
 
   const rawBody = await readBody(h3);
   const body = AchievementReport(rawBody);

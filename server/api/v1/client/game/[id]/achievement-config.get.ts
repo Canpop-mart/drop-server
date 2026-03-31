@@ -5,7 +5,8 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const user = await fetchUser();
 
   const gameId = getRouterParam(h3, "id");
-  if (!gameId) throw createError({ statusCode: 400, statusMessage: "No game ID." });
+  if (!gameId)
+    throw createError({ statusCode: 400, statusMessage: "No game ID." });
 
   // Get all achievements for this game
   const achievements = await prisma.achievement.findMany({

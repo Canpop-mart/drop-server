@@ -18,25 +18,30 @@ export default defineEventHandler(async (h3) => {
   if (!userId) throw createError({ statusCode: 403 });
 
   const id = getRouterParam(h3, "id");
-  if (!id) throw createError({ statusCode: 400, statusMessage: "No request ID." });
+  if (!id)
+    throw createError({ statusCode: 400, statusMessage: "No request ID." });
 
   const body = await readDropValidatedBody(h3, UpdateRequest);
 
   const existing = await prisma.gameRequest.findUnique({ where: { id } });
-  if (!existing) throw createError({ statusCode: 404, statusMessage: "Request not found." });
+  if (!existing)
+    throw createError({ statusCode: 404, statusMessage: "Request not found." });
 
-  const updated = (await prisma.gameRequest.updateManyAndReturn({
-    where: { id },
-    data: {
-      status: body.status as RequestStatus,
-      reviewNotes: body.reviewNotes,
-      reviewerId: userId,
-      reviewedAt: new Date(),
-      ...(body.gameId && { gameId: body.gameId }),
-    },
-  })).at(0);
+  const updated = (
+    await prisma.gameRequest.updateManyAndReturn({
+      where: { id },
+      data: {
+        status: body.status as RequestStatus,
+        reviewNotes: body.reviewNotes,
+        reviewerId: userId,
+        reviewedAt: new Date(),
+        ...(body.gameId && { gameId: body.gameId }),
+      },
+    })
+  ).at(0);
 
-  if (!updated) throw createError({ statusCode: 404, statusMessage: "Request not found." });
+  if (!updated)
+    throw createError({ statusCode: 404, statusMessage: "Request not found." });
 
   return updated;
 });

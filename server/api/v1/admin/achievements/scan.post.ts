@@ -41,23 +41,36 @@ export default defineEventHandler(async (h3) => {
   return { scanned };
 });
 
-async function scanRetroAchievements(gameId: string, raGameId: string): Promise<number> {
+async function scanRetroAchievements(
+  gameId: string,
+  raGameId: string,
+): Promise<number> {
   const apiKey = process.env.RA_API_KEY;
-  if (!apiKey) throw createError({ statusCode: 500, statusMessage: "RA_API_KEY not configured." });
+  if (!apiKey)
+    throw createError({
+      statusCode: 500,
+      statusMessage: "RA_API_KEY not configured.",
+    });
 
   const response = await fetch(
-    `https://retroachievements.org/API/API_GetGameInfoAndUserProgress.php?z=_&y=${apiKey}&g=${raGameId}&u=_`
+    `https://retroachievements.org/API/API_GetGameInfoAndUserProgress.php?z=_&y=${apiKey}&g=${raGameId}&u=_`,
   );
 
   if (!response.ok) {
-    throw createError({ statusCode: 502, statusMessage: "Failed to fetch from RetroAchievements API." });
+    throw createError({
+      statusCode: 502,
+      statusMessage: "Failed to fetch from RetroAchievements API.",
+    });
   }
 
   const data = await response.json();
   if (!data.Achievements) return 0;
 
   let count = 0;
-  for (const [achId, achData] of Object.entries(data.Achievements) as [string, Record<string, unknown>][]) {
+  for (const [achId, achData] of Object.entries(data.Achievements) as [
+    string,
+    Record<string, unknown>,
+  ][]) {
     const title = String(achData.Title ?? "");
     const description = String(achData.Description ?? "");
     const badgeName = achData.BadgeName ? String(achData.BadgeName) : "";
@@ -67,7 +80,8 @@ async function scanRetroAchievements(gameId: string, raGameId: string): Promise<
     const iconLockedUrl = badgeName
       ? `https://media.retroachievements.org/Badge/${badgeName}_lock.png`
       : "";
-    const displayOrder = typeof achData.DisplayOrder === "number" ? achData.DisplayOrder : count;
+    const displayOrder =
+      typeof achData.DisplayOrder === "number" ? achData.DisplayOrder : count;
 
     await prisma.achievement.upsert({
       where: {

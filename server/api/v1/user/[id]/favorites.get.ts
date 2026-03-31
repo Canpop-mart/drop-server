@@ -6,7 +6,11 @@ export default defineEventHandler(async (h3) => {
   if (!requestingUser) throw createError({ statusCode: 403 });
 
   const userId = getRouterParam(h3, "id");
-  if (!userId) throw createError({ statusCode: 400, statusMessage: "No userId in route." });
+  if (!userId)
+    throw createError({
+      statusCode: 400,
+      statusMessage: "No userId in route.",
+    });
 
   const favorites = await prisma.favoriteGame.findMany({
     where: { userId },

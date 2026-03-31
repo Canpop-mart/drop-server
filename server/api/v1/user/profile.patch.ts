@@ -21,15 +21,21 @@ export default defineEventHandler(async (h3) => {
   if (body.profileTheme !== undefined) data.profileTheme = body.profileTheme;
 
   if (Object.keys(data).length === 0) {
-    throw createError({ statusCode: 400, statusMessage: "No fields to update." });
+    throw createError({
+      statusCode: 400,
+      statusMessage: "No fields to update.",
+    });
   }
 
-  const updated = (await prisma.user.updateManyAndReturn({
-    where: { id: userId },
-    data,
-  })).at(0);
+  const updated = (
+    await prisma.user.updateManyAndReturn({
+      where: { id: userId },
+      data,
+    })
+  ).at(0);
 
-  if (!updated) throw createError({ statusCode: 404, statusMessage: "User not found." });
+  if (!updated)
+    throw createError({ statusCode: 404, statusMessage: "User not found." });
 
   return {
     id: updated.id,

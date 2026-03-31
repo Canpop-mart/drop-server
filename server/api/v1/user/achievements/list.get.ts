@@ -30,7 +30,12 @@ export default defineEventHandler(async (h3) => {
   const gameIds = [...new Set(achievements.map((a) => a.gameId))];
   const games = await prisma.game.findMany({
     where: { id: { in: gameIds } },
-    select: { id: true, mName: true, mIconObjectId: true, mCoverObjectId: true },
+    select: {
+      id: true,
+      mName: true,
+      mIconObjectId: true,
+      mCoverObjectId: true,
+    },
   });
   const gameMap = Object.fromEntries(games.map((g) => [g.id, g]));
 
