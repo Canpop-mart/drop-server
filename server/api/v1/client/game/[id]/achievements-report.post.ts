@@ -1,8 +1,7 @@
-import { type } from "arktype";
-import { ArkErrors } from "arktype";
+import { type, ArkErrors } from "arktype";
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
-import { ExternalAccountProvider } from "~/prisma/client/enums";
+import type { ExternalAccountProvider } from "~/prisma/client/enums";
 
 const AchievementReport = type({
   achievements: type({

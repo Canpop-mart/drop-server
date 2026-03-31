@@ -57,7 +57,7 @@ async function scanRetroAchievements(gameId: string, raGameId: string): Promise<
   if (!data.Achievements) return 0;
 
   let count = 0;
-  for (const [achId, achData] of Object.entries(data.Achievements) as any[]) {
+  for (const [achId, achData] of Object.entries(data.Achievements) as [string, Record<string, string | number>][]) {
     await prisma.achievement.upsert({
       where: {
         gameId_provider_externalId: {

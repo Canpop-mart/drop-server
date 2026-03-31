@@ -8,7 +8,8 @@ export default defineEventHandler(async (h3) => {
   const id = getRouterParam(h3, "id");
   if (!id) throw createError({ statusCode: 400, statusMessage: "No request ID." });
 
-  await prisma.gameRequest.delete({ where: { id } });
+  const deleted = await prisma.gameRequest.deleteMany({ where: { id } });
+  if (deleted.count === 0) throw createError({ statusCode: 404, statusMessage: "Request not found." });
 
   return {};
 });

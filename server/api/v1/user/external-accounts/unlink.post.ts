@@ -2,7 +2,7 @@ import { type } from "arktype";
 import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
-import { ExternalAccountProvider } from "~/prisma/client/enums";
+import type { ExternalAccountProvider } from "~/prisma/client/enums";
 
 const UnlinkAccount = type({
   provider: "'Steam' | 'RetroAchievements' | 'Goldberg'",

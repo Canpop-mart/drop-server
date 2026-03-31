@@ -1,5 +1,6 @@
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
+import type { Prisma } from "~/prisma/client/client";
 
 export default defineEventHandler(async (h3) => {
   const allowed = await aclManager.allowSystemACL(h3, ["game:update"]);
@@ -8,8 +9,8 @@ export default defineEventHandler(async (h3) => {
   const query = getQuery(h3);
   const status = query.status as string | undefined;
 
-  const where: any = {};
-  if (status) where.status = status;
+  const where: Prisma.GameRequestWhereInput = {};
+  if (status) where.status = status as Prisma.GameRequestWhereInput["status"];
 
   const requests = await prisma.gameRequest.findMany({
     where,

@@ -2,7 +2,7 @@ import { type } from "arktype";
 import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
-import { RequestStatus } from "~/prisma/client/enums";
+import type { RequestStatus } from "~/prisma/client/enums";
 
 const UpdateRequest = type({
   status: "'Approved' | 'Denied' | 'Pending'",
@@ -26,7 +26,7 @@ export default defineEventHandler(async (h3) => {
   const existing = await prisma.gameRequest.findUnique({ where: { id } });
   if (!existing) throw createError({ statusCode: 404, statusMessage: "Request not found." });
 
-  const updated = await prisma.gameRequest.update({
+  const updated = (await prisma.gameRequest.updateManyAndReturn({
     where: { id },
     data: {
       status: body.status as RequestStatus,
@@ -35,7 +35,9 @@ export default defineEventHandler(async (h3) => {
       reviewedAt: new Date(),
       ...(body.gameId && { gameId: body.gameId }),
     },
-  });
+  })).at(0);
+
+  if (!updated) throw createError({ statusCode: 404, statusMessage: "Request not found." });
 
   return updated;
 });

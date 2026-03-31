@@ -1,5 +1,6 @@
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
+import type { Prisma } from "~/prisma/client/client";
 
 export default defineEventHandler(async (h3) => {
   const userId = await aclManager.getUserIdACL(h3, ["store:read"]);
@@ -9,12 +10,12 @@ export default defineEventHandler(async (h3) => {
   const q = (query.q as string) || "";
   const status = query.status as string | undefined;
 
-  const where: any = {};
+  const where: Prisma.GameRequestWhereInput = {};
   if (q) {
     where.title = { contains: q, mode: "insensitive" };
   }
   if (status) {
-    where.status = status;
+    where.status = status as Prisma.GameRequestWhereInput["status"];
   }
 
   const requests = await prisma.gameRequest.findMany({

@@ -18,10 +18,12 @@ export default defineEventHandler(async (h3) => {
     throw createError({ statusCode: 400, statusMessage: "Can only withdraw pending requests." });
   }
 
-  const updated = await prisma.gameRequest.update({
+  const updated = (await prisma.gameRequest.updateManyAndReturn({
     where: { id },
     data: { status: RequestStatus.Withdrawn },
-  });
+  })).at(0);
+
+  if (!updated) throw createError({ statusCode: 404, statusMessage: "Request not found." });
 
   return updated;
 });
