@@ -387,7 +387,7 @@ import {
   TransitionChild,
   TransitionRoot,
 } from "@headlessui/vue";
-import { XMarkIcon } from "@heroicons/vue/24/outline";
+import { XMarkIcon, MagnifyingGlassIcon } from "@heroicons/vue/24/outline";
 import {
   ChevronDownIcon,
   FunnelIcon,
@@ -395,7 +395,6 @@ import {
   PlusIcon,
   Squares2X2Icon,
 } from "@heroicons/vue/20/solid";
-import { MagnifyingGlassIcon } from "@heroicons/vue/24/outline";
 import type { SerializeObject } from "nitropack";
 import type { GameModel, GameTagModel } from "~/prisma/client/models";
 import { Platform } from "~/prisma/client/enums";

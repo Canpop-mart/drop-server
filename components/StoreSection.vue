@@ -1,5 +1,5 @@
 <template>
-  <section class="w-full" v-if="!hidden">
+  <section v-if="!hidden" class="w-full">
     <div class="flex items-center justify-between px-1 mb-4">
       <div class="flex items-center gap-x-3">
         <component
@@ -56,6 +56,9 @@ withDefaults(
     skeletonCount?: number;
   }>(),
   {
+    subtitle: undefined,
+    icon: undefined,
+    viewAllHref: undefined,
     skeletonCount: 6,
   },
 );

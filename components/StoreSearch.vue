@@ -1,5 +1,5 @@
 <template>
-  <div class="relative w-full max-w-2xl" ref="searchContainer">
+  <div ref="searchContainer" class="relative w-full max-w-2xl">
     <div
       :class="[
         'flex items-center gap-x-2 rounded-lg border px-3 py-2 transition-colors duration-200',

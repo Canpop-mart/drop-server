@@ -146,6 +146,10 @@ import {
   SparklesIcon,
   ClockIcon,
 } from "@heroicons/vue/24/outline";
+import type { SerializeObject } from "nitropack";
+import type { GameModel } from "~/prisma/client/models";
+
+type StoreGame = SerializeObject<GameModel>;
 
 const featured = await $dropFetch("/api/v1/store/featured");
 const user = useUser();
@@ -157,10 +161,10 @@ useHead({
 
 // Trending games (recent play activity)
 const trendingLoading = ref(true);
-const trendingGames = ref<any[]>([]);
+const trendingGames = ref<StoreGame[]>([]);
 $fetch("/api/v1/store/trending", { query: { take: 10, days: 7 } })
   .then((data) => {
-    trendingGames.value = data.results;
+    trendingGames.value = data.results as StoreGame[];
   })
   .catch(() => {})
   .finally(() => {
@@ -169,10 +173,10 @@ $fetch("/api/v1/store/trending", { query: { take: 10, days: 7 } })
 
 // Popular games (most total playtime)
 const popularLoading = ref(true);
-const popularGames = ref<any[]>([]);
+const popularGames = ref<StoreGame[]>([]);
 $fetch("/api/v1/store/popular", { query: { take: 10 } })
   .then((data) => {
-    popularGames.value = data.results;
+    popularGames.value = data.results as StoreGame[];
   })
   .catch(() => {})
   .finally(() => {
@@ -181,11 +185,11 @@ $fetch("/api/v1/store/popular", { query: { take: 10 } })
 
 // Recommended for current user
 const recommendedLoading = ref(true);
-const recommendedGames = ref<any[]>([]);
+const recommendedGames = ref<StoreGame[]>([]);
 if (user.value) {
   $fetch("/api/v1/store/recommended", { query: { take: 10 } })
     .then((data) => {
-      recommendedGames.value = data.results;
+      recommendedGames.value = data.results as StoreGame[];
     })
     .catch(() => {})
     .finally(() => {
@@ -197,10 +201,10 @@ if (user.value) {
 
 // Recently added games
 const recentlyAddedLoading = ref(true);
-const recentlyAdded = ref<any[]>([]);
+const recentlyAdded = ref<StoreGame[]>([]);
 $fetch("/api/v1/store", { query: { take: 10, sort: "recent", order: "desc" } })
   .then((data) => {
-    recentlyAdded.value = data.results;
+    recentlyAdded.value = data.results as StoreGame[];
   })
   .catch(() => {})
   .finally(() => {

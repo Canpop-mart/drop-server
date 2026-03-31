@@ -293,7 +293,7 @@
             <!-- Similar Games Tab -->
             <div v-if="activeTab === 'Similar'">
               <div v-if="similarLoading" class="text-zinc-500">Loading...</div>
-              <div v-else-if="similarGames?.length === 0" class="text-zinc-500 text-center py-8">No similar games found</div>
+              <div v-else-if="similarGames.length === 0" class="text-zinc-500 text-center py-8">No similar games found</div>
               <GameCarousel v-else :items="similarGames" />
             </div>
           </div>
@@ -306,6 +306,8 @@
 <script setup lang="ts">
 import { ArrowTopRightOnSquareIcon } from "@heroicons/vue/24/outline";
 import { StarIcon, ServerIcon, CloudIcon } from "@heroicons/vue/24/solid";
+import type { SerializeObject } from "nitropack";
+import type { GameModel } from "~/prisma/client/models";
 import { micromark } from "micromark";
 import { formatBytes } from "~/server/internal/utils/files";
 
@@ -325,19 +327,34 @@ const similarLoading = ref(true);
 const achievements = await $dropFetch(`/api/v1/games/${gameId}/achievements`).catch(() => []);
 achievementsLoading.value = false;
 
-const reviewStats = ref<{ averageRating: number; totalReviews: number } | null>(null);
-const reviews = ref<{ id: string; rating: number; body: string; user: { profilePictureObjectId: string; displayName: string; username: string } }[]>([]);
-const reviewData = await $dropFetch(`/api/v1/games/${gameId}/reviews`).catch(() => null);
+interface ReviewData {
+  stats: { averageRating: number; totalReviews: number };
+  reviews: Array<{ id: string; rating: number; body: string; createdAt: Date; user: { profilePictureObjectId: string; displayName: string; username: string } }>;
+}
+
+const reviewStats = ref<ReviewData["stats"] | null>(null);
+const reviews = ref<ReviewData["reviews"]>([]);
+const reviewData = await $dropFetch(`/api/v1/games/${gameId}/reviews`).catch(() => null) as ReviewData | null;
 if (reviewData) { reviewStats.value = reviewData.stats; reviews.value = reviewData.reviews; }
 
-const similarGames = await $dropFetch(`/api/v1/store/${gameId}/similar`).catch(() => []);
+// Similar games based on shared tags
+const similarGames = ref<SerializeObject<GameModel>[]>([]);
+const gameTagIds = game.tags.map((t: { id: string }) => t.id);
+if (gameTagIds.length > 0) {
+  const similar = await $fetch("/api/v1/store", {
+    query: { take: 10, sort: "default", tags: gameTagIds.join(",") },
+  }).catch(() => null);
+  if (similar) {
+    similarGames.value = (similar.results as SerializeObject<GameModel>[]).filter((g: SerializeObject<GameModel>) => g.id !== gameId);
+  }
+}
 similarLoading.value = false;
 
 const newReviewRating = ref(3);
 const newReviewBody = ref('');
 const submitReview = async () => {
   await $dropFetch(`/api/v1/games/${gameId}/reviews`, { method: 'POST', body: { rating: newReviewRating.value, body: newReviewBody.value } });
-  const refreshed = await $dropFetch(`/api/v1/games/${gameId}/reviews`).catch(() => null);
+  const refreshed = await $dropFetch(`/api/v1/games/${gameId}/reviews`).catch(() => null) as ReviewData | null;
   if (refreshed) { reviewStats.value = refreshed.stats; reviews.value = refreshed.reviews; }
   newReviewBody.value = '';
 };

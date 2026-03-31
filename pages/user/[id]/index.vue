@@ -70,7 +70,7 @@ const route = useRoute();
 const id = (route.params.id ?? "") as string;
 const loading = ref(true);
 
-const profile = await $dropFetch(`/api/v1/user/${id}`).catch(() => null);
+const profile = await $dropFetch(`/api/v1/user/${id}`).catch(() => null) as { id?: string; username?: string; displayName?: string; bio?: string; profilePictureObjectId?: string; bannerObjectId?: string } | null;
 const userStats = await $dropFetch(`/api/v1/user/${id}/stats`).catch(() => null);
 const activity = await $dropFetch(`/api/v1/user/${id}/activity`).catch(() => null);
 const activityLoading = ref(false);

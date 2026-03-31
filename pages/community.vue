@@ -35,7 +35,7 @@
 </template>
 <script lang="ts" setup>
 useHead({ title: "Community" });
-const activity = await $dropFetch('/api/v1/community/activity').catch(() => []);
+const activity = await $dropFetch('/api/v1/community/activity').catch(() => []) as Array<{ type: string; timestamp: Date | string; user?: { id?: string; username?: string; displayName?: string; profilePictureObjectId?: string }; game?: { mName?: string; mIconObjectId?: string }; data?: { achievement?: { title?: string; iconUrl?: string } } }>;
 const stats = await $dropFetch('/api/v1/community/stats').catch(() => null);
 const leaderboard = await $dropFetch('/api/v1/community/leaderboard').catch(() => ({ playtime: [] }));
 </script>

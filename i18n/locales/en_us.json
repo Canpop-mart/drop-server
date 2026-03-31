@@ -75,6 +75,9 @@
       "title": "API Tokens"
     }
   },
+  "achievements": {
+    "locked": "Locked"
+  },
   "actions": "Actions",
   "add": "Add",
   "adminTitle": "Admin Dashboard - {0}",
@@ -155,6 +158,14 @@
     "arrowDown": "↓",
     "arrowUp": "↑",
     "srComma": ", {0}"
+  },
+  "community": {
+    "activity": {
+      "played": "played",
+      "unlocked": "unlocked",
+      "in": "in",
+      "empty": "No activity yet"
+    }
   },
   "common": {
     "add": "Add",
