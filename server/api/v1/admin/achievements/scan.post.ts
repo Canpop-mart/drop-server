@@ -57,7 +57,18 @@ async function scanRetroAchievements(gameId: string, raGameId: string): Promise<
   if (!data.Achievements) return 0;
 
   let count = 0;
-  for (const [achId, achData] of Object.entries(data.Achievements) as [string, Record<string, string | number>][]) {
+  for (const [achId, achData] of Object.entries(data.Achievements) as [string, Record<string, unknown>][]) {
+    const title = String(achData.Title ?? "");
+    const description = String(achData.Description ?? "");
+    const badgeName = achData.BadgeName ? String(achData.BadgeName) : "";
+    const iconUrl = badgeName
+      ? `https://media.retroachievements.org/Badge/${badgeName}.png`
+      : "";
+    const iconLockedUrl = badgeName
+      ? `https://media.retroachievements.org/Badge/${badgeName}_lock.png`
+      : "";
+    const displayOrder = typeof achData.DisplayOrder === "number" ? achData.DisplayOrder : count;
+
     await prisma.achievement.upsert({
       where: {
         gameId_provider_externalId: {
@@ -70,26 +81,18 @@ async function scanRetroAchievements(gameId: string, raGameId: string): Promise<
         gameId,
         provider: ExternalAccountProvider.RetroAchievements,
         externalId: String(achId),
-        title: achData.Title || "",
-        description: achData.Description || "",
-        iconUrl: achData.BadgeName
-          ? `https://media.retroachievements.org/Badge/${achData.BadgeName}.png`
-          : "",
-        iconLockedUrl: achData.BadgeName
-          ? `https://media.retroachievements.org/Badge/${achData.BadgeName}_lock.png`
-          : "",
-        displayOrder: achData.DisplayOrder ?? count,
+        title,
+        description,
+        iconUrl,
+        iconLockedUrl,
+        displayOrder,
       },
       update: {
-        title: achData.Title || "",
-        description: achData.Description || "",
-        iconUrl: achData.BadgeName
-          ? `https://media.retroachievements.org/Badge/${achData.BadgeName}.png`
-          : "",
-        iconLockedUrl: achData.BadgeName
-          ? `https://media.retroachievements.org/Badge/${achData.BadgeName}_lock.png`
-          : "",
-        displayOrder: achData.DisplayOrder ?? count,
+        title,
+        description,
+        iconUrl,
+        iconLockedUrl,
+        displayOrder,
       },
     });
     count++;

@@ -11,12 +11,11 @@ const UpdateRequest = type({
 }).configure(throwingArktype);
 
 export default defineEventHandler(async (h3) => {
-  const userId = await aclManager.getUserIdACL(h3, ["game:update"]);
-  if (!userId) throw createError({ statusCode: 403 });
-
-  // Also check system ACL for admin permission
   const allowed = await aclManager.allowSystemACL(h3, ["game:update"]);
   if (!allowed) throw createError({ statusCode: 403 });
+
+  const userId = await aclManager.getUserIdACL(h3, ["read"]);
+  if (!userId) throw createError({ statusCode: 403 });
 
   const id = getRouterParam(h3, "id");
   if (!id) throw createError({ statusCode: 400, statusMessage: "No request ID." });

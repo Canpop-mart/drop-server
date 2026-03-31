@@ -50,7 +50,7 @@ async function syncRetroAchievements(userId: string, raUsername: string): Promis
       const data = await response.json();
       if (!data.Achievements) continue;
 
-      for (const [achId, achData] of Object.entries(data.Achievements) as [string, Record<string, string | number>][]) {
+      for (const [achId, achData] of Object.entries(data.Achievements) as [string, Record<string, unknown>][]) {
         if (achData.DateEarned) {
           // Find matching achievement in our DB
           const achievement = await prisma.achievement.findUnique({
@@ -74,7 +74,7 @@ async function syncRetroAchievements(userId: string, raUsername: string): Promis
               create: {
                 userId,
                 achievementId: achievement.id,
-                unlockedAt: new Date(achData.DateEarned),
+                unlockedAt: new Date(String(achData.DateEarned)),
               },
               update: {},
             });
