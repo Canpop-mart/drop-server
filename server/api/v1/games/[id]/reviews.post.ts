@@ -1,3 +1,4 @@
+/* eslint-disable @intlify/vue-i18n/no-prisma-delete */
 import { type } from "arktype";
 import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
 import aclManager from "~/server/internal/acls";
