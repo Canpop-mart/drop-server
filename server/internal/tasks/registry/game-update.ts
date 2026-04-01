@@ -89,7 +89,7 @@ export default defineDropTask({
 
       const hasUpdate = latestBuildId !== currentBuildId;
 
-      await prisma.game.update({
+      await prisma.game.updateMany({
         where: { id: game.id },
         data: { updateAvailable: hasUpdate },
       });

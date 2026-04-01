@@ -574,7 +574,7 @@ class LibraryManager {
           logger.info("Successfully created version!");
 
           // Clear the update-available flag now that a new version is installed
-          await prisma.game.update({
+          await prisma.game.updateMany({
             where: { id: gameId },
             data: { updateAvailable: false },
           });

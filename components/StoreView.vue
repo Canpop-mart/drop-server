@@ -403,34 +403,6 @@ const {
 } = await $dropFetch(`/api/v1/settings`);
 
 const mobileFiltersOpen = ref(false);
-const activeQuickTag = ref<string | null>(null);
-
-function toggleQuickTag(tagId: string) {
-  if (activeQuickTag.value === tagId) {
-    activeQuickTag.value = null;
-    // Clear tag filter in optionValues
-    if (
-      optionValues.value["tags"] &&
-      typeof optionValues.value["tags"] === "object"
-    ) {
-      (optionValues.value["tags"] as Record<string, boolean>)[tagId] = false;
-    }
-  } else {
-    activeQuickTag.value = tagId;
-    // Set tag filter in optionValues
-    if (
-      optionValues.value["tags"] &&
-      typeof optionValues.value["tags"] === "object"
-    ) {
-      // Clear existing tag selections first
-      const tagMap = optionValues.value["tags"] as Record<string, boolean>;
-      Object.keys(tagMap).forEach((k) => {
-        tagMap[k] = false;
-      });
-      tagMap[tagId] = true;
-    }
-  }
-}
 
 const searchText = ref("");
 let searchDebounce: ReturnType<typeof setTimeout> | null = null;
