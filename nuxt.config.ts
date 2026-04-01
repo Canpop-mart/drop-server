@@ -64,10 +64,6 @@ export default defineNuxtConfig({
 
   sourcemap: false,
 
-  nitro: {
-    sourceMap: false,
-  },
-
   experimental: {
     buildCache: true,
     viewTransition: false,
@@ -111,6 +107,7 @@ export default defineNuxtConfig({
   },
 
   nitro: {
+    sourceMap: false,
     minify: true,
     compressPublicAssets: true,
 
