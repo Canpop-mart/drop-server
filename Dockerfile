@@ -59,13 +59,13 @@ RUN pnpm exec nuxt prepare && pnpm exec prisma generate && pnpm exec buf generat
     NUXT_SOURCEMAP_SERVER=false NUXT_SOURCEMAP_CLIENT=false NODE_OPTIONS="--max-old-space-size=12288" pnpm exec nuxt build
 
 
-# create run environment for Drop (Alpine for small image)
-FROM base AS run-system
+# create run environment for Drop (Debian/glibc for native module compat)
+FROM build-base AS run-system
 
 ENV NODE_ENV=production
 ENV NUXT_TELEMETRY_DISABLED=1
 
-RUN apk add --no-cache pnpm 7zip nginx
+RUN apt-get update && apt-get install -y --no-install-recommends p7zip-full nginx && rm -rf /var/lib/apt/lists/*
 RUN pnpm install prisma@7.3.0
 # init prisma to download all required files
 RUN pnpm prisma init
