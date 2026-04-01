@@ -735,6 +735,13 @@
     "featured": "Featured",
     "images": "Game Images",
     "lookAt": "Check it out",
+    "nav": {
+      "browse": "Browse All",
+      "new": "New",
+      "popular": "Popular",
+      "recommended": "For You",
+      "trending": "Trending"
+    },
     "noDevelopers": "No developers",
     "noFeatured": "NO FEATURED GAMES",
     "noGame": "NO GAME",
@@ -776,6 +783,9 @@
       "viewAll": "View all"
     },
     "size": "Size",
+    "spotlight": {
+      "recentPlayers": "{n} recent players"
+    },
     "tabs": {
       "achievements": "Achievements",
       "reviews": "Reviews",
@@ -784,12 +794,14 @@
     "tags": "Tags",
     "title": "Store",
     "view": {
+      "allTags": "All",
       "search": "Search",
       "sort": "Sort",
       "srFilters": "Filters",
       "srGames": "Games",
       "srViewGrid": "View grid"
     },
+    "viewGame": "View Game",
     "viewInStore": "View in Store"
   },
   "tasks": {

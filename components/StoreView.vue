@@ -142,8 +142,36 @@
       </TransitionRoot>
 
       <main class="mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Quick-filter tag pills -->
+        <div v-if="tags.length > 0" class="flex flex-wrap gap-2 pt-6 pb-2">
+          <button
+            class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border transition-colors duration-150"
+            :class="
+              !activeQuickTag
+                ? 'bg-blue-600 border-blue-600 text-white'
+                : 'bg-transparent border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'
+            "
+            @click="activeQuickTag = null"
+          >
+            {{ $t("store.view.allTags") }}
+          </button>
+          <button
+            v-for="tag in tags.slice(0, 12)"
+            :key="tag.id"
+            class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border transition-colors duration-150"
+            :class="
+              activeQuickTag === tag.id
+                ? 'bg-blue-600 border-blue-600 text-white'
+                : 'bg-transparent border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'
+            "
+            @click="toggleQuickTag(tag.id)"
+          >
+            {{ tag.name }}
+          </button>
+        </div>
+
         <div
-          class="flex items-baseline justify-between border-b border-zinc-700 py-6"
+          class="flex items-baseline justify-between border-b border-zinc-700 py-4"
         >
           <div />
           <div class="flex items-center">
@@ -403,6 +431,35 @@ const {
 } = await $dropFetch(`/api/v1/settings`);
 
 const mobileFiltersOpen = ref(false);
+const activeQuickTag = ref<string | null>(null);
+
+function toggleQuickTag(tagId: string) {
+  if (activeQuickTag.value === tagId) {
+    activeQuickTag.value = null;
+    // Clear tag filter in optionValues
+    if (
+      optionValues.value["tags"] &&
+      typeof optionValues.value["tags"] === "object"
+    ) {
+      (optionValues.value["tags"] as Record<string, boolean>)[tagId] = false;
+    }
+  } else {
+    activeQuickTag.value = tagId;
+    // Set tag filter in optionValues
+    if (
+      optionValues.value["tags"] &&
+      typeof optionValues.value["tags"] === "object"
+    ) {
+      // Clear existing tag selections first
+      const tagMap = optionValues.value["tags"] as Record<string, boolean>;
+      Object.keys(tagMap).forEach((k) => {
+        tagMap[k] = false;
+      });
+      tagMap[tagId] = true;
+    }
+  }
+}
+
 const searchText = ref("");
 let searchDebounce: ReturnType<typeof setTimeout> | null = null;
 const debouncedSearch = ref("");
