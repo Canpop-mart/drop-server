@@ -106,7 +106,7 @@
               {{ item.title || item.game?.mName || $t("user.showcase.custom") }}
             </p>
             <p class="text-[10px] text-zinc-400 uppercase tracking-wide">
-              {{ $t(`user.showcase.types.${item.type}`) }}
+              {{ showcaseTypeLabels[item.type] }}
             </p>
           </div>
         </NuxtLink>
@@ -193,6 +193,16 @@
 import { SparklesIcon } from "@heroicons/vue/24/outline";
 import { useObject } from "~/composables/objects";
 import { useUser } from "~/composables/user";
+
+const { t } = useI18n();
+// Static map — avoids @intlify/vue-i18n/no-dynamic-keys violation
+const showcaseTypeLabels = computed<Record<string, string>>(() => ({
+  Achievement: t("user.showcase.types.Achievement"),
+  Custom: t("user.showcase.types.Custom"),
+  FavoriteGame: t("user.showcase.types.FavoriteGame"),
+  GameStats: t("user.showcase.types.GameStats"),
+  Review: t("user.showcase.types.Review"),
+}));
 
 const route = useRoute();
 const id = (route.params.id ?? "") as string;

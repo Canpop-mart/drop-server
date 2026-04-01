@@ -38,7 +38,7 @@
                 }}
               </p>
               <p class="text-[10px] text-zinc-400 uppercase tracking-wide">
-                {{ $t(`user.showcase.types.${slot.type}`) }}
+                {{ showcaseTypeLabels[slot.type] }}
               </p>
             </div>
             <!-- Remove button -->
@@ -131,7 +131,7 @@
                       ]"
                       @click="addType = st"
                     >
-                      {{ $t(`user.showcase.types.${st}`) }}
+                      {{ showcaseTypeLabels[st] }}
                     </button>
                   </div>
                 </div>
@@ -242,6 +242,15 @@ import type { ShowcaseType } from "~/prisma/client/enums";
 
 const { t } = useI18n();
 const MAX_SLOTS = 6;
+
+// Static map — avoids @intlify/vue-i18n/no-dynamic-keys violation
+const showcaseTypeLabels = computed<Record<string, string>>(() => ({
+  Achievement: t("user.showcase.types.Achievement"),
+  Custom: t("user.showcase.types.Custom"),
+  FavoriteGame: t("user.showcase.types.FavoriteGame"),
+  GameStats: t("user.showcase.types.GameStats"),
+  Review: t("user.showcase.types.Review"),
+}));
 const showcaseTypes: ShowcaseType[] = [
   "FavoriteGame",
   "Achievement",
