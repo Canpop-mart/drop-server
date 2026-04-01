@@ -55,9 +55,10 @@ COPY . .
 ARG BUILD_DROP_VERSION
 ARG BUILD_GIT_REF
 
-## build (source maps already disabled in nuxt.config.ts)
+## build — call node directly on nuxt's JS entry point so --max-old-space-size
+## is guaranteed to reach V8 (pnpm shell shims swallow NODE_OPTIONS)
 RUN pnpm exec nuxt prepare && pnpm exec prisma generate && pnpm exec buf generate && \
-    pnpm exec nuxt build
+    node --max-old-space-size=8192 node_modules/nuxt/bin/nuxt.mjs build
 
 
 # create run environment for Drop (Debian/glibc for native module compat)

@@ -64,6 +64,10 @@ export default defineNuxtConfig({
 
   sourcemap: false,
 
+  nitro: {
+    sourceMap: false,
+  },
+
   experimental: {
     buildCache: true,
     viewTransition: false,
