@@ -42,6 +42,8 @@ FROM build-base AS build-system
 
 ENV NODE_ENV=production
 ENV NUXT_TELEMETRY_DISABLED=1
+## Set as ENV (not inline) so it propagates to all grandchild Node processes
+ENV NODE_OPTIONS="--max-old-space-size=8192"
 
 ## add git so drop can determine its git ref at build
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
@@ -53,10 +55,9 @@ COPY . .
 ARG BUILD_DROP_VERSION
 ARG BUILD_GIT_REF
 
-## build (disable source maps to avoid V8 "invalid array length" crash)
-## Use node --max-old-space-size directly via node call
+## build (source maps already disabled in nuxt.config.ts)
 RUN pnpm exec nuxt prepare && pnpm exec prisma generate && pnpm exec buf generate && \
-    NUXT_SOURCEMAP_SERVER=false NUXT_SOURCEMAP_CLIENT=false NODE_OPTIONS="--max-old-space-size=12288" pnpm exec nuxt build
+    pnpm exec nuxt build
 
 
 # create run environment for Drop (Debian/glibc for native module compat)
