@@ -329,7 +329,7 @@
                     <span
                       class="text-xs font-normal text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full"
                     >
-                      {{ $t(`store.leaderboard.types.${lb.type}`) }}
+                      {{ leaderboardTypeLabels[lb.type] }}
                     </span>
                   </h3>
                   <GameLeaderboard
@@ -357,6 +357,13 @@ import { formatBytes } from "~/server/internal/utils/files";
 
 const { t } = useI18n();
 const route = useRoute();
+
+const leaderboardTypeLabels = computed<Record<string, string>>(() => ({
+  AchievementCount: t("store.leaderboard.types.AchievementCount"),
+  Playtime: t("store.leaderboard.types.Playtime"),
+  Score: t("store.leaderboard.types.Score"),
+  Speedrun: t("store.leaderboard.types.Speedrun"),
+}));
 const gameId = route.params.id.toString();
 const user = useUser();
 const { game, rating, sizes, platforms } = await $dropFetch(

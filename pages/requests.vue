@@ -104,7 +104,7 @@
                   : 'bg-green-500/10 text-green-400 ring-1 ring-green-500/20',
               ]"
             >
-              {{ $t(`requests.status.${req.status}`) }}
+              {{ requestStatusLabels[req.status] }}
             </span>
           </div>
 
@@ -276,6 +276,12 @@ import { useUser } from "~/composables/user";
 
 const { t } = useI18n();
 useHead({ title: t("requests.title") });
+
+const requestStatusLabels = computed<Record<string, string>>(() => ({
+  Approved: t("requests.status.Approved"),
+  Pending: t("requests.status.Pending"),
+  Rejected: t("requests.status.Rejected"),
+}));
 
 const user = useUser();
 
