@@ -267,7 +267,7 @@
                     'pb-2 px-1 border-b-2 text-sm font-medium',
                   ]"
                 >
-                  {{ $t("store.tabs." + tab.toLowerCase()) }}
+                  {{ tabLabels[tab] }}
                 </button>
               </nav>
             </div>
@@ -373,6 +373,7 @@ import type { GameModel } from "~/prisma/client/models";
 import { micromark } from "micromark";
 import { formatBytes } from "~/server/internal/utils/files";
 
+const { t } = useI18n();
 const route = useRoute();
 const gameId = route.params.id.toString();
 const user = useUser();
@@ -386,7 +387,12 @@ const ratingArray = Array(5)
   .fill(null)
   .map((_, i) => i + 1 <= averageRating);
 
-const tabs = ["Achievements", "Reviews", "Similar"];
+const tabs = ["Achievements", "Reviews", "Similar"] as const;
+const tabLabels: Record<string, string> = {
+  Achievements: t("store.tabs.achievements"),
+  Reviews: t("store.tabs.reviews"),
+  Similar: t("store.tabs.similar"),
+};
 const activeTab = ref("Achievements");
 const achievementsLoading = ref(true);
 const similarLoading = ref(true);
