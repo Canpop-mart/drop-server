@@ -27,6 +27,22 @@ export default defineEventHandler(async (h3) => {
           mName: true,
         },
       },
+      tags: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      versions: {
+        select: {
+          displayName: true,
+          versionIndex: true,
+        },
+        orderBy: {
+          versionIndex: "desc",
+        },
+        take: 1,
+      },
     },
     orderBy: {
       created: "desc",

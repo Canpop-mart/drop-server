@@ -121,6 +121,20 @@ export default defineEventHandler(async (h3) => {
   const hasSearch = searchTerm && searchTerm.length > 0;
 
   /**
+   * Relational data included in all game result sets
+   */
+  const gameInclude = {
+    tags: {
+      select: { id: true, name: true },
+    },
+    versions: {
+      select: { displayName: true, versionIndex: true },
+      orderBy: { versionIndex: "desc" as const },
+      take: 1,
+    },
+  } satisfies Prisma.GameInclude;
+
+  /**
    * Query
    */
 
@@ -153,6 +167,7 @@ export default defineEventHandler(async (h3) => {
             },
           ],
         },
+        include: gameInclude,
         orderBy:
           effectiveSort === "name"
             ? { mName: options.order }
@@ -208,6 +223,7 @@ export default defineEventHandler(async (h3) => {
       skip: options.skip,
       take: Math.min(options.take, 50),
       where: finalFilter,
+      include: gameInclude,
       orderBy: sort,
     }),
     prisma.game.count({ where: finalFilter }),

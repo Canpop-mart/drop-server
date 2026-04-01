@@ -43,3 +43,4 @@ local-data/
 
 /server/internal/proto
 drop-image.tar
+drop-custom.tar

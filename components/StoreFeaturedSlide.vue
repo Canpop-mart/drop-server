@@ -1,26 +1,44 @@
 <template>
-  <div class="relative w-full overflow-hidden bg-zinc-950 select-none">
+  <div class="relative w-full h-full overflow-hidden bg-zinc-950 select-none">
     <!-- Blurred banner backdrop -->
     <div class="absolute inset-0 pointer-events-none">
       <img
         :src="useObject(game.mBannerObjectId)"
         aria-hidden="true"
-        class="size-full object-cover object-center scale-110 blur-3xl opacity-15"
+        class="size-full object-cover object-center scale-110 blur-3xl opacity-40"
       />
       <div
-        class="absolute inset-0 bg-gradient-to-r from-zinc-950 via-zinc-950/85 to-zinc-950/30"
+        class="absolute inset-0 bg-gradient-to-r from-zinc-950 via-zinc-950/80 to-zinc-950/20"
       />
       <div
-        class="absolute inset-0 bg-gradient-to-t from-zinc-950/60 to-transparent"
+        class="absolute inset-0 bg-gradient-to-t from-zinc-950/70 to-transparent"
       />
     </div>
 
-    <!-- Split layout -->
+    <!-- Split layout — full-width, no max-w constraint -->
     <div
-      class="relative max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 py-14 sm:py-20 lg:py-24 flex flex-col lg:flex-row items-center gap-10 lg:gap-16"
+      class="relative h-full px-8 sm:px-14 lg:px-20 flex flex-col lg:flex-row items-center gap-10 lg:gap-16"
+      style="padding-top: clamp(3rem, 8vh, 6rem); padding-bottom: clamp(3rem, 8vh, 6rem)"
     >
       <!-- Left: text content -->
       <div class="flex-1 min-w-0 text-left">
+        <!-- Badge row: version + tags -->
+        <div class="flex items-center flex-wrap gap-2 mb-4">
+          <span
+            v-if="versionLabel"
+            class="text-xs font-bold px-2.5 py-1 rounded-md bg-green-700 text-white leading-tight"
+          >
+            {{ versionLabel }}
+          </span>
+          <span
+            v-for="tag in game.tags?.slice(0, 2)"
+            :key="tag.id"
+            class="text-xs font-semibold px-2.5 py-1 rounded-md bg-blue-500/15 text-blue-300 border border-blue-500/25 leading-tight"
+          >
+            {{ tag.name }}
+          </span>
+        </div>
+
         <!-- Developer name -->
         <p
           v-if="developer"
@@ -58,12 +76,12 @@
 
       <!-- Right: cover art -->
       <div
-        class="shrink-0 w-48 sm:w-56 lg:w-64 xl:w-72 transition-transform duration-700 hover:scale-[1.02]"
+        class="shrink-0 w-44 sm:w-52 lg:w-60 xl:w-72 transition-transform duration-700 hover:scale-[1.02]"
       >
         <div class="relative">
           <!-- Glow behind cover -->
           <div
-            class="absolute -inset-3 bg-blue-600/20 rounded-2xl blur-xl opacity-60"
+            class="absolute -inset-4 bg-blue-600/25 rounded-2xl blur-2xl opacity-70"
           />
           <img
             :src="useObject(game.mCoverObjectId)"
@@ -88,10 +106,19 @@ const props = defineProps<{
     mBannerObjectId: string;
     developers?: Array<{ id: string; mName: string }>;
     publishers?: Array<{ id: string; mName: string }>;
+    tags?: Array<{ id: string; name: string }>;
+    versions?: Array<{ displayName?: string | null; versionIndex?: number }>;
   };
 }>();
 
 const developer = computed(
-  () => props.game.developers?.[0]?.mName ?? props.game.publishers?.[0]?.mName,
+  () =>
+    props.game.developers?.[0]?.mName ?? props.game.publishers?.[0]?.mName,
 );
+
+const versionLabel = computed(() => {
+  const v = props.game.versions?.[0];
+  if (!v) return null;
+  return v.displayName ?? `v${v.versionIndex}`;
+});
 </script>

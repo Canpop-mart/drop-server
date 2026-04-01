@@ -1,137 +1,127 @@
 <template>
   <div class="w-full flex flex-col overflow-x-hidden">
     <!-- ─── Hero carousel ───────────────────────────────────────── -->
-    <VueCarousel
-      v-if="featured.length > 0"
-      :wrap-around="true"
-      :items-to-show="1"
-      :autoplay="15 * 1000"
-      :transition="600"
-      :pause-autoplay-on-hover="true"
-      class="store-carousel"
-    >
-      <VueSlide v-for="game in featured" :key="game.id">
-        <StoreFeaturedSlide :game="game" />
-      </VueSlide>
-
-      <template #addons>
-        <CarouselPagination class="py-2" :items="featured" />
-      </template>
-    </VueCarousel>
-
-    <!-- Empty hero fallback -->
     <div
-      v-else
-      class="w-full flex flex-col items-center justify-center bg-zinc-950/50 px-6 py-32 gap-4"
+      class="relative overflow-hidden bg-zinc-950"
+      style="height: calc(100vh - 54px); min-height: 560px"
     >
-      <h2
-        class="uppercase text-xl font-bold tracking-tight text-zinc-700 sm:text-3xl"
+      <VueCarousel
+        v-if="featured.length > 0"
+        v-model="heroSlide"
+        :wrap-around="true"
+        :items-to-show="1"
+        :transition="600"
+        :autoplay="0"
+        class="hero-carousel h-full relative"
       >
-        {{ $t("store.noFeatured") }}
-      </h2>
-      <NuxtLink
-        v-if="user?.admin"
-        to="/admin/library"
-        class="inline-flex items-center gap-x-2 rounded-md bg-zinc-800 px-3 py-1 text-sm font-semibold text-white shadow-sm hover:bg-zinc-700 duration-200 hover:scale-105 active:scale-95"
-      >
-        <i18n-t
-          keypath="store.openFeatured"
-          tag="span"
-          scope="global"
-          class="inline-flex items-center gap-x-1"
-        >
-          <template #arrow>
-            <ArrowTopRightOnSquareIcon class="size-4" />
-          </template>
-        </i18n-t>
-      </NuxtLink>
-    </div>
+        <VueSlide v-for="game in featured" :key="game.id">
+          <StoreFeaturedSlide :game="game" />
+        </VueSlide>
 
-    <!-- ─── Sticky category nav + search ──────────────────────── -->
-    <div
-      class="sticky top-0 z-30 w-full bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800/60 shadow-lg shadow-black/20"
-    >
-      <div class="max-w-7xl mx-auto px-4 sm:px-8 flex items-center gap-6 h-14">
-        <!-- Category tabs -->
-        <nav class="hidden sm:flex items-center gap-1 shrink-0">
-          <a
-            v-for="cat in categories"
-            :key="cat.anchor"
-            :href="`#${cat.anchor}`"
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 transition-colors duration-150"
+        <template #addons>
+          <div
+            class="absolute bottom-5 left-0 right-0 flex justify-center z-10"
           >
-            <component :is="cat.icon" class="size-4 shrink-0" />
-            {{ cat.label }}
-          </a>
-        </nav>
+            <CarouselPagination />
+          </div>
+        </template>
+      </VueCarousel>
 
-        <!-- Divider -->
-        <div class="hidden sm:block h-5 w-px bg-zinc-700/60 shrink-0" />
+      <!-- Empty hero fallback -->
+      <div
+        v-else
+        class="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950 px-6 gap-4"
+      >
+        <h2
+          class="uppercase text-xl font-bold tracking-tight text-zinc-700 sm:text-3xl"
+        >
+          {{ $t("store.noFeatured") }}
+        </h2>
+        <NuxtLink
+          v-if="user?.admin"
+          to="/admin/library"
+          class="inline-flex items-center gap-x-2 rounded-md bg-zinc-800 px-3 py-1 text-sm font-semibold text-white shadow-sm hover:bg-zinc-700 duration-200 hover:scale-105 active:scale-95"
+        >
+          <i18n-t
+            keypath="store.openFeatured"
+            tag="span"
+            scope="global"
+            class="inline-flex items-center gap-x-1"
+          >
+            <template #arrow>
+              <ArrowTopRightOnSquareIcon class="size-4" />
+            </template>
+          </i18n-t>
+        </NuxtLink>
+      </div>
 
-        <!-- Search bar -->
-        <div class="flex-1 min-w-0">
-          <StoreSearch />
-        </div>
+      <!-- Blue progress bar at bottom edge of hero -->
+      <div
+        v-if="featured.length > 1"
+        class="absolute bottom-0 left-0 right-0 h-[3px] bg-zinc-800/60 z-20 pointer-events-none"
+      >
+        <div
+          class="h-full bg-blue-500"
+          :style="{
+            width: progressPercent + '%',
+            transition: progressTransition,
+          }"
+        />
       </div>
     </div>
 
-    <!-- ─── Discovery sections ─────────────────────────────────── -->
+    <!-- ─── Tab nav ───────────────────────────────────────────────── -->
     <div
-      class="max-w-7xl mx-auto w-full px-4 sm:px-8 py-10 flex flex-col gap-y-14"
+      class="sticky top-[54px] z-30 w-full bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800/60 shadow-lg shadow-black/20"
     >
-      <!-- Trending: spotlight layout (1 big + 4 small) -->
-      <section id="trending">
-        <div class="flex items-center justify-between px-1 mb-5">
-          <div class="flex items-center gap-x-3">
-            <div class="w-1 h-5 rounded-full bg-blue-500 shrink-0" />
-            <FireIcon class="size-5 text-blue-400" />
-            <h2 class="text-xl font-bold font-display text-zinc-100">
-              {{ $t("store.sections.trending") }}
-            </h2>
-          </div>
-        </div>
-        <p class="text-sm text-zinc-500 px-1 -mt-3 mb-4">
-          {{ $t("store.sections.trendingSub") }}
-        </p>
+      <div class="px-4 sm:px-8 flex items-center gap-1 h-14">
+        <button
+          v-for="tab in tabs"
+          :key="tab.id"
+          :class="
+            activeTab === tab.id
+              ? 'text-white bg-blue-500/15'
+              : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60'
+          "
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors duration-150 cursor-pointer"
+          @click="activeTab = tab.id"
+        >
+          <component :is="tab.icon" class="size-4 shrink-0" />
+          {{ tab.label }}
+        </button>
+      </div>
+    </div>
+
+    <!-- ─── Tab panels ─────────────────────────────────────────────── -->
+    <div class="px-4 sm:px-8 py-8 min-h-[60vh]">
+      <!-- Most Played -->
+      <section v-show="activeTab === 'mostPlayed'">
         <StoreSpotlight :items="trendingGames" :loading="trendingLoading" />
       </section>
 
-      <!-- Most Popular -->
-      <section id="popular">
-        <StoreSection
-          :title="$t('store.sections.popular')"
-          :subtitle="$t('store.sections.popularSub')"
-          :icon="ChartBarIcon"
-          :items="popularGames"
-          :loading="popularLoading"
-        />
+      <!-- Recently Added: 2-row × 7-col grid -->
+      <section v-show="activeTab === 'recentlyAdded'">
+        <div v-if="recentlyAddedLoading" class="grid grid-cols-7 gap-3.5">
+          <div
+            v-for="i in 14"
+            :key="i"
+            class="aspect-[2/3] rounded-xl bg-zinc-800/50 animate-pulse"
+          />
+        </div>
+        <div v-else class="grid grid-cols-7 gap-3.5">
+          <GamePanel
+            v-for="game in recentlyAdded.slice(0, 14)"
+            :key="game.id"
+            :game="game"
+            :href="`/store/${game.id}`"
+          />
+        </div>
       </section>
 
-      <!-- Recommended -->
-      <section v-if="user" id="recommended">
-        <StoreSection
-          :title="$t('store.sections.recommended')"
-          :subtitle="$t('store.sections.recommendedSub')"
-          :icon="SparklesIcon"
-          :items="recommendedGames"
-          :loading="recommendedLoading"
-        />
+      <!-- Browse All -->
+      <section v-if="tabMounted.browse" v-show="activeTab === 'browse'">
+        <StoreView />
       </section>
-
-      <!-- Recently Added -->
-      <section id="new">
-        <StoreSection
-          :title="$t('store.sections.recentlyAdded')"
-          :icon="ClockIcon"
-          :items="recentlyAdded"
-          :loading="recentlyAddedLoading"
-        />
-      </section>
-    </div>
-
-    <!-- ─── Full store browser ─────────────────────────────────── -->
-    <div id="browse" class="border-t border-zinc-800/50">
-      <StoreView />
     </div>
   </div>
 </template>
@@ -140,8 +130,6 @@
 import {
   ArrowTopRightOnSquareIcon,
   FireIcon,
-  ChartBarIcon,
-  SparklesIcon,
   ClockIcon,
   Squares2X2Icon,
 } from "@heroicons/vue/24/outline";
@@ -151,7 +139,6 @@ import type { GameModel } from "~/prisma/client/models";
 type StoreGame = SerializeObject<GameModel>;
 type TrendingGame = StoreGame & {
   tags?: Array<{ id: string; name: string }>;
-  recentPlayers?: number;
 };
 
 const featured = await $dropFetch("/api/v1/store/featured");
@@ -160,71 +147,103 @@ const { t } = useI18n();
 
 useHead({ title: t("store.title") });
 
-const categories = computed(() => [
-  { label: t("store.nav.trending"), anchor: "trending", icon: FireIcon },
-  { label: t("store.nav.popular"), anchor: "popular", icon: ChartBarIcon },
-  ...(user.value
-    ? [
-        {
-          label: t("store.nav.recommended"),
-          anchor: "recommended",
-          icon: SparklesIcon,
-        },
-      ]
-    : []),
-  { label: t("store.nav.new"), anchor: "new", icon: ClockIcon },
-  { label: t("store.nav.browse"), anchor: "browse", icon: Squares2X2Icon },
+// ─── Tabs ─────────────────────────────────────────────────────────────
+const activeTab = ref<"mostPlayed" | "recentlyAdded" | "browse">("mostPlayed");
+const tabMounted = reactive<Record<string, boolean>>({
+  mostPlayed: true,
+  recentlyAdded: true,
+  browse: false,
+});
+
+watch(activeTab, (tab) => {
+  tabMounted[tab] = true;
+});
+
+const tabs = computed(() => [
+  {
+    id: "mostPlayed" as const,
+    label: t("store.nav.mostPlayed"),
+    icon: FireIcon,
+  },
+  {
+    id: "recentlyAdded" as const,
+    label: t("store.nav.new"),
+    icon: ClockIcon,
+  },
+  {
+    id: "browse" as const,
+    label: t("store.nav.browse"),
+    icon: Squares2X2Icon,
+  },
 ]);
 
-// Trending
+// ─── Hero progress bar ────────────────────────────────────────────────
+const SLIDE_MS = 6000;
+const heroSlide = ref(0);
+const progressPercent = ref(0);
+const progressTransition = ref<string>("none");
+let slideTimer: ReturnType<typeof setTimeout> | null = null;
+
+function startProgress() {
+  if (slideTimer) {
+    clearTimeout(slideTimer);
+    slideTimer = null;
+  }
+  progressTransition.value = "none";
+  progressPercent.value = 0;
+  nextTick(() => {
+    progressTransition.value = `width ${SLIDE_MS}ms linear`;
+    progressPercent.value = 100;
+    slideTimer = setTimeout(() => {
+      heroSlide.value = (heroSlide.value + 1) % featured.length;
+    }, SLIDE_MS);
+  });
+}
+
+watch(heroSlide, () => {
+  if (featured.length > 1) startProgress();
+});
+
+onMounted(() => {
+  if (featured.length > 1) startProgress();
+});
+
+onUnmounted(() => {
+  if (slideTimer) clearTimeout(slideTimer);
+});
+
+// ─── Data fetching ────────────────────────────────────────────────────
 const trendingLoading = ref(true);
 const trendingGames = ref<TrendingGame[]>([]);
 $fetch("/api/v1/store/trending", { query: { take: 10, days: 7 } })
-  .then((data) => {
-    trendingGames.value = data.results as unknown as TrendingGame[];
+  .then((data: any) => {
+    trendingGames.value = data.results as TrendingGame[];
   })
   .catch(() => {})
   .finally(() => {
     trendingLoading.value = false;
   });
 
-// Popular
-const popularLoading = ref(true);
-const popularGames = ref<StoreGame[]>([]);
-$fetch("/api/v1/store/popular", { query: { take: 10 } })
-  .then((data) => {
-    popularGames.value = data.results as unknown as StoreGame[];
-  })
-  .catch(() => {})
-  .finally(() => {
-    popularLoading.value = false;
-  });
-
-// Recommended
-const recommendedLoading = ref(true);
-const recommendedGames = ref<StoreGame[]>([]);
-if (user.value) {
-  $fetch("/api/v1/store/recommended", { query: { take: 10 } })
-    .then((data) => {
-      recommendedGames.value = data.results as unknown as StoreGame[];
-    })
-    .catch(() => {})
-    .finally(() => {
-      recommendedLoading.value = false;
-    });
-} else {
-  recommendedLoading.value = false;
-}
-
-// Recently Added
 const recentlyAddedLoading = ref(true);
 const recentlyAdded = ref<StoreGame[]>([]);
-$fetch("/api/v1/store", { query: { take: 10, sort: "recent", order: "desc" } })
-  .then((data) => {
-    recentlyAdded.value = data.results as unknown as StoreGame[];
+$fetch("/api/v1/store", { query: { take: 14, sort: "recent", order: "desc" } })
+  .then((data: any) => {
+    recentlyAdded.value = data.results as StoreGame[];
   })
   .catch(() => {})
   .finally(() => {
     recentlyAddedLoading.value = false;
   });
 </script>
+
+<style scoped>
+:deep(.hero-carousel .carousel__viewport),
+:deep(.hero-carousel .carousel__track),
+:deep(.hero-carousel .carousel__slide) {
+  height: 100%;
+}
+/* Override the global overflow:visible rule for the hero carousel */
+:deep(.hero-carousel > .carousel__viewport) {
+  overflow: hidden !important;
+}
+</style>

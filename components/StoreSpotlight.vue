@@ -35,19 +35,6 @@
         <p class="text-zinc-300 text-sm mt-1 line-clamp-2 max-w-sm">
           {{ items[0].mShortDescription }}
         </p>
-        <div
-          v-if="(items[0] as any).recentPlayers"
-          class="mt-2 flex items-center gap-1.5 text-xs text-zinc-400"
-        >
-          <span
-            class="inline-block size-1.5 rounded-full bg-green-400 animate-pulse"
-          />
-          {{
-            $t("store.spotlight.recentPlayers", {
-              n: (items[0] as any).recentPlayers,
-            })
-          }}
-        </div>
       </div>
     </NuxtLink>
 
@@ -110,7 +97,6 @@ defineProps<{
   items: Array<
     SerializeObject<GameModel> & {
       tags?: Array<{ id: string; name: string }>;
-      recentPlayers?: number;
     }
   >;
   loading?: boolean;

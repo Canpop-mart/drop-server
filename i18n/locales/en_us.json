@@ -737,10 +737,11 @@
     "lookAt": "Check it out",
     "nav": {
       "browse": "Browse All",
-      "new": "New",
+      "new": "Recently Added",
       "popular": "Popular",
       "recommended": "For You",
-      "trending": "Trending"
+      "trending": "Trending",
+      "mostPlayed": "Most Played"
     },
     "noDevelopers": "No developers",
     "noFeatured": "NO FEATURED GAMES",
