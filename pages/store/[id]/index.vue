@@ -299,52 +299,6 @@
                 </div>
               </div>
             </div>
-            <!-- Reviews Tab -->
-            <div v-if="activeTab === 'Reviews'">
-              <div class="mb-6 p-4 bg-zinc-800/50 rounded-lg">
-                <div class="flex items-center gap-4">
-                  <div class="text-3xl font-bold text-blue-400">
-                    {{
-                      reviewStats?.averageRating
-                        ? reviewStats.averageRating.toFixed(1)
-                        : "—"
-                    }}
-                  </div>
-                  <StarRating
-                    :model-value="Math.round(reviewStats?.averageRating || 0)"
-                  />
-                  <span class="text-zinc-400 text-sm"
-                    >({{ reviewStats?.totalReviews || 0 }} reviews)</span
-                  >
-                </div>
-              </div>
-              <div v-if="user" class="mb-6 p-4 bg-zinc-800/30 rounded-lg">
-                <h3 class="text-sm font-medium text-zinc-200 mb-2">
-                  {{ $t("store.review.write") }}
-                </h3>
-                <StarRating v-model="newReviewRating" :interactive="true" />
-                <textarea
-                  v-model="newReviewBody"
-                  :placeholder="$t('store.review.placeholder')"
-                  class="mt-2 w-full p-2 rounded bg-zinc-900 border border-zinc-700 text-sm text-zinc-200 placeholder-zinc-500 resize-none h-20"
-                />
-                <button
-                  class="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white"
-                  @click="submitReview"
-                >
-                  {{ $t("store.review.submit") }}
-                </button>
-              </div>
-              <div class="space-y-3">
-                <ReviewCard v-for="r in reviews" :key="r.id" :review="r" />
-                <p
-                  v-if="!reviews?.length"
-                  class="text-zinc-500 text-center py-8"
-                >
-                  {{ $t("store.review.noReviews") }}
-                </p>
-              </div>
-            </div>
             <!-- Similar Games Tab -->
             <div v-if="activeTab === 'Similar'">
               <div v-if="similarLoading" class="text-zinc-500">
@@ -357,6 +311,34 @@
                 {{ $t("store.review.noSimilar") }}
               </div>
               <GameCarousel v-else :items="similarGames" />
+            </div>
+            <!-- Leaderboards Tab -->
+            <div v-if="activeTab === 'Leaderboards'">
+              <div
+                v-if="leaderboards.length === 0"
+                class="text-zinc-500 text-center py-8"
+              >
+                {{ $t("store.leaderboard.empty") }}
+              </div>
+              <div v-else class="space-y-8">
+                <div v-for="lb in leaderboards" :key="lb.id">
+                  <h3
+                    class="text-base font-semibold text-zinc-100 mb-3 flex items-center gap-2"
+                  >
+                    {{ lb.name }}
+                    <span
+                      class="text-xs font-normal text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full"
+                    >
+                      {{ $t(`store.leaderboard.types.${lb.type}`) }}
+                    </span>
+                  </h3>
+                  <GameLeaderboard
+                    :game-id="gameId"
+                    :board-id="lb.id"
+                    :board-type="lb.type"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -387,10 +369,10 @@ const ratingArray = Array(5)
   .fill(null)
   .map((_, i) => i + 1 <= averageRating);
 
-const tabs = ["Achievements", "Reviews", "Similar"] as const;
+const tabs = ["Achievements", "Leaderboards", "Similar"] as const;
 const tabLabels: Record<string, string> = {
   Achievements: t("store.tabs.achievements"),
-  Reviews: t("store.tabs.reviews"),
+  Leaderboards: t("store.tabs.leaderboards"),
   Similar: t("store.tabs.similar"),
 };
 const activeTab = ref("Achievements");
@@ -401,30 +383,15 @@ const achievements = await $dropFetch(
 ).catch(() => []);
 achievementsLoading.value = false;
 
-interface ReviewData {
-  stats: { averageRating: number; totalReviews: number };
-  reviews: Array<{
-    id: string;
-    rating: number;
-    body: string;
-    createdAt: Date;
-    user: {
-      profilePictureObjectId: string;
-      displayName: string;
-      username: string;
-    };
-  }>;
-}
-
-const reviewStats = ref<ReviewData["stats"] | null>(null);
-const reviews = ref<ReviewData["reviews"]>([]);
-const reviewData = (await $dropFetch(`/api/v1/games/${gameId}/reviews`).catch(
-  () => null,
-)) as ReviewData | null;
-if (reviewData) {
-  reviewStats.value = reviewData.stats;
-  reviews.value = reviewData.reviews;
-}
+type LeaderboardMeta = {
+  id: string;
+  name: string;
+  type: string;
+  entryCount: number;
+};
+const leaderboards = (await $dropFetch(
+  `/api/v1/games/${gameId}/leaderboards`,
+).catch(() => [])) as LeaderboardMeta[];
 
 // Similar games based on shared tags
 const similarGames = ref<SerializeObject<GameModel>[]>([]);
@@ -440,23 +407,6 @@ if (gameTagIds.length > 0) {
   }
 }
 similarLoading.value = false;
-
-const newReviewRating = ref(3);
-const newReviewBody = ref("");
-const submitReview = async () => {
-  await $dropFetch(`/api/v1/games/${gameId}/reviews`, {
-    method: "POST",
-    body: { rating: newReviewRating.value, body: newReviewBody.value },
-  });
-  const refreshed = (await $dropFetch(`/api/v1/games/${gameId}/reviews`).catch(
-    () => null,
-  )) as ReviewData | null;
-  if (refreshed) {
-    reviewStats.value = refreshed.stats;
-    reviews.value = refreshed.reviews;
-  }
-  newReviewBody.value = "";
-};
 
 useHead({ title: game.mName });
 </script>

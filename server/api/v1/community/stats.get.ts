@@ -14,6 +14,7 @@ export default defineEventHandler(async (h3) => {
     _totalPlaytimeRecords,
     totalRequests,
     pendingRequests,
+    totalLeaderboardEntries,
   ] = await Promise.all([
     prisma.game.count({ where: { type: "Game" } }),
     prisma.user.count({ where: { enabled: true } }),
@@ -22,6 +23,7 @@ export default defineEventHandler(async (h3) => {
     prisma.playtime.count(),
     prisma.gameRequest.count(),
     prisma.gameRequest.count({ where: { status: "Pending" } }),
+    prisma.leaderboardEntry.count(),
   ]);
 
   // Calculate total playtime hours using DB aggregation (not JS reduce)
@@ -38,5 +40,6 @@ export default defineEventHandler(async (h3) => {
     totalAchievementUnlocks,
     totalRequests,
     pendingRequests,
+    totalLeaderboardEntries,
   };
 });

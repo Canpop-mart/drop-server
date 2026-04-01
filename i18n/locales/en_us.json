@@ -209,6 +209,7 @@
       "empty": "No activity yet",
       "in": "in",
       "played": "played",
+      "requestApproved": "had their request approved:",
       "unlocked": "unlocked"
     },
     "leaderboard": {
@@ -216,6 +217,7 @@
       "games": "{count} games",
       "hoursPlayed": "{hours}h played"
     },
+    "loadMore": "Load more",
     "recentActivity": "Recent Activity",
     "stats": {
       "games": "Games",
@@ -675,6 +677,30 @@
     "title": "Latest News"
   },
   "options": "Options",
+  "requests": {
+    "createNew": "New Request",
+    "createTitle": "Request a Game",
+    "empty": "No requests yet. Be the first to make one!",
+    "form": {
+      "description": "Description",
+      "descriptionPlaceholder": "Why should this be added?",
+      "steamUrl": "Steam URL (optional)",
+      "submit": "Submit Request",
+      "title": "Game Title",
+      "titlePlaceholder": "The name of the game"
+    },
+    "sortNewest": "Newest",
+    "sortVotes": "Most Voted",
+    "status": {
+      "Approved": "Approved",
+      "Denied": "Denied",
+      "Pending": "Pending",
+      "Withdrawn": "Withdrawn"
+    },
+    "subtitle": "Vote on games you want to see added to the library.",
+    "title": "Game Requests",
+    "withdraw": "Withdraw"
+  },
   "selectLanguage": "Select language",
   "services": {
     "nginx": {
@@ -746,6 +772,18 @@
     "developers": "Developers | Developer | Developers",
     "featured": "Featured",
     "images": "Game Images",
+    "leaderboard": {
+      "empty": "No leaderboards yet for this game.",
+      "error": "Could not load leaderboard.",
+      "types": {
+        "AchievementCount": "Achievements",
+        "Playtime": "Playtime",
+        "Score": "Score",
+        "Speedrun": "Speedrun"
+      },
+      "withScore": "with",
+      "yourRank": "Your rank:"
+    },
     "lookAt": "Check it out",
     "mostPlayedEmpty": "THE ARENA IS QUIET...",
     "mostPlayedEmptySub": "No one has been playing lately. Fire it up!",
@@ -773,12 +811,8 @@
     "released": "Released",
     "review": {
       "noAchievements": "No achievements for this game yet",
-      "noReviews": "No reviews yet. Be the first!",
       "noSimilar": "No similar games found",
-      "placeholder": "Your thoughts on this game...",
-      "submit": "Submit Review",
-      "unlockCount": "{unlocked} / {total} unlocked",
-      "write": "Write a Review"
+      "unlockCount": "{unlocked} / {total} unlocked"
     },
     "reviews": "({0} Reviews)",
     "search": {
@@ -803,7 +837,7 @@
     },
     "tabs": {
       "achievements": "Achievements",
-      "reviews": "Reviews",
+      "leaderboards": "Leaderboards",
       "similar": "Similar Games"
     },
     "tags": "Tags",
@@ -874,8 +908,7 @@
         "Achievement": "Achievement",
         "Custom": "Custom",
         "FavoriteGame": "Favorite Game",
-        "GameStats": "Game Stats",
-        "Review": "Review"
+        "GameStats": "Game Stats"
       }
     },
     "stats": {

@@ -249,12 +249,10 @@ const showcaseTypeLabels = computed<Record<string, string>>(() => ({
   Custom: t("user.showcase.types.Custom"),
   FavoriteGame: t("user.showcase.types.FavoriteGame"),
   GameStats: t("user.showcase.types.GameStats"),
-  Review: t("user.showcase.types.Review"),
 }));
 const showcaseTypes: ShowcaseType[] = [
   "FavoriteGame",
   "Achievement",
-  "Review",
   "GameStats",
   "Custom",
 ];

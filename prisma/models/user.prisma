@@ -34,7 +34,6 @@ model User {
 
     externalAccounts UserExternalAccount[]
     achievements     UserAchievement[]
-    reviews          GameReview[]        @relation(name: "UserReviews")
     showcases        ProfileShowcase[]
     leaderboardEntries LeaderboardEntry[]
     requestVotes     RequestVote[]

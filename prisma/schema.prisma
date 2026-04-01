@@ -34,7 +34,6 @@ enum AchieveMode {
 enum ShowcaseType {
   FavoriteGame
   Achievement
-  Review
   GameStats
   Custom
 }
@@ -54,26 +53,6 @@ enum SortOrder {
 enum VoteType {
   Up
   Down
-}
-
-model GameReview {
-  id        String   @id @default(uuid())
-  gameId    String
-  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade, name: "GameReviews")
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, name: "UserReviews")
-  rating    Int
-  body      String?  @default("")
-  helpful   Int      @default(0)
-  unhelpful Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([gameId, userId])
-  @@index([gameId])
-  @@index([userId])
-  @@index([createdAt])
-  @@index([rating])
 }
 
 model Leaderboard {

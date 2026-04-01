@@ -64,7 +64,6 @@ model Game {
   favoritedBy            FavoriteGame[]
   achievements           Achievement[]
   externalLinks          GameExternalLink[]
-  reviews                GameReview[]          @relation(name: "GameReviews")
   leaderboards           Leaderboard[]
   showcases              ProfileShowcase[]
 
