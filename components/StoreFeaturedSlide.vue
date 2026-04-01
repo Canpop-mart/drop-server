@@ -1,17 +1,18 @@
 <template>
   <div class="relative w-full h-full overflow-hidden bg-zinc-950 select-none">
-    <!-- Blurred banner backdrop -->
+    <!-- Background art: banner if available, otherwise cover art -->
     <div class="absolute inset-0 pointer-events-none">
       <img
-        :src="useObject(game.mBannerObjectId)"
+        :src="useObject(game.mBannerObjectId || game.mCoverObjectId)"
         aria-hidden="true"
-        class="size-full object-cover object-center scale-110 blur-3xl opacity-40"
+        class="size-full object-cover object-center opacity-55"
+      />
+      <!-- Left-heavy gradient so text stays readable -->
+      <div
+        class="absolute inset-0 bg-gradient-to-r from-zinc-950 via-zinc-950/75 to-zinc-950/10"
       />
       <div
-        class="absolute inset-0 bg-gradient-to-r from-zinc-950 via-zinc-950/80 to-zinc-950/20"
-      />
-      <div
-        class="absolute inset-0 bg-gradient-to-t from-zinc-950/70 to-transparent"
+        class="absolute inset-0 bg-gradient-to-t from-zinc-950/80 via-zinc-950/20 to-transparent"
       />
     </div>
 
@@ -79,7 +80,7 @@
             <EyeIcon class="size-4" />
             {{ $t("store.viewGame") }}
           </NuxtLink>
-          <AddLibraryButton :game-id="game.id" class="!w-auto" />
+          <AddLibraryButton :game-id="game.id" />
         </div>
       </div>
 

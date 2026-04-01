@@ -735,6 +735,8 @@
     "featured": "Featured",
     "images": "Game Images",
     "lookAt": "Check it out",
+    "mostPlayedEmpty": "THE ARENA IS QUIET...",
+    "mostPlayedEmptySub": "No one has been playing lately. Fire it up!",
     "nav": {
       "browse": "Browse All",
       "mostPlayed": "Most Played",

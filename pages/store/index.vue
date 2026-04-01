@@ -98,20 +98,35 @@
       <!-- Most Played -->
       <section v-show="activeTab === 'mostPlayed'">
         <StoreSpotlight :items="trendingGames" :loading="trendingLoading" />
+        <!-- Empty state -->
+        <div
+          v-if="!trendingLoading && trendingGames.length === 0"
+          class="flex flex-col items-center justify-center py-24 gap-4 text-center"
+        >
+          <FireIcon class="size-16 text-zinc-700" />
+          <p
+            class="text-xl font-bold text-zinc-500 font-display uppercase tracking-wide"
+          >
+            {{ $t("store.mostPlayedEmpty") }}
+          </p>
+          <p class="text-sm text-zinc-600 max-w-sm">
+            {{ $t("store.mostPlayedEmptySub") }}
+          </p>
+        </div>
       </section>
 
-      <!-- Recently Added: 2-row × 7-col grid -->
+      <!-- Recently Added: 3-row × 7-col grid -->
       <section v-show="activeTab === 'recentlyAdded'">
         <div v-if="recentlyAddedLoading" class="grid grid-cols-7 gap-3.5">
           <div
-            v-for="i in 14"
+            v-for="i in 21"
             :key="i"
             class="aspect-[2/3] rounded-xl bg-zinc-800/50 animate-pulse"
           />
         </div>
         <div v-else class="grid grid-cols-7 gap-3.5">
           <GamePanel
-            v-for="game in recentlyAdded.slice(0, 14)"
+            v-for="game in recentlyAdded.slice(0, 21)"
             :key="game.id"
             :game="game"
             :href="`/store/${game.id}`"
@@ -230,7 +245,7 @@ $fetch<{ results: TrendingGame[] }>("/api/v1/store/trending", {
 const recentlyAddedLoading = ref(true);
 const recentlyAdded = ref<StoreGame[]>([]);
 $fetch<{ results: StoreGame[] }>("/api/v1/store", {
-  query: { take: 14, sort: "recent", order: "desc" },
+  query: { take: 21, sort: "recent", order: "desc" },
 })
   .then((data) => {
     recentlyAdded.value = data.results;

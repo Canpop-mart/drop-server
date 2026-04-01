@@ -1,11 +1,9 @@
 <template>
-  <div
-    class="inline-flex w-full group hover:scale-105 transition-all duration-200"
-  >
+  <div class="inline-flex group hover:scale-105 transition-all duration-200">
     <LoadingButton
       :loading="isLibraryLoading"
       :style="'none'"
-      class="transition w-full inline-flex items-center justify-center h-full gap-x-2 rounded-none rounded-l-md bg-white/10 hover:bg-white/20 text-zinc-100 backdrop-blur px-5 py-3 active:scale-95"
+      class="transition inline-flex items-center justify-center h-full gap-x-2 rounded-none rounded-l-md bg-white/10 hover:bg-white/20 text-zinc-100 backdrop-blur px-5 py-3 active:scale-95"
       @click="() => toggleLibrary()"
     >
       {{ inLibrary ? $t("library.inLib") : $t("library.addToLib") }}
