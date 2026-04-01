@@ -56,7 +56,7 @@ ARG BUILD_GIT_REF
 ## build (disable source maps to avoid V8 "invalid array length" crash)
 ## Use node --max-old-space-size directly via node call
 RUN pnpm exec nuxt prepare && pnpm exec prisma generate && pnpm exec buf generate && \
-    NUXT_SOURCEMAP_SERVER=false NUXT_SOURCEMAP_CLIENT=false node --max-old-space-size=12288 ./node_modules/.bin/nuxt build
+    NUXT_SOURCEMAP_SERVER=false NUXT_SOURCEMAP_CLIENT=false NODE_OPTIONS="--max-old-space-size=12288" pnpm exec nuxt build
 
 
 # create run environment for Drop (Alpine for small image)
