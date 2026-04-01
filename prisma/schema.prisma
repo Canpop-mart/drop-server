@@ -56,21 +56,6 @@ enum VoteType {
   Down
 }
 
-enum BadgeType {
-  Achievement
-  Playtime
-  Collection
-  Review
-  Admin
-}
-
-enum DeckStatus {
-  Verified
-  Playable
-  Unsupported
-  Unknown
-}
-
 model GameReview {
   id        String   @id @default(uuid())
   gameId    String
@@ -137,17 +122,6 @@ model ProfileShowcase {
 
   @@index([userId])
   @@index([sortOrder])
-}
-
-model UserBadge {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      BadgeType
-  data      Json?
-  unlockedAt DateTime @default(now())
-
-  @@index([userId])
 }
 
 model RequestVote {

@@ -44,6 +44,7 @@ import {
   HomeIcon,
   LockClosedIcon,
   DevicePhoneMobileIcon,
+  SparklesIcon,
   WrenchScrewdriverIcon,
   CodeBracketIcon,
 } from "@heroicons/vue/24/outline";
@@ -73,6 +74,12 @@ const navigation: Ref<
     route: "/account/devices",
     prefix: "/account/devices",
     icon: DevicePhoneMobileIcon,
+  },
+  {
+    label: t("account.showcase.title"),
+    route: "/account/showcase",
+    prefix: "/account/showcase",
+    icon: SparklesIcon,
   },
   {
     label: t("account.token.title"),

@@ -57,7 +57,7 @@
           <img
             :src="useObject(game.mCoverObjectId)"
             :alt="game.mName"
-            class="size-full object-cover transition-transform duration-400 group-hover:scale-110"
+            class="size-full object-cover transition-transform duration-[400ms] group-hover:scale-110"
           />
           <div
             class="absolute inset-0 bg-gradient-to-t from-zinc-950/80 via-transparent to-transparent"

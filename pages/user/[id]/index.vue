@@ -71,6 +71,48 @@
         </p>
       </div>
     </div>
+    <!-- Showcase -->
+    <div v-if="showcase?.items?.length" class="mb-6">
+      <h2 class="text-lg font-bold font-display text-zinc-100 mb-3">
+        {{ $t("user.showcase.title") }}
+      </h2>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <NuxtLink
+          v-for="item in showcase.items"
+          :key="item.id"
+          :to="item.game ? `/store/${item.game.id}` : undefined"
+          class="group relative rounded-lg overflow-hidden bg-zinc-800/50 ring-1 ring-white/5 hover:ring-blue-500/30 transition-all duration-200"
+          :class="{ 'pointer-events-none': !item.game }"
+        >
+          <div class="aspect-[2/3]">
+            <img
+              v-if="item.game?.mCoverObjectId"
+              :src="useObject(item.game.mCoverObjectId)"
+              :alt="item.game.mName"
+              class="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+            <div
+              v-else
+              class="size-full flex items-center justify-center text-zinc-600"
+            >
+              <SparklesIcon class="size-8" />
+            </div>
+          </div>
+          <!-- Overlay -->
+          <div
+            class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-950/90 to-transparent p-2"
+          >
+            <p class="text-xs font-medium text-zinc-200 truncate">
+              {{ item.title || item.game?.mName || $t("user.showcase.custom") }}
+            </p>
+            <p class="text-[10px] text-zinc-400 uppercase tracking-wide">
+              {{ $t(`user.showcase.types.${item.type}`) }}
+            </p>
+          </div>
+        </NuxtLink>
+      </div>
+    </div>
+
     <!-- Activity -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div>
@@ -148,6 +190,7 @@
 </template>
 
 <script setup lang="ts">
+import { SparklesIcon } from "@heroicons/vue/24/outline";
 import { useObject } from "~/composables/objects";
 import { useUser } from "~/composables/user";
 
@@ -167,6 +210,9 @@ const userStats = await $dropFetch(`/api/v1/user/${id}/stats`).catch(
   () => null,
 );
 const activity = await $dropFetch(`/api/v1/user/${id}/activity`).catch(
+  () => null,
+);
+const showcase = await $dropFetch(`/api/v1/user/${id}/showcase`).catch(
   () => null,
 );
 const activityLoading = ref(false);

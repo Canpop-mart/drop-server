@@ -169,7 +169,6 @@ model LaunchConfiguration {
   gameVersion GameVersion @relation(fields: [versionId], references: [versionId], onDelete: Cascade, onUpdate: Cascade)
 
   emulations LaunchConfiguration[] @relation("emulator")
-  deckVerified DeckStatus @default(Unknown)
 }
 
 // A save slot for a game

@@ -194,7 +194,7 @@ const tabs = computed(() => [
 ]);
 
 // ─── Hero progress bar ────────────────────────────────────────────────
-const SLIDE_MS = 6000;
+const SLIDE_MS = 10_000;
 const heroSlide = ref(0);
 const progressPercent = ref(0);
 const progressTransition = ref<string>("none");
@@ -205,14 +205,18 @@ function startProgress() {
     clearTimeout(slideTimer);
     slideTimer = null;
   }
+  // Reset transition + width immediately
   progressTransition.value = "none";
   progressPercent.value = 0;
-  nextTick(() => {
-    progressTransition.value = `width ${SLIDE_MS}ms linear`;
-    progressPercent.value = 100;
-    slideTimer = setTimeout(() => {
-      heroSlide.value = (heroSlide.value + 1) % featured.length;
-    }, SLIDE_MS);
+  // Double rAF ensures the browser paints the reset before re-triggering
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      progressTransition.value = `width ${SLIDE_MS}ms linear`;
+      progressPercent.value = 100;
+      slideTimer = setTimeout(() => {
+        heroSlide.value = (heroSlide.value + 1) % featured.length;
+      }, SLIDE_MS);
+    });
   });
 }
 

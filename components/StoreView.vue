@@ -203,14 +203,6 @@
             </Menu>
 
             <button
-              v-if="false"
-              type="button"
-              class="-m-2 ml-5 p-2 text-zinc-500 hover:text-zinc-400 sm:ml-7"
-            >
-              <span class="sr-only">{{ $t("store.view.srViewGrid") }}</span>
-              <Squares2X2Icon class="size-5" aria-hidden="true" />
-            </button>
-            <button
               type="button"
               :class="[
                 '-m-2 ml-4 p-2 sm:ml-6 lg:hidden',
@@ -393,7 +385,6 @@ import {
   FunnelIcon,
   MinusIcon,
   PlusIcon,
-  Squares2X2Icon,
 } from "@heroicons/vue/20/solid";
 import type { SerializeObject } from "nitropack";
 import type { GameModel, GameTagModel } from "~/prisma/client/models";
@@ -402,6 +393,7 @@ const {
   store: { showGamePanelTextDecoration },
 } = await $dropFetch(`/api/v1/settings`);
 
+const { t } = useI18n();
 const mobileFiltersOpen = ref(false);
 
 const searchText = ref("");
@@ -427,13 +419,13 @@ const tags =
 
 const sorts = computed<Array<StoreSortOption>>(() => {
   const base: Array<StoreSortOption> = [
-    { name: "Default", param: "default" },
-    { name: "Newest", param: "newest" },
-    { name: "Recently Added", param: "recent" },
-    { name: "Name", param: "name" },
+    { name: t("store.view.sorts.default"), param: "default" },
+    { name: t("store.view.sorts.newest"), param: "newest" },
+    { name: t("store.view.sorts.recent"), param: "recent" },
+    { name: t("store.view.sorts.name"), param: "name" },
   ];
   if (debouncedSearch.value.length > 0) {
-    base.unshift({ name: "Relevance", param: "relevance" });
+    base.unshift({ name: t("store.view.sorts.relevance"), param: "relevance" });
   }
   return base;
 });
@@ -444,7 +436,7 @@ const options: Array<StoreFilterOption> = [
   ...(tags.length > 0
     ? [
         {
-          name: "Tags",
+          name: t("store.view.filters.tags"),
           param: "tags",
           multiple: true,
           options: tags.map((e) => ({ name: e.name, param: e.id })),
@@ -452,7 +444,7 @@ const options: Array<StoreFilterOption> = [
       ]
     : []),
   {
-    name: "Platform",
+    name: t("store.view.filters.platform"),
     param: "platform",
     multiple: true,
     options: Object.values(Platform).map((e) => ({ name: e, param: e })),

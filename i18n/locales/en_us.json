@@ -53,6 +53,18 @@
       "title": "Security"
     },
     "settings": "Settings",
+    "showcase": {
+      "add": "Add",
+      "addSlot": "Add item",
+      "addTitle": "Add Showcase Item",
+      "customTitle": "Title",
+      "description": "Choose up to 6 items to feature on your profile.",
+      "save": "Save Showcase",
+      "saved": "Showcase saved!",
+      "selectGame": "Select a game",
+      "title": "Showcase",
+      "type": "Type"
+    },
     "title": "Account Settings",
     "token": {
       "acls": "ACLs/scopes",
@@ -799,11 +811,21 @@
     "updateAvailable": "Update Available",
     "view": {
       "allTags": "All",
+      "filters": {
+        "platform": "Platform",
+        "tags": "Tags"
+      },
       "search": "Search",
       "sort": "Sort",
+      "sorts": {
+        "default": "Default",
+        "name": "Name",
+        "newest": "Newest",
+        "recent": "Recently Added",
+        "relevance": "Relevance"
+      },
       "srFilters": "Filters",
-      "srGames": "Games",
-      "srViewGrid": "View grid"
+      "srGames": "Games"
     },
     "viewGame": "View Game",
     "viewInStore": "View in Store"
@@ -845,6 +867,17 @@
     "notFound": "User not found",
     "recent": "Recent activity (TODO)",
     "recentSub": "Recent activity by this user",
+    "showcase": {
+      "custom": "Custom",
+      "title": "Showcase",
+      "types": {
+        "Achievement": "Achievement",
+        "Custom": "Custom",
+        "FavoriteGame": "Favorite Game",
+        "GameStats": "Game Stats",
+        "Review": "Review"
+      }
+    },
     "stats": {
       "achievements": "Achievements",
       "gamesPlayed": "Games Played",
