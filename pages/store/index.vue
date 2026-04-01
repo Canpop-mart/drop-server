@@ -215,9 +215,11 @@ onUnmounted(() => {
 // ─── Data fetching ────────────────────────────────────────────────────
 const trendingLoading = ref(true);
 const trendingGames = ref<TrendingGame[]>([]);
-$fetch("/api/v1/store/trending", { query: { take: 10, days: 7 } })
-  .then((data: any) => {
-    trendingGames.value = data.results as TrendingGame[];
+$fetch<{ results: TrendingGame[] }>("/api/v1/store/trending", {
+  query: { take: 10, days: 7 },
+})
+  .then((data) => {
+    trendingGames.value = data.results;
   })
   .catch(() => {})
   .finally(() => {
@@ -226,9 +228,11 @@ $fetch("/api/v1/store/trending", { query: { take: 10, days: 7 } })
 
 const recentlyAddedLoading = ref(true);
 const recentlyAdded = ref<StoreGame[]>([]);
-$fetch("/api/v1/store", { query: { take: 14, sort: "recent", order: "desc" } })
-  .then((data: any) => {
-    recentlyAdded.value = data.results as StoreGame[];
+$fetch<{ results: StoreGame[] }>("/api/v1/store", {
+  query: { take: 14, sort: "recent", order: "desc" },
+})
+  .then((data) => {
+    recentlyAdded.value = data.results;
   })
   .catch(() => {})
   .finally(() => {
