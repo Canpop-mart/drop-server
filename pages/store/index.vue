@@ -143,7 +143,6 @@ import {
   ChartBarIcon,
   SparklesIcon,
   ClockIcon,
-  TagIcon,
   Squares2X2Icon,
 } from "@heroicons/vue/24/outline";
 import type { SerializeObject } from "nitropack";
