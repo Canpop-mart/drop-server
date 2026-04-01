@@ -39,7 +39,7 @@
           v-if="isCurrentUser"
           to="/account"
           class="px-4 py-2 bg-zinc-800 rounded text-sm text-zinc-200 hover:bg-zinc-700"
-          >Edit Profile</NuxtLink
+          >{{ $t("user.editProfile") }}</NuxtLink
         >
       </div>
       <p v-if="profile?.bio" class="mt-4 text-zinc-300">{{ profile.bio }}</p>
@@ -52,30 +52,34 @@
             userStats?.totalPlaytimeSeconds
               ? Math.round(userStats.totalPlaytimeSeconds / 3600)
               : 0
-          }}h
+          }}{{ $t("community.stats.hoursSuffix") }}
         </p>
-        <p class="text-sm text-zinc-400">Playtime</p>
+        <p class="text-sm text-zinc-400">{{ $t("user.stats.playtime") }}</p>
       </div>
       <div class="p-4 bg-zinc-800/50 rounded-lg text-center">
         <p class="text-2xl font-bold text-blue-400">
           {{ userStats?.gamesPlayed ?? 0 }}
         </p>
-        <p class="text-sm text-zinc-400">Games Played</p>
+        <p class="text-sm text-zinc-400">{{ $t("user.stats.gamesPlayed") }}</p>
       </div>
       <div class="p-4 bg-zinc-800/50 rounded-lg text-center">
         <p class="text-2xl font-bold text-blue-400">
           {{ userStats?.achievementsUnlocked ?? 0 }}
         </p>
-        <p class="text-sm text-zinc-400">Achievements</p>
+        <p class="text-sm text-zinc-400">
+          {{ $t("user.stats.achievements") }}
+        </p>
       </div>
     </div>
     <!-- Activity -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div>
         <h2 class="text-lg font-bold font-display text-zinc-100 mb-3">
-          Recent Activity
+          {{ $t("user.stats.recentActivity") }}
         </h2>
-        <div v-if="activityLoading" class="text-zinc-500">Loading...</div>
+        <div v-if="activityLoading" class="text-zinc-500">
+          {{ $t("common.srLoading") }}
+        </div>
         <div v-else>
           <div
             v-for="s in userStats?.recentSessions?.slice(0, 5)"
@@ -92,8 +96,9 @@
               <p class="text-xs text-zinc-500">
                 {{
                   s.durationSeconds
-                    ? Math.round(s.durationSeconds / 60) + "min"
-                    : "Unknown duration"
+                    ? Math.round(s.durationSeconds / 60) +
+                      $t("user.stats.minutesSuffix")
+                    : $t("user.stats.unknownDuration")
                 }}
               </p>
             </div>
@@ -102,15 +107,17 @@
             v-if="!userStats?.recentSessions?.length"
             class="text-zinc-500 text-sm"
           >
-            No sessions yet
+            {{ $t("user.stats.noSessions") }}
           </p>
         </div>
       </div>
       <div>
         <h2 class="text-lg font-bold font-display text-zinc-100 mb-3">
-          Recent Achievements
+          {{ $t("user.stats.recentAchievements") }}
         </h2>
-        <div v-if="activityLoading" class="text-zinc-500">Loading...</div>
+        <div v-if="activityLoading" class="text-zinc-500">
+          {{ $t("common.srLoading") }}
+        </div>
         <div v-else>
           <div
             v-for="a in activity?.achievements?.slice(0, 5)"
@@ -132,7 +139,7 @@
             v-if="!activity?.achievements?.length"
             class="text-zinc-500 text-sm"
           >
-            No achievements yet
+            {{ $t("user.stats.noAchievements") }}
           </p>
         </div>
       </div>

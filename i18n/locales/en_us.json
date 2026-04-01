@@ -749,6 +749,15 @@
     "recentlyAdded": "Recently Added",
     "recentlyReleased": "Recently released",
     "released": "Released",
+    "review": {
+      "noAchievements": "No achievements for this game yet",
+      "noReviews": "No reviews yet. Be the first!",
+      "noSimilar": "No similar games found",
+      "placeholder": "Your thoughts on this game...",
+      "submit": "Submit Review",
+      "unlockCount": "{unlocked} / {total} unlocked",
+      "write": "Write a Review"
+    },
     "reviews": "({0} Reviews)",
     "search": {
       "noResults": "No games found",
@@ -767,6 +776,11 @@
       "viewAll": "View all"
     },
     "size": "Size",
+    "tabs": {
+      "achievements": "Achievements",
+      "reviews": "Reviews",
+      "similar": "Similar Games"
+    },
     "tags": "Tags",
     "title": "Store",
     "view": {
@@ -815,6 +829,17 @@
     "notFound": "User not found",
     "recent": "Recent activity (TODO)",
     "recentSub": "Recent activity by this user",
+    "stats": {
+      "achievements": "Achievements",
+      "gamesPlayed": "Games Played",
+      "minutesSuffix": "min",
+      "noAchievements": "No achievements yet",
+      "noSessions": "No sessions yet",
+      "playtime": "Playtime",
+      "recentAchievements": "Recent Achievements",
+      "recentActivity": "Recent Activity",
+      "unknownDuration": "Unknown duration"
+    },
     "unknown": "Unknown user"
   },
   "userHeader": {

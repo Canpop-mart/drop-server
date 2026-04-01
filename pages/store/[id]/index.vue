@@ -267,20 +267,20 @@
                     'pb-2 px-1 border-b-2 text-sm font-medium',
                   ]"
                 >
-                  {{ tab }}
+                  {{ $t("store.tabs." + tab.toLowerCase()) }}
                 </button>
               </nav>
             </div>
             <!-- Achievements Tab -->
             <div v-if="activeTab === 'Achievements'">
               <div v-if="achievementsLoading" class="text-zinc-500">
-                Loading...
+                {{ $t("common.srLoading") }}
               </div>
               <div
                 v-else-if="achievements?.length === 0"
                 class="text-zinc-500 text-center py-8"
               >
-                No achievements for this game yet
+                {{ $t("store.review.noAchievements") }}
               </div>
               <div v-else class="space-y-2">
                 <AchievementCard
@@ -290,8 +290,12 @@
                   :unlocked-at="a.unlockedAt"
                 />
                 <div class="mt-4 text-sm text-zinc-400">
-                  {{ achievements.filter((a) => a.unlocked).length }} /
-                  {{ achievements.length }} unlocked
+                  {{
+                    $t("store.review.unlockCount", {
+                      unlocked: achievements.filter((a) => a.unlocked).length,
+                      total: achievements.length,
+                    })
+                  }}
                 </div>
               </div>
             </div>
@@ -316,19 +320,19 @@
               </div>
               <div v-if="user" class="mb-6 p-4 bg-zinc-800/30 rounded-lg">
                 <h3 class="text-sm font-medium text-zinc-200 mb-2">
-                  Write a Review
+                  {{ $t("store.review.write") }}
                 </h3>
                 <StarRating v-model="newReviewRating" :interactive="true" />
                 <textarea
                   v-model="newReviewBody"
-                  placeholder="Your thoughts on this game..."
+                  :placeholder="$t('store.review.placeholder')"
                   class="mt-2 w-full p-2 rounded bg-zinc-900 border border-zinc-700 text-sm text-zinc-200 placeholder-zinc-500 resize-none h-20"
                 />
                 <button
-                  @click="submitReview"
                   class="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white"
+                  @click="submitReview"
                 >
-                  Submit Review
+                  {{ $t("store.review.submit") }}
                 </button>
               </div>
               <div class="space-y-3">
@@ -337,18 +341,20 @@
                   v-if="!reviews?.length"
                   class="text-zinc-500 text-center py-8"
                 >
-                  No reviews yet. Be the first!
+                  {{ $t("store.review.noReviews") }}
                 </p>
               </div>
             </div>
             <!-- Similar Games Tab -->
             <div v-if="activeTab === 'Similar'">
-              <div v-if="similarLoading" class="text-zinc-500">Loading...</div>
+              <div v-if="similarLoading" class="text-zinc-500">
+                {{ $t("common.srLoading") }}
+              </div>
               <div
                 v-else-if="similarGames.length === 0"
                 class="text-zinc-500 text-center py-8"
               >
-                No similar games found
+                {{ $t("store.review.noSimilar") }}
               </div>
               <GameCarousel v-else :items="similarGames" />
             </div>

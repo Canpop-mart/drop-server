@@ -24,12 +24,11 @@ export default defineEventHandler(async (h3) => {
     prisma.gameRequest.count({ where: { status: "Pending" } }),
   ]);
 
-  // Calculate total playtime hours
-  const playtimeRecords = await prisma.playtime.findMany({
-    select: { seconds: true },
+  // Calculate total playtime hours using DB aggregation (not JS reduce)
+  const playtimeAggregate = await prisma.playtime.aggregate({
+    _sum: { seconds: true },
   });
-  const totalPlaytimeHours =
-    playtimeRecords.reduce((sum, p) => sum + p.seconds, 0) / 3600;
+  const totalPlaytimeHours = (playtimeAggregate._sum.seconds ?? 0) / 3600;
 
   return {
     totalGames,
