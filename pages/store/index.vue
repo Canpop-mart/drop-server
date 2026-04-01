@@ -12,7 +12,8 @@
         :items-to-show="1"
         :transition="600"
         :autoplay="0"
-        class="hero-carousel h-full relative"
+        class="hero-carousel"
+        style="height: 100%"
       >
         <VueSlide v-for="game in featured" :key="game.id">
           <StoreFeaturedSlide :game="game" />

@@ -15,6 +15,7 @@ export default defineEventHandler(async (h3) => {
       mShortDescription: true,
       mCoverObjectId: true,
       mBannerObjectId: true,
+      updateAvailable: true,
       developers: {
         select: {
           id: true,

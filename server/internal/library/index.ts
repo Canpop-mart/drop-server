@@ -533,7 +533,7 @@ class LibraryManager {
                 },
               },
 
-              displayName: metadata.displayName ?? null,
+              displayName: metadata.displayName ?? versionPath ?? null,
 
               versionPath,
               dropletManifest: manifest,
@@ -572,6 +572,12 @@ class LibraryManager {
             },
           });
           logger.info("Successfully created version!");
+
+          // Clear the update-available flag now that a new version is installed
+          await prisma.game.update({
+            where: { id: gameId },
+            data: { updateAvailable: false },
+          });
 
           notificationSystem.systemPush({
             nonce: `version-create-${gameId}-${version}`,

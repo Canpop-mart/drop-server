@@ -737,11 +737,11 @@
     "lookAt": "Check it out",
     "nav": {
       "browse": "Browse All",
+      "mostPlayed": "Most Played",
       "new": "Recently Added",
       "popular": "Popular",
       "recommended": "For You",
-      "trending": "Trending",
-      "mostPlayed": "Most Played"
+      "trending": "Trending"
     },
     "noDevelopers": "No developers",
     "noFeatured": "NO FEATURED GAMES",
@@ -794,6 +794,7 @@
     },
     "tags": "Tags",
     "title": "Store",
+    "updateAvailable": "Update Available",
     "view": {
       "allTags": "All",
       "search": "Search",

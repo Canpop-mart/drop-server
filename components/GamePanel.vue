@@ -28,8 +28,22 @@
       class="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-200 pointer-events-none"
     />
 
-    <!-- Top badges row -->
-    <div class="absolute top-2 left-2 right-2 flex items-start justify-between gap-1 z-10">
+    <!-- Update available badge (always visible) -->
+    <div
+      v-if="game?.updateAvailable"
+      class="absolute top-2 right-2 z-20 pointer-events-none"
+    >
+      <span
+        class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500 text-white leading-tight shadow-lg"
+      >
+        {{ $t("store.updateAvailable") }}
+      </span>
+    </div>
+
+    <!-- Top badges row (hover only) -->
+    <div
+      class="absolute top-2 left-2 right-2 flex items-start justify-between gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+    >
       <!-- Genre tag badge (top-left) -->
       <span
         v-if="firstTag"
@@ -60,16 +74,14 @@
       </div>
     </div>
 
-    <!-- Always-visible bottom info bar (hidden when showTitleDescription=false) -->
+    <!-- Bottom info bar — slides up on hover -->
     <div
       v-if="showTitleDescription"
-      class="absolute bottom-0 left-0 right-0 px-3 py-2.5 bg-zinc-950/90 border-t border-white/5 z-10"
+      class="absolute bottom-0 left-0 right-0 px-3 py-2.5 bg-zinc-950/90 border-t border-white/5 z-10 translate-y-full group-hover:translate-y-0 transition-transform duration-200"
     >
       <p class="text-zinc-100 text-xs font-bold leading-tight truncate">
         {{
-          game
-            ? game.mName
-            : $t("settings.admin.store.dropGameNamePlaceholder")
+          game ? game.mName : $t("settings.admin.store.dropGameNamePlaceholder")
         }}
       </p>
       <p v-if="metaLine" class="text-zinc-500 text-[10px] mt-0.5 truncate">
@@ -108,6 +120,7 @@ const {
         mName: string;
         mShortDescription: string;
         mReleased?: string | null;
+        updateAvailable?: boolean | null;
         tags?: Array<{ id: string; name: string }>;
         versions?: Array<{
           displayName?: string | null;

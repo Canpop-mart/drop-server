@@ -18,7 +18,10 @@
     <!-- Split layout — full-width, no max-w constraint -->
     <div
       class="relative h-full px-8 sm:px-14 lg:px-20 flex flex-col lg:flex-row items-center gap-10 lg:gap-16"
-      style="padding-top: clamp(3rem, 8vh, 6rem); padding-bottom: clamp(3rem, 8vh, 6rem)"
+      style="
+        padding-top: clamp(3rem, 8vh, 6rem);
+        padding-bottom: clamp(3rem, 8vh, 6rem);
+      "
     >
       <!-- Left: text content -->
       <div class="flex-1 min-w-0 text-left">
@@ -29,6 +32,12 @@
             class="text-xs font-bold px-2.5 py-1 rounded-md bg-green-700 text-white leading-tight"
           >
             {{ versionLabel }}
+          </span>
+          <span
+            v-if="game.updateAvailable"
+            class="text-xs font-bold px-2.5 py-1 rounded-md bg-orange-500 text-white leading-tight"
+          >
+            {{ $t("store.updateAvailable") }}
           </span>
           <span
             v-for="tag in game.tags?.slice(0, 2)"
@@ -108,12 +117,12 @@ const props = defineProps<{
     publishers?: Array<{ id: string; mName: string }>;
     tags?: Array<{ id: string; name: string }>;
     versions?: Array<{ displayName?: string | null; versionIndex?: number }>;
+    updateAvailable?: boolean | null;
   };
 }>();
 
 const developer = computed(
-  () =>
-    props.game.developers?.[0]?.mName ?? props.game.publishers?.[0]?.mName,
+  () => props.game.developers?.[0]?.mName ?? props.game.publishers?.[0]?.mName,
 );
 
 const versionLabel = computed(() => {

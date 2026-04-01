@@ -39,7 +39,7 @@ export default defineEventHandler(async (h3) => {
   });
   const dailyTasks = await taskHandler.dailyTasks();
   const weeklyTasks = await taskHandler.weeklyTasks();
-  const other: TaskGroup[] = ["import:check-integrity"];
+  const other: TaskGroup[] = ["import:check-integrity", "check:game-updates"];
 
   return { runningTasks, historicalTasks, dailyTasks, weeklyTasks, other };
 });

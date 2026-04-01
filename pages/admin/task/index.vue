@@ -261,6 +261,11 @@ const scheduledTasks: {
     name: "Check Integrity",
     description: "Re-imports all versions and updates their manifests.",
   },
+  "check:game-updates": {
+    name: "Check for Game Updates",
+    description:
+      "Checks Steam for new build IDs and flags any games that have an update available.",
+  },
 };
 
 async function startTask(taskGroup: string) {
