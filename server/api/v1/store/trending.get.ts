@@ -58,9 +58,7 @@ export default defineEventHandler(async (h3) => {
 
   // Preserve trending order
   const gameMap = new Map(games.map((g) => [g.id, g]));
-  const trendingMap = new Map(
-    trending.map((t) => [t.gameId, t._count.userId]),
-  );
+  const trendingMap = new Map(trending.map((t) => [t.gameId, t._count.userId]));
 
   return {
     results: gameIds

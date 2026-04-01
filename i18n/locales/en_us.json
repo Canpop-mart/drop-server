@@ -159,29 +159,6 @@
     "arrowUp": "↑",
     "srComma": ", {0}"
   },
-  "community": {
-    "title": "Community",
-    "recentActivity": "Recent Activity",
-    "topPlayers": "Top Players",
-    "stats": {
-      "games": "Games",
-      "players": "Players",
-      "totalPlaytime": "Total Playtime",
-      "pendingRequests": "Pending Requests",
-      "hoursSuffix": "h"
-    },
-    "leaderboard": {
-      "hoursPlayed": "{hours}h played",
-      "achievements": "{count} achievements",
-      "games": "{count} games"
-    },
-    "activity": {
-      "played": "played",
-      "unlocked": "unlocked",
-      "in": "in",
-      "empty": "No activity yet"
-    }
-  },
   "common": {
     "add": "Add",
     "cannotUndo": "This action cannot be undone.",
@@ -214,6 +191,29 @@
     "srLoading": "Loading…",
     "tags": "Tags",
     "today": "Today"
+  },
+  "community": {
+    "activity": {
+      "empty": "No activity yet",
+      "in": "in",
+      "played": "played",
+      "unlocked": "unlocked"
+    },
+    "leaderboard": {
+      "achievements": "{count} achievements",
+      "games": "{count} games",
+      "hoursPlayed": "{hours}h played"
+    },
+    "recentActivity": "Recent Activity",
+    "stats": {
+      "games": "Games",
+      "hoursSuffix": "h",
+      "pendingRequests": "Pending Requests",
+      "players": "Players",
+      "totalPlaytime": "Total Playtime"
+    },
+    "title": "Community",
+    "topPlayers": "Top Players"
   },
   "drop": {
     "desc": "An open-source game distribution platform built for speed, flexibility and beauty.",
@@ -750,25 +750,25 @@
     "recentlyReleased": "Recently released",
     "released": "Released",
     "reviews": "({0} Reviews)",
+    "search": {
+      "noResults": "No games found",
+      "placeholder": "Search games...",
+      "searching": "Searching..."
+    },
+    "sections": {
+      "empty": "Nothing here yet",
+      "popular": "Most Popular",
+      "popularSub": "All-time community favorites",
+      "recentlyAdded": "Recently Added",
+      "recommended": "Recommended for You",
+      "recommendedSub": "Based on your play history",
+      "trending": "Trending",
+      "trendingSub": "Most played this week",
+      "viewAll": "View all"
+    },
     "size": "Size",
     "tags": "Tags",
     "title": "Store",
-    "search": {
-      "placeholder": "Search games...",
-      "searching": "Searching...",
-      "noResults": "No games found"
-    },
-    "sections": {
-      "trending": "Trending",
-      "trendingSub": "Most played this week",
-      "popular": "Most Popular",
-      "popularSub": "All-time community favorites",
-      "recommended": "Recommended for You",
-      "recommendedSub": "Based on your play history",
-      "recentlyAdded": "Recently Added",
-      "viewAll": "View all",
-      "empty": "Nothing here yet"
-    },
     "view": {
       "search": "Search",
       "sort": "Sort",

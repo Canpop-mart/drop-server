@@ -22,13 +22,6 @@ export default defineEventHandler(async (h3) => {
     take: 20,
   });
 
-  // Get top users by games owned
-  const _gamesByUser = await prisma.collectionEntry.groupBy({
-    by: ["collectionId"],
-    _count: true,
-    take: 20,
-  });
-
   // Fetch user details for all these users
   const userIds = new Set([
     ...playtimeByUser.map((p) => p.userId),
@@ -71,8 +64,7 @@ export default defineEventHandler(async (h3) => {
     gamesPlayed: p._count,
     achievements:
       achievementByUser.find((a) => a.userId === p.userId)?._count ?? 0,
-    gamesOwned:
-      collectionCountMap[userCollectionIds[p.userId] ?? ""] ?? 0,
+    gamesOwned: collectionCountMap[userCollectionIds[p.userId] ?? ""] ?? 0,
   }));
 
   return { playtime: playtimeLeaderboard };

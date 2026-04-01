@@ -82,7 +82,9 @@ export default defineEventHandler(async (h3) => {
         },
       },
     })),
-  ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  ].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  );
 
   return activityItems.slice(0, 30);
 });

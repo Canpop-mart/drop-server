@@ -93,7 +93,9 @@
     </div>
 
     <!-- Discovery sections -->
-    <div class="max-w-7xl mx-auto w-full px-4 sm:px-8 py-8 flex flex-col gap-y-10">
+    <div
+      class="max-w-7xl mx-auto w-full px-4 sm:px-8 py-8 flex flex-col gap-y-10"
+    >
       <!-- Trending: games with recent play activity -->
       <StoreSection
         :title="$t('store.sections.trending')"

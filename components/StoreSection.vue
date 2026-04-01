@@ -2,11 +2,7 @@
   <section v-if="!hidden" class="w-full">
     <div class="flex items-center justify-between px-1 mb-4">
       <div class="flex items-center gap-x-3">
-        <component
-          :is="icon"
-          v-if="icon"
-          class="size-5 text-blue-400"
-        />
+        <component :is="icon" v-if="icon" class="size-5 text-blue-400" />
         <h2 class="text-xl font-bold font-display text-zinc-100">
           {{ title }}
         </h2>
@@ -31,7 +27,9 @@
       />
     </div>
     <div v-else-if="items.length === 0" class="py-6 text-center">
-      <p class="text-zinc-600 text-sm">{{ emptyText ?? $t("store.sections.empty") }}</p>
+      <p class="text-zinc-600 text-sm">
+        {{ emptyText ?? $t("store.sections.empty") }}
+      </p>
     </div>
     <GameCarousel v-else :items="items" />
   </section>

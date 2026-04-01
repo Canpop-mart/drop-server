@@ -163,8 +163,7 @@ function navigateToFirst() {
 
 function highlightNext() {
   if (results.value.length === 0) return;
-  highlightedIndex.value =
-    (highlightedIndex.value + 1) % results.value.length;
+  highlightedIndex.value = (highlightedIndex.value + 1) % results.value.length;
 }
 
 function highlightPrev() {

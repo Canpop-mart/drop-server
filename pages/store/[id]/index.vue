@@ -256,17 +256,42 @@
           <div class="mt-12">
             <div class="border-b border-zinc-700 mb-4">
               <nav class="flex gap-4">
-                <button v-for="tab in tabs" :key="tab" @click="activeTab = tab" :class="[activeTab === tab ? 'border-blue-400 text-blue-400' : 'border-transparent text-zinc-400 hover:text-zinc-200', 'pb-2 px-1 border-b-2 text-sm font-medium']">{{ tab }}</button>
+                <button
+                  v-for="tab in tabs"
+                  :key="tab"
+                  @click="activeTab = tab"
+                  :class="[
+                    activeTab === tab
+                      ? 'border-blue-400 text-blue-400'
+                      : 'border-transparent text-zinc-400 hover:text-zinc-200',
+                    'pb-2 px-1 border-b-2 text-sm font-medium',
+                  ]"
+                >
+                  {{ tab }}
+                </button>
               </nav>
             </div>
             <!-- Achievements Tab -->
             <div v-if="activeTab === 'Achievements'">
-              <div v-if="achievementsLoading" class="text-zinc-500">Loading...</div>
-              <div v-else-if="achievements?.length === 0" class="text-zinc-500 text-center py-8">No achievements for this game yet</div>
+              <div v-if="achievementsLoading" class="text-zinc-500">
+                Loading...
+              </div>
+              <div
+                v-else-if="achievements?.length === 0"
+                class="text-zinc-500 text-center py-8"
+              >
+                No achievements for this game yet
+              </div>
               <div v-else class="space-y-2">
-                <AchievementCard v-for="a in achievements" :key="a.id" :achievement="a" :unlocked-at="a.unlockedAt" />
+                <AchievementCard
+                  v-for="a in achievements"
+                  :key="a.id"
+                  :achievement="a"
+                  :unlocked-at="a.unlockedAt"
+                />
                 <div class="mt-4 text-sm text-zinc-400">
-                  {{ achievements.filter(a => a.unlocked).length }} / {{ achievements.length }} unlocked
+                  {{ achievements.filter((a) => a.unlocked).length }} /
+                  {{ achievements.length }} unlocked
                 </div>
               </div>
             </div>
@@ -274,26 +299,57 @@
             <div v-if="activeTab === 'Reviews'">
               <div class="mb-6 p-4 bg-zinc-800/50 rounded-lg">
                 <div class="flex items-center gap-4">
-                  <div class="text-3xl font-bold text-blue-400">{{ reviewStats?.averageRating ? reviewStats.averageRating.toFixed(1) : '—' }}</div>
-                  <StarRating :model-value="Math.round(reviewStats?.averageRating || 0)" />
-                  <span class="text-zinc-400 text-sm">({{ reviewStats?.totalReviews || 0 }} reviews)</span>
+                  <div class="text-3xl font-bold text-blue-400">
+                    {{
+                      reviewStats?.averageRating
+                        ? reviewStats.averageRating.toFixed(1)
+                        : "—"
+                    }}
+                  </div>
+                  <StarRating
+                    :model-value="Math.round(reviewStats?.averageRating || 0)"
+                  />
+                  <span class="text-zinc-400 text-sm"
+                    >({{ reviewStats?.totalReviews || 0 }} reviews)</span
+                  >
                 </div>
               </div>
               <div v-if="user" class="mb-6 p-4 bg-zinc-800/30 rounded-lg">
-                <h3 class="text-sm font-medium text-zinc-200 mb-2">Write a Review</h3>
+                <h3 class="text-sm font-medium text-zinc-200 mb-2">
+                  Write a Review
+                </h3>
                 <StarRating v-model="newReviewRating" :interactive="true" />
-                <textarea v-model="newReviewBody" placeholder="Your thoughts on this game..." class="mt-2 w-full p-2 rounded bg-zinc-900 border border-zinc-700 text-sm text-zinc-200 placeholder-zinc-500 resize-none h-20" />
-                <button @click="submitReview" class="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white">Submit Review</button>
+                <textarea
+                  v-model="newReviewBody"
+                  placeholder="Your thoughts on this game..."
+                  class="mt-2 w-full p-2 rounded bg-zinc-900 border border-zinc-700 text-sm text-zinc-200 placeholder-zinc-500 resize-none h-20"
+                />
+                <button
+                  @click="submitReview"
+                  class="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white"
+                >
+                  Submit Review
+                </button>
               </div>
               <div class="space-y-3">
                 <ReviewCard v-for="r in reviews" :key="r.id" :review="r" />
-                <p v-if="!reviews?.length" class="text-zinc-500 text-center py-8">No reviews yet. Be the first!</p>
+                <p
+                  v-if="!reviews?.length"
+                  class="text-zinc-500 text-center py-8"
+                >
+                  No reviews yet. Be the first!
+                </p>
               </div>
             </div>
             <!-- Similar Games Tab -->
             <div v-if="activeTab === 'Similar'">
               <div v-if="similarLoading" class="text-zinc-500">Loading...</div>
-              <div v-else-if="similarGames.length === 0" class="text-zinc-500 text-center py-8">No similar games found</div>
+              <div
+                v-else-if="similarGames.length === 0"
+                class="text-zinc-500 text-center py-8"
+              >
+                No similar games found
+              </div>
               <GameCarousel v-else :items="similarGames" />
             </div>
           </div>
@@ -314,28 +370,49 @@ import { formatBytes } from "~/server/internal/utils/files";
 const route = useRoute();
 const gameId = route.params.id.toString();
 const user = useUser();
-const { game, rating, sizes, platforms } = await $dropFetch(`/api/v1/games/${gameId}`);
+const { game, rating, sizes, platforms } = await $dropFetch(
+  `/api/v1/games/${gameId}`,
+);
 const isClient = isClientRequest();
 const descriptionHTML = micromark(game.mDescription);
 const averageRating = Math.round((rating._avg.mReviewRating ?? 0) * 5);
-const ratingArray = Array(5).fill(null).map((_, i) => i + 1 <= averageRating);
+const ratingArray = Array(5)
+  .fill(null)
+  .map((_, i) => i + 1 <= averageRating);
 
-const tabs = ['Achievements', 'Reviews', 'Similar'];
-const activeTab = ref('Achievements');
+const tabs = ["Achievements", "Reviews", "Similar"];
+const activeTab = ref("Achievements");
 const achievementsLoading = ref(true);
 const similarLoading = ref(true);
-const achievements = await $dropFetch(`/api/v1/games/${gameId}/achievements`).catch(() => []);
+const achievements = await $dropFetch(
+  `/api/v1/games/${gameId}/achievements`,
+).catch(() => []);
 achievementsLoading.value = false;
 
 interface ReviewData {
   stats: { averageRating: number; totalReviews: number };
-  reviews: Array<{ id: string; rating: number; body: string; createdAt: Date; user: { profilePictureObjectId: string; displayName: string; username: string } }>;
+  reviews: Array<{
+    id: string;
+    rating: number;
+    body: string;
+    createdAt: Date;
+    user: {
+      profilePictureObjectId: string;
+      displayName: string;
+      username: string;
+    };
+  }>;
 }
 
 const reviewStats = ref<ReviewData["stats"] | null>(null);
 const reviews = ref<ReviewData["reviews"]>([]);
-const reviewData = await $dropFetch(`/api/v1/games/${gameId}/reviews`).catch(() => null) as ReviewData | null;
-if (reviewData) { reviewStats.value = reviewData.stats; reviews.value = reviewData.reviews; }
+const reviewData = (await $dropFetch(`/api/v1/games/${gameId}/reviews`).catch(
+  () => null,
+)) as ReviewData | null;
+if (reviewData) {
+  reviewStats.value = reviewData.stats;
+  reviews.value = reviewData.reviews;
+}
 
 // Similar games based on shared tags
 const similarGames = ref<SerializeObject<GameModel>[]>([]);
@@ -345,18 +422,28 @@ if (gameTagIds.length > 0) {
     query: { take: 10, sort: "default", tags: gameTagIds.join(",") },
   }).catch(() => null);
   if (similar) {
-    similarGames.value = (similar.results as SerializeObject<GameModel>[]).filter((g: SerializeObject<GameModel>) => g.id !== gameId);
+    similarGames.value = (
+      similar.results as SerializeObject<GameModel>[]
+    ).filter((g: SerializeObject<GameModel>) => g.id !== gameId);
   }
 }
 similarLoading.value = false;
 
 const newReviewRating = ref(3);
-const newReviewBody = ref('');
+const newReviewBody = ref("");
 const submitReview = async () => {
-  await $dropFetch(`/api/v1/games/${gameId}/reviews`, { method: 'POST', body: { rating: newReviewRating.value, body: newReviewBody.value } });
-  const refreshed = await $dropFetch(`/api/v1/games/${gameId}/reviews`).catch(() => null) as ReviewData | null;
-  if (refreshed) { reviewStats.value = refreshed.stats; reviews.value = refreshed.reviews; }
-  newReviewBody.value = '';
+  await $dropFetch(`/api/v1/games/${gameId}/reviews`, {
+    method: "POST",
+    body: { rating: newReviewRating.value, body: newReviewBody.value },
+  });
+  const refreshed = (await $dropFetch(`/api/v1/games/${gameId}/reviews`).catch(
+    () => null,
+  )) as ReviewData | null;
+  if (refreshed) {
+    reviewStats.value = refreshed.stats;
+    reviews.value = refreshed.reviews;
+  }
+  newReviewBody.value = "";
 };
 
 useHead({ title: game.mName });

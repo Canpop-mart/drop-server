@@ -145,7 +145,12 @@ export default defineEventHandler(async (h3) => {
           ...baseFilter,
           OR: [
             { mName: { contains: searchTerm, mode: "insensitive" as const } },
-            { mShortDescription: { contains: searchTerm, mode: "insensitive" as const } },
+            {
+              mShortDescription: {
+                contains: searchTerm,
+                mode: "insensitive" as const,
+              },
+            },
           ],
         },
         orderBy:
@@ -162,7 +167,12 @@ export default defineEventHandler(async (h3) => {
           ...baseFilter,
           OR: [
             { mName: { contains: searchTerm, mode: "insensitive" as const } },
-            { mShortDescription: { contains: searchTerm, mode: "insensitive" as const } },
+            {
+              mShortDescription: {
+                contains: searchTerm,
+                mode: "insensitive" as const,
+              },
+            },
           ],
         },
       }),

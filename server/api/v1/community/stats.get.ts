@@ -28,7 +28,8 @@ export default defineEventHandler(async (h3) => {
   const playtimeRecords = await prisma.playtime.findMany({
     select: { seconds: true },
   });
-  const totalPlaytimeHours = playtimeRecords.reduce((sum, p) => sum + p.seconds, 0) / 3600;
+  const totalPlaytimeHours =
+    playtimeRecords.reduce((sum, p) => sum + p.seconds, 0) / 3600;
 
   return {
     totalGames,
