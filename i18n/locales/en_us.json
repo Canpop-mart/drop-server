@@ -160,6 +160,21 @@
     "srComma": ", {0}"
   },
   "community": {
+    "title": "Community",
+    "recentActivity": "Recent Activity",
+    "topPlayers": "Top Players",
+    "stats": {
+      "games": "Games",
+      "players": "Players",
+      "totalPlaytime": "Total Playtime",
+      "pendingRequests": "Pending Requests",
+      "hoursSuffix": "h"
+    },
+    "leaderboard": {
+      "hoursPlayed": "{hours}h played",
+      "achievements": "{count} achievements",
+      "games": "{count} games"
+    },
     "activity": {
       "played": "played",
       "unlocked": "unlocked",

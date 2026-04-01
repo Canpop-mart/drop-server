@@ -59,6 +59,7 @@ withDefaults(
     subtitle: undefined,
     icon: undefined,
     viewAllHref: undefined,
+    emptyText: undefined,
     skeletonCount: 6,
   },
 );

@@ -12,7 +12,7 @@
   </div>
 </template>
 <script setup lang="ts">
-const props = defineProps<{
+defineProps<{
   achievement: { id: string; title: string; description: string; iconUrl: string; iconLockedUrl: string };
   unlockedAt?: Date | string | null;
 }>();

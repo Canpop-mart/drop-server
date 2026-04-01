@@ -164,7 +164,7 @@ const trendingLoading = ref(true);
 const trendingGames = ref<StoreGame[]>([]);
 $fetch("/api/v1/store/trending", { query: { take: 10, days: 7 } })
   .then((data) => {
-    trendingGames.value = data.results as StoreGame[];
+    trendingGames.value = data.results as unknown as StoreGame[];
   })
   .catch(() => {})
   .finally(() => {
@@ -176,7 +176,7 @@ const popularLoading = ref(true);
 const popularGames = ref<StoreGame[]>([]);
 $fetch("/api/v1/store/popular", { query: { take: 10 } })
   .then((data) => {
-    popularGames.value = data.results as StoreGame[];
+    popularGames.value = data.results as unknown as StoreGame[];
   })
   .catch(() => {})
   .finally(() => {
@@ -189,7 +189,7 @@ const recommendedGames = ref<StoreGame[]>([]);
 if (user.value) {
   $fetch("/api/v1/store/recommended", { query: { take: 10 } })
     .then((data) => {
-      recommendedGames.value = data.results as StoreGame[];
+      recommendedGames.value = data.results as unknown as StoreGame[];
     })
     .catch(() => {})
     .finally(() => {
@@ -204,7 +204,7 @@ const recentlyAddedLoading = ref(true);
 const recentlyAdded = ref<StoreGame[]>([]);
 $fetch("/api/v1/store", { query: { take: 10, sort: "recent", order: "desc" } })
   .then((data) => {
-    recentlyAdded.value = data.results as StoreGame[];
+    recentlyAdded.value = data.results as unknown as StoreGame[];
   })
   .catch(() => {})
   .finally(() => {

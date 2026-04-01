@@ -5,13 +5,13 @@
     <div class="flex-1 min-w-0">
       <NuxtLink :to="`/user/${user?.id}`" class="font-medium text-zinc-100 hover:text-blue-400 truncate block">{{ user?.displayName || user?.username || 'Unknown' }}</NuxtLink>
       <div class="flex gap-4 text-xs text-zinc-500 mt-1">
-        <span>{{ playtimeHours }}h played</span>
-        <span>{{ achievements }} achievements</span>
-        <span>{{ gamesOwned }} games</span>
+        <span>{{ $t('community.leaderboard.hoursPlayed', { hours: playtimeHours }) }}</span>
+        <span>{{ $t('community.leaderboard.achievements', { count: achievements }) }}</span>
+        <span>{{ $t('community.leaderboard.games', { count: gamesOwned }) }}</span>
       </div>
     </div>
     <div class="text-right shrink-0">
-      <span class="text-lg font-bold text-blue-400">{{ playtimeHours }}h</span>
+      <span class="text-lg font-bold text-blue-400">{{ playtimeHours }}{{ $t('community.stats.hoursSuffix') }}</span>
     </div>
   </div>
 </template>
