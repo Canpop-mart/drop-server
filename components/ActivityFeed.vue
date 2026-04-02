@@ -56,11 +56,24 @@
         </p>
       </div>
       <!-- Icon on right -->
-      <img
-        v-if="item.type === 'achievement' && item.data?.achievement?.iconUrl"
-        :src="item.data.achievement.iconUrl"
-        class="size-8 rounded shrink-0"
-      />
+      <template v-if="item.type === 'achievement'">
+        <img
+          v-if="
+            item.data?.achievement?.iconUrl &&
+            item.data.achievement.iconUrl.trim() !== '' &&
+            !achIconErrors[combineKey(item)]
+          "
+          :src="item.data.achievement.iconUrl"
+          class="size-8 rounded shrink-0"
+          @error="achIconErrors[combineKey(item)] = true"
+        />
+        <div
+          v-else
+          class="size-8 rounded shrink-0 bg-zinc-700/50 flex items-center justify-center"
+        >
+          <TrophyIcon class="size-4 text-zinc-500" />
+        </div>
+      </template>
       <img
         v-else-if="item.game?.mIconObjectId"
         :src="useObject(item.game.mIconObjectId)"
@@ -90,7 +103,11 @@
 
 <script setup lang="ts">
 import { CheckIcon } from "@heroicons/vue/24/outline";
+import { TrophyIcon } from "@heroicons/vue/24/solid";
 import { useObject } from "~/composables/objects";
+
+// Achievement icon error tracking
+const achIconErrors = reactive<Record<string, boolean>>({});
 
 interface ActivityItem {
   type: string;

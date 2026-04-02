@@ -154,15 +154,29 @@
         </div>
       </div>
       <div>
-        <h2 class="text-lg font-bold font-display text-zinc-100 mb-3">
-          {{ $t("user.stats.recentAchievements") }}
-        </h2>
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-bold font-display text-zinc-100">
+            {{ $t("user.stats.recentAchievements") }}
+          </h2>
+          <select
+            v-if="achievementGames.length > 1"
+            v-model="selectedAchGameId"
+            class="text-xs bg-zinc-800 border-zinc-700 text-zinc-300 rounded-md px-2 py-1 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">
+              {{ $t("account.achievements.allGames") }}
+            </option>
+            <option v-for="g in achievementGames" :key="g.id" :value="g.id">
+              {{ g.mName }}
+            </option>
+          </select>
+        </div>
         <div v-if="activityLoading" class="text-zinc-500">
           {{ $t("common.srLoading") }}
         </div>
         <div v-else>
           <div
-            v-for="a in activity?.achievements?.slice(0, 5)"
+            v-for="a in filteredAchievements"
             :key="a.id"
             class="flex items-center gap-3 p-3 bg-zinc-800/30 rounded mb-2"
           >
@@ -241,6 +255,29 @@ const achievementIcon = (a: { achievement?: { iconUrl?: string } }) => {
   const url = a.achievement?.iconUrl;
   return url && url.trim() !== "" ? url : undefined;
 };
+
+// Game filter for achievements section
+const selectedAchGameId = ref("");
+const achievementGames = computed(() => {
+  const seen = new Map<string, { id: string; mName: string }>();
+  for (const a of (activity as any)?.achievements ?? []) {
+    if (a.game && !seen.has(a.game.id)) {
+      seen.set(a.game.id, { id: a.game.id, mName: a.game.mName });
+    }
+  }
+  return [...seen.values()].sort((x, y) => x.mName.localeCompare(y.mName));
+});
+const filteredAchievements = computed(() => {
+  const all = ((activity as any)?.achievements ?? []) as {
+    id: string;
+    achievement?: { title?: string; iconUrl?: string };
+    game?: { id: string; mName: string };
+  }[];
+  const filtered = selectedAchGameId.value
+    ? all.filter((a) => a.game?.id === selectedAchGameId.value)
+    : all;
+  return filtered.slice(0, 10);
+});
 
 loading.value = false;
 const current = useUser();

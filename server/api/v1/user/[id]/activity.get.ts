@@ -23,11 +23,11 @@ export default defineEventHandler(async (h3) => {
     take: 20,
   });
 
-  // Recent achievements
+  // Recent achievements (higher limit so profile page can filter by game)
   const achievements = await prisma.userAchievement.findMany({
     where: { userId },
     orderBy: { unlockedAt: "desc" },
-    take: 10,
+    take: 50,
   });
 
   // Fetch game info for sessions

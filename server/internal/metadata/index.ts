@@ -276,6 +276,9 @@ export class MetadataHandler {
             mBannerObjectId: metadata.bannerId,
             mCoverObjectId: metadata.coverId,
             mImageLibraryObjectIds: metadata.images,
+            // Auto-populate carousel from library images (skip cover at index 0,
+            // use artworks and screenshots — up to 10 images)
+            mImageCarouselObjectIds: metadata.images.slice(1, 11),
 
             publishers: {
               connect: metadata.publishers,

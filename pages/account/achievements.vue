@@ -79,9 +79,17 @@
         class="flex items-center gap-3 p-3 rounded-lg bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors"
       >
         <img
-          :src="item.achievement?.iconUrl || '/favicon.ico'"
+          v-if="achievementIcon(item) && !achievementIconErrors[item.id]"
+          :src="achievementIcon(item)"
           class="size-10 rounded shrink-0"
+          @error="achievementIconErrors[item.id] = true"
         />
+        <div
+          v-else
+          class="size-10 rounded shrink-0 bg-zinc-700/50 flex items-center justify-center"
+        >
+          <TrophyIcon class="size-5 text-zinc-500" />
+        </div>
         <div class="flex-1 min-w-0">
           <p class="text-sm font-medium text-zinc-100 truncate">
             {{ item.achievement?.title }}
@@ -115,8 +123,15 @@
 </template>
 
 <script setup lang="ts">
-import { TrophyIcon } from "@heroicons/vue/24/outline";
+import { TrophyIcon } from "@heroicons/vue/24/solid";
 import { useObject } from "~/composables/objects";
+
+// Achievement icon error tracking — show trophy fallback when URL fails or is empty
+const achievementIconErrors = reactive<Record<string, boolean>>({});
+const achievementIcon = (item: AchievementItem) => {
+  const url = item.achievement?.iconUrl;
+  return url && url.trim() !== "" ? url : undefined;
+};
 
 const { t } = useI18n();
 useHead({ title: t("account.achievements.title") });

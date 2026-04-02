@@ -186,9 +186,13 @@
                                 class="inline-flex items-center gap-x-1"
                               >
                                 <ServerIcon class="size-4" />
-                                {{ formatBytes(version.installSize) }}
+                                {{
+                                  formatBytes(version.installSize)
+                                }}
                                 <CloudIcon class="size-4 ml-2" />
-                                {{ formatBytes(version.downloadSize) }}
+                                {{
+                                  formatBytes(version.downloadSize)
+                                }}
                               </ol>
                             </ul>
                           </td>
@@ -248,9 +252,7 @@
                           <td
                             class="whitespace-nowrap align-top py-2 pr-3 text-sm font-medium text-zinc-100"
                           >
-                            {{
-                              $t("store.developers", game.developers.length)
-                            }}
+                            {{ $t("store.developers", game.developers.length) }}
                           </td>
                           <td
                             class="flex flex-col px-3 py-2 text-sm text-zinc-400"
@@ -269,9 +271,7 @@
                           <td
                             class="whitespace-nowrap align-top py-2 pr-3 text-sm font-medium text-zinc-100"
                           >
-                            {{
-                              $t("store.publishers", game.publishers.length)
-                            }}
+                            {{ $t("store.publishers", game.publishers.length) }}
                           </td>
                           <td
                             class="flex flex-col px-3 py-2 text-sm text-zinc-400"
@@ -325,9 +325,7 @@
               v-if="similarGames.length > 0"
               class="bg-zinc-800/50 rounded-xl p-6 backdrop-blur-sm"
             >
-              <h2
-                class="text-xl font-display font-semibold text-zinc-100 mb-4"
-              >
+              <h2 class="text-xl font-display font-semibold text-zinc-100 mb-4">
                 {{ $t("store.tabs.similar") }}
               </h2>
               <GameCarousel :items="similarGames" />
@@ -338,9 +336,7 @@
           <div class="space-y-6">
             <!-- Game Images carousel -->
             <div class="bg-zinc-800/50 rounded-xl p-6 backdrop-blur-sm">
-              <h2
-                class="text-xl font-display font-semibold text-zinc-100 mb-4"
-              >
+              <h2 class="text-xl font-display font-semibold text-zinc-100 mb-4">
                 {{ $t("store.images") }}
               </h2>
               <div class="relative">
@@ -404,9 +400,7 @@
                   </div>
 
                   <!-- Dot navigation -->
-                  <div
-                    class="mt-4 flex justify-center gap-x-2"
-                  >
+                  <div class="mt-4 flex justify-center gap-x-2">
                     <button
                       v-for="(_, index) in game.mImageCarouselObjectIds"
                       :key="index"
@@ -435,9 +429,7 @@
 
             <!-- Achievements -->
             <div class="bg-zinc-800/50 rounded-xl p-6 backdrop-blur-sm">
-              <h2
-                class="text-xl font-display font-semibold text-zinc-100 mb-4"
-              >
+              <h2 class="text-xl font-display font-semibold text-zinc-100 mb-4">
                 {{ $t("store.tabs.achievements") }}
               </h2>
               <div v-if="achievementsLoading" class="flex justify-center py-4">
@@ -454,16 +446,28 @@
                   {{ $t("store.review.noAchievements") }}
                 </p>
               </div>
-              <div v-else class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-1">
+              <div
+                v-else
+                class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-1"
+              >
                 <!-- Progress bar -->
                 <div class="flex items-center justify-between mb-2">
                   <span class="text-xs text-zinc-400">
-                    {{ $t("store.review.unlockCount", { unlocked: achievementsUnlocked, total: achievements.length }) }}
+                    {{
+                      $t("store.review.unlockCount", {
+                        unlocked: achievementsUnlocked,
+                        total: achievements.length,
+                      })
+                    }}
                   </span>
-                  <div class="flex-1 ml-3 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+                  <div
+                    class="flex-1 ml-3 h-1.5 bg-zinc-700 rounded-full overflow-hidden"
+                  >
                     <div
                       class="h-full bg-yellow-500 rounded-full transition-all"
-                      :style="{ width: `${achievements.length > 0 ? (achievementsUnlocked / achievements.length) * 100 : 0}%` }"
+                      :style="{
+                        width: `${achievements.length > 0 ? (achievementsUnlocked / achievements.length) * 100 : 0}%`,
+                      }"
                     />
                   </div>
                 </div>

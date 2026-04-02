@@ -142,8 +142,22 @@
             :key="ach.id"
             class="flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-900/50 transition-colors"
           >
-            <img v-if="ach.iconUrl" :src="ach.iconUrl" class="size-8 rounded" />
-            <div v-else class="size-8 rounded bg-zinc-700" />
+            <img
+              v-if="
+                ach.iconUrl &&
+                ach.iconUrl.trim() !== '' &&
+                !achIconErrors[ach.id]
+              "
+              :src="ach.iconUrl"
+              class="size-8 rounded"
+              @error="achIconErrors[ach.id] = true"
+            />
+            <div
+              v-else
+              class="size-8 rounded bg-zinc-700/50 flex items-center justify-center"
+            >
+              <TrophyIcon class="size-4 text-zinc-500" />
+            </div>
             <div class="flex-1 min-w-0">
               <p class="text-sm text-zinc-100 truncate">{{ ach.title }}</p>
               <p class="text-xs text-zinc-500 truncate">
@@ -162,7 +176,11 @@
 </template>
 
 <script setup lang="ts">
+import { TrophyIcon } from "@heroicons/vue/24/solid";
+
 definePageMeta({ layout: "admin" });
+
+const achIconErrors = reactive<Record<string, boolean>>({});
 
 const { t } = useI18n();
 useHead({ title: t("admin.achievements.title") });
