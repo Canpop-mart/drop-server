@@ -248,12 +248,12 @@ async function scanProvider(provider: string) {
   if (!selectedGameId.value) return;
   scanning.value = true;
   try {
-    const result = (await $dropFetch("/api/v1/admin/achievements/scan", {
+    await $dropFetch("/api/v1/admin/achievements/scan", {
       method: "POST",
       body: { gameId: selectedGameId.value, provider },
-    })) as { scanned: number };
+    });
     await refreshData(selectedGameId.value);
-    alert(t("admin.achievements.scanComplete", { count: result.scanned }));
+    alert(t("admin.achievements.scanComplete"));
   } catch {
     alert(t("admin.achievements.scanFailed"));
   } finally {

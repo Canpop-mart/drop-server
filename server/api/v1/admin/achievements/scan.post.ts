@@ -1,11 +1,9 @@
 import { type } from "arktype";
 import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
 import aclManager from "~/server/internal/acls";
-import prisma from "~/server/internal/db/database";
-import { ExternalAccountProvider } from "~/prisma/client/enums";
 import {
   resolveGameVersionDir,
-  readGoldbergDefinitions,
+  setupAchievementsForGame,
 } from "~/server/internal/goldberg";
 
 const ScanRequest = type({
@@ -19,40 +17,11 @@ export default defineEventHandler(async (h3) => {
 
   const body = await readDropValidatedBody(h3, ScanRequest);
 
-  // Find the external link for this game + provider
-  const link = await prisma.gameExternalLink.findUnique({
-    where: {
-      gameId_provider: {
-        gameId: body.gameId,
-        provider: body.provider as ExternalAccountProvider,
-      },
-    },
-  });
-
-  if (!link) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: "No external link found for this game and provider.",
-    });
-  }
-
   console.log(
     `[ACH-SCAN] Scan requested for game=${body.gameId} provider=${body.provider}`,
   );
-  const scanned = await scanGoldbergAchievements(body.gameId);
-  return { scanned };
-});
 
-/**
- * Scan Goldberg achievement definitions from the game's steam_settings
- * directory on the NAS. This reads the static definition file — unlock
- * state is handled separately by the client.
- */
-async function scanGoldbergAchievements(gameId: string): Promise<number> {
-  const versionDir = await resolveGameVersionDir(gameId);
-  console.log(
-    `[ACH-SCAN] resolveGameVersionDir => ${versionDir ?? "undefined"}`,
-  );
+  const versionDir = await resolveGameVersionDir(body.gameId);
   if (!versionDir) {
     throw createError({
       statusCode: 400,
@@ -61,56 +30,9 @@ async function scanGoldbergAchievements(gameId: string): Promise<number> {
     });
   }
 
-  const definitions = readGoldbergDefinitions(versionDir);
-  console.log(
-    `[ACH-SCAN] readGoldbergDefinitions => ${definitions.length} definitions from ${versionDir}`,
-  );
-  if (definitions.length === 0) {
-    throw createError({
-      statusCode: 404,
-      statusMessage:
-        "No steam_settings/achievements.json found in game directory.",
-    });
-  }
+  // setupAchievementsForGame handles the full pipeline:
+  // local file → Steam API fallback → write to disk → DB records
+  await setupAchievementsForGame(body.gameId, versionDir);
 
-  let count = 0;
-  for (const def of definitions) {
-    const apiName = def.name ?? "";
-    if (!apiName) continue;
-
-    const title = def.displayName ?? apiName;
-    const description = def.description ?? "";
-    const iconUrl = def.icon ?? "";
-    const iconLockedUrl = def.icon_gray ?? "";
-
-    await prisma.achievement.upsert({
-      where: {
-        gameId_provider_externalId: {
-          gameId,
-          provider: ExternalAccountProvider.Goldberg,
-          externalId: apiName,
-        },
-      },
-      create: {
-        gameId,
-        provider: ExternalAccountProvider.Goldberg,
-        externalId: apiName,
-        title,
-        description,
-        iconUrl,
-        iconLockedUrl,
-        displayOrder: count,
-      },
-      update: {
-        title,
-        description,
-        iconUrl,
-        iconLockedUrl,
-        displayOrder: count,
-      },
-    });
-    count++;
-  }
-
-  return count;
-}
+  return { scanned: true };
+});

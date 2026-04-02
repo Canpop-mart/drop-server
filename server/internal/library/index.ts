@@ -17,6 +17,10 @@ import type { GameModel } from "~/prisma/client/models";
 import { createHash } from "node:crypto";
 import type { WorkingLibrarySource } from "~/server/api/v1/admin/library/sources/index.get";
 import gameSizeManager from "~/server/internal/gamesize";
+import {
+  resolveGameVersionDir,
+  setupAchievementsForGame,
+} from "~/server/internal/goldberg";
 import type { ImportVersion } from "~/server/api/v1/admin/import/version/index.post";
 import { GameType, type Platform } from "~/prisma/client/enums";
 import { castManifest } from "./manifest/utils";
@@ -578,6 +582,18 @@ class LibraryManager {
             where: { id: gameId },
             data: { updateAvailable: false },
           });
+
+          // Auto-setup achievements (reads steam_appid.txt, fetches from
+          // Steam API if no local achievements.json, writes to disk, creates
+          // DB records). Never blocks or throws.
+          try {
+            const achievementDir = await resolveGameVersionDir(gameId);
+            if (achievementDir) {
+              await setupAchievementsForGame(gameId, achievementDir);
+            }
+          } catch (e) {
+            logger.warn(`Achievement auto-setup failed for ${gameId}: ${e}`);
+          }
 
           notificationSystem.systemPush({
             nonce: `version-create-${gameId}-${version}`,
