@@ -86,8 +86,6 @@
               v-model="newLinkProvider"
               class="w-full rounded-md bg-zinc-900 border-zinc-700 text-zinc-100 text-sm px-3 py-2"
             >
-              <option value="Steam">Steam</option>
-              <option value="RetroAchievements">RetroAchievements</option>
               <option value="Goldberg">Goldberg</option>
             </select>
           </div>
@@ -98,9 +96,7 @@
             <input
               v-model="newLinkExternalId"
               type="text"
-              :placeholder="
-                newLinkProvider === 'Steam' ? 'App ID (e.g. 730)' : 'Game ID'
-              "
+              :placeholder="'Game ID'"
               class="w-full rounded-md bg-zinc-900 border-zinc-700 text-zinc-100 text-sm px-3 py-2 placeholder-zinc-600"
             />
           </div>
@@ -213,7 +209,7 @@ const selectedGameId = ref("");
 const links = ref<GameExternalLinkData[]>([]);
 const achievements = ref<AchievementData[]>([]);
 const scanning = ref(false);
-const newLinkProvider = ref("Steam");
+const newLinkProvider = ref("Goldberg");
 const newLinkExternalId = ref("");
 
 // Watch game selection

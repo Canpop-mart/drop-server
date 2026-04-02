@@ -32,7 +32,6 @@ model User {
     gameRequests         GameRequest[] @relation(name: "requestsCreated")
     reviewedGameRequests GameRequest[] @relation(name: "requestsReviewed")
 
-    externalAccounts UserExternalAccount[]
     achievements     UserAchievement[]
     showcases        ProfileShowcase[]
     leaderboardEntries LeaderboardEntry[]

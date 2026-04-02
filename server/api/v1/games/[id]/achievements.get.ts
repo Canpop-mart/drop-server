@@ -3,9 +3,7 @@ import prisma from "~/server/internal/db/database";
 
 // Lower number = higher priority when deduplicating cross-provider achievements
 const PROVIDER_PRIORITY: Record<string, number> = {
-  Steam: 0,
-  RetroAchievements: 1,
-  Goldberg: 2,
+  Goldberg: 0,
 };
 
 export default defineEventHandler(async (h3) => {
@@ -22,7 +20,7 @@ export default defineEventHandler(async (h3) => {
   });
 
   // Deduplicate by externalId — a game can have the same achievement stored
-  // from multiple providers (Steam + Goldberg, etc.). Keep the highest-priority
+  // from multiple providers. Keep the highest-priority
   // provider's metadata for display, but track all IDs so we can merge unlock data.
   const dedupedMap = new Map<
     string,

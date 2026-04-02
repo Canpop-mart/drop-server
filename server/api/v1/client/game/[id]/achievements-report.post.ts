@@ -7,7 +7,7 @@ import notificationSystem from "~/server/internal/notifications";
 const AchievementReport = type({
   achievements: type({
     externalId: "string",
-    provider: "'Steam' | 'RetroAchievements' | 'Goldberg'",
+    provider: "'Goldberg'",
     unlockedAt: "string",
   }).array(),
 });
@@ -59,7 +59,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     });
 
     // Check if ANY provider variant of this externalId is already unlocked
-    // (prevents duplicate notifications when Steam + Goldberg both report the same achievement)
+    // (prevents duplicate notifications when multiple providers report the same achievement)
     const anyProviderUnlocked = existing
       ? true
       : await prisma.userAchievement

@@ -160,94 +160,6 @@
       </div>
     </section>
 
-    <!-- Favorite Games section -->
-    <section>
-      <h2 class="text-xl font-bold font-display text-zinc-100 mb-1">
-        {{ $t("account.favorites.title") }}
-      </h2>
-      <p class="text-sm text-zinc-400 mb-6">
-        {{ $t("account.favorites.description") }}
-      </p>
-
-      <div class="flex gap-3 flex-wrap mb-4">
-        <div
-          v-for="(fav, idx) in favoriteGames"
-          :key="fav.id"
-          class="relative group"
-        >
-          <div class="w-20 rounded-lg overflow-hidden ring-1 ring-white/5">
-            <div class="aspect-[2/3]">
-              <img
-                v-if="fav.mCoverObjectId"
-                :src="useObject(fav.mCoverObjectId)"
-                :alt="fav.mName"
-                class="size-full object-cover"
-              />
-              <div
-                v-else
-                class="size-full bg-zinc-800 flex items-center justify-center text-zinc-600"
-              >
-                <SparklesIcon class="size-5" />
-              </div>
-            </div>
-          </div>
-          <p class="text-xs text-zinc-400 text-center mt-1 truncate w-20">
-            {{ fav.mName }}
-          </p>
-          <button
-            class="absolute -top-1 -right-1 p-0.5 rounded-full bg-zinc-900/80 text-zinc-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-            @click="removeFavorite(idx)"
-          >
-            <XMarkIcon class="size-4" />
-          </button>
-        </div>
-      </div>
-
-      <!-- Add favorite game picker -->
-      <div class="flex gap-2 items-start mb-4">
-        <div class="flex-1">
-          <input
-            v-model="favSearch"
-            type="text"
-            :placeholder="$t('account.favorites.searchPlaceholder')"
-            class="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
-            @focus="favDropdownOpen = true"
-          />
-          <div
-            v-if="favDropdownOpen && favFilteredGames.length > 0"
-            class="mt-1 max-h-40 overflow-y-auto rounded-md border border-zinc-700 bg-zinc-800"
-          >
-            <button
-              v-for="game in favFilteredGames"
-              :key="game.id"
-              class="flex items-center gap-2 w-full p-2 text-left text-sm hover:bg-zinc-700 transition-colors"
-              @click="addFavorite(game)"
-            >
-              <img
-                v-if="game.mIconObjectId"
-                :src="useObject(game.mIconObjectId)"
-                class="size-5 rounded"
-              />
-              <span class="text-zinc-200 truncate">{{ game.mName }}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="flex items-center gap-3">
-        <LoadingButton
-          :loading="favSaving"
-          class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-sm font-medium transition-colors"
-          @click="saveFavorites"
-        >
-          {{ $t("account.favorites.save") }}
-        </LoadingButton>
-        <span v-if="favSaveMessage" class="text-sm text-green-400">
-          {{ favSaveMessage }}
-        </span>
-      </div>
-    </section>
-
     <!-- Showcase section (moved from separate page) -->
     <section>
       <h2 class="text-xl font-bold font-display text-zinc-100 mb-1">
@@ -387,11 +299,7 @@
 
                 <!-- Game picker -->
                 <div
-                  v-if="
-                    addType === 'FavoriteGame' ||
-                    addType === 'GameStats' ||
-                    addType === 'Achievement'
-                  "
+                  v-if="addType === 'FavoriteGame' || addType === 'Achievement'"
                   class="mb-4"
                 >
                   <label class="block text-sm font-medium text-zinc-300 mb-2">
@@ -625,68 +533,6 @@ const allGames = await $dropFetch<{
   query: { sort: "name", order: "asc", limit: "200" },
 }).catch(() => ({ results: [] }));
 
-// ── Favorites ──────────────────────────────────────────────────────────────
-
-type FavGame = {
-  id: string;
-  mName: string;
-  mCoverObjectId?: string;
-  mIconObjectId?: string;
-};
-
-const currentFavorites = currentUser.value?.id
-  ? await $dropFetch<Array<{ gameId: string; game: FavGame | null }>>(
-      `/api/v1/user/${currentUser.value.id}/favorites`,
-    ).catch(() => [])
-  : [];
-
-const favoriteGames = ref<FavGame[]>(
-  (currentFavorites ?? []).filter((f) => f.game).map((f) => f.game as FavGame),
-);
-
-const favSearch = ref("");
-const favDropdownOpen = ref(false);
-const favSaving = ref(false);
-const favSaveMessage = ref("");
-
-const favFilteredGames = computed(() => {
-  const q = favSearch.value.toLowerCase();
-  if (!q) return [];
-  const currentIds = new Set(favoriteGames.value.map((g) => g.id));
-  return (allGames?.results ?? [])
-    .filter((g) => g.mName.toLowerCase().includes(q) && !currentIds.has(g.id))
-    .slice(0, 10);
-});
-
-function addFavorite(game: FavGame) {
-  if (favoriteGames.value.length >= 10) return;
-  if (favoriteGames.value.some((g) => g.id === game.id)) return;
-  favoriteGames.value.push(game);
-  favSearch.value = "";
-  favDropdownOpen.value = false;
-}
-
-function removeFavorite(idx: number) {
-  favoriteGames.value.splice(idx, 1);
-}
-
-async function saveFavorites() {
-  favSaving.value = true;
-  favSaveMessage.value = "";
-  try {
-    await $dropFetch("/api/v1/user/favorites", {
-      method: "PUT",
-      body: { gameIds: favoriteGames.value.map((g) => g.id) },
-    });
-    favSaveMessage.value = t("account.favorites.saved");
-    setTimeout(() => {
-      favSaveMessage.value = "";
-    }, 3000);
-  } finally {
-    favSaving.value = false;
-  }
-}
-
 // ── Showcase ────────────────────────────────────────────────────────────────
 
 const MAX_SLOTS = 6;
@@ -695,14 +541,8 @@ const showcaseTypeLabels = computed<Record<string, string>>(() => ({
   Achievement: t("user.showcase.types.Achievement"),
   Custom: t("user.showcase.types.Custom"),
   FavoriteGame: t("user.showcase.types.FavoriteGame"),
-  GameStats: t("user.showcase.types.GameStats"),
 }));
-const showcaseTypes: ShowcaseType[] = [
-  "FavoriteGame",
-  "Achievement",
-  "GameStats",
-  "Custom",
-];
+const showcaseTypes: ShowcaseType[] = ["FavoriteGame", "Achievement", "Custom"];
 
 // Fetch current showcase
 const currentShowcase = currentUser.value?.id
@@ -792,7 +632,7 @@ const canAdd = computed(() => {
   if (addType.value === "Achievement") {
     return !!addGameId.value && !!addItemId.value;
   }
-  if (addType.value === "FavoriteGame" || addType.value === "GameStats") {
+  if (addType.value === "FavoriteGame") {
     return !!addGameId.value;
   }
   if (addType.value === "Custom") {

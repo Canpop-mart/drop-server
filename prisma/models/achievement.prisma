@@ -1,18 +1,5 @@
 enum ExternalAccountProvider {
-    Steam
-    RetroAchievements
     Goldberg
-}
-
-model UserExternalAccount {
-    id         String                  @id @default(uuid())
-    userId     String
-    user       User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-    provider   ExternalAccountProvider
-    externalId String
-
-    @@unique([userId, provider])
-    @@index([provider, externalId])
 }
 
 model GameExternalLink {

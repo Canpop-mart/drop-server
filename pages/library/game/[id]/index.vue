@@ -478,11 +478,20 @@
                   class="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-zinc-700/30 transition-colors"
                 >
                   <img
-                    v-if="ach.iconUrl && !achIconErrors[ach.id]"
-                    :src="ach.iconUrl"
+                    v-if="
+                      (ach.unlocked
+                        ? ach.iconUrl
+                        : ach.iconLockedUrl || ach.iconUrl) &&
+                      !achIconErrors[ach.id]
+                    "
+                    :src="
+                      ach.unlocked
+                        ? ach.iconUrl || ach.iconLockedUrl
+                        : ach.iconLockedUrl || ach.iconUrl
+                    "
                     :class="[
                       'size-9 rounded shrink-0',
-                      ach.unlocked ? '' : 'grayscale opacity-50',
+                      ach.unlocked ? '' : 'opacity-50',
                     ]"
                     @error="achIconErrors[ach.id] = true"
                   />
@@ -618,6 +627,7 @@ const achievements = (await $dropFetch(
   title: string;
   description: string;
   iconUrl: string;
+  iconLockedUrl?: string;
   unlocked: boolean;
   unlockedAt?: string | null;
   rarity?: number | null;
