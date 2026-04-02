@@ -28,6 +28,7 @@ import { XMarkIcon } from "@heroicons/vue/24/outline";
 await updateUser();
 
 const user = useUser();
+// @ts-expect-error — Nuxt route-type union depth exceeds TS limit (TS2589)
 const apiDetails = await $dropFetch("/api/v1");
 const clientMode = isClientRequest();
 
