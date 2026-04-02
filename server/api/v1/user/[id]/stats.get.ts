@@ -64,14 +64,29 @@ export default defineEventHandler(async (h3) => {
   });
   const gameMap = Object.fromEntries(games.map((g) => [g.id, g]));
 
+  // Auto-close orphaned sessions (started more than 24h ago with no endedAt)
+  const orphanedIds = recentSessions
+    .filter(
+      (s) =>
+        !s.endedAt &&
+        Date.now() - new Date(s.startedAt).getTime() > 24 * 60 * 60 * 1000,
+    )
+    .map((s) => s.id);
+
+  if (orphanedIds.length > 0) {
+    await prisma.playSession.updateMany({
+      where: { id: { in: orphanedIds } },
+      data: { endedAt: new Date() },
+    });
+  }
+
   return {
     totalPlaytimeSeconds,
     gamesPlayed,
     achievementsUnlocked,
-    recentSessions: recentSessions.map((s) => ({
-      ...s,
-      // Compute duration from timestamps if durationSeconds is missing
-      durationSeconds:
+    recentSessions: recentSessions.map((s) => {
+      // Compute duration: stored > from timestamps > from startedAt to now
+      const duration =
         s.durationSeconds ??
         (s.endedAt
           ? Math.floor(
@@ -79,8 +94,13 @@ export default defineEventHandler(async (h3) => {
                 new Date(s.startedAt).getTime()) /
                 1000,
             )
-          : null),
-      game: gameMap[s.gameId] ?? null,
-    })),
+          : Math.floor((Date.now() - new Date(s.startedAt).getTime()) / 1000));
+
+      return {
+        ...s,
+        durationSeconds: duration > 0 ? duration : null,
+        game: gameMap[s.gameId] ?? null,
+      };
+    }),
   };
 });

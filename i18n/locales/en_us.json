@@ -981,6 +981,7 @@
     "stats": {
       "achievements": "Achievements",
       "gamesPlayed": "Games Played",
+      "lessThanMinute": "< 1 min",
       "minutesSuffix": "min",
       "noAchievements": "No achievements yet",
       "noPlaytime": "No playtime",

@@ -196,10 +196,12 @@
               <p class="text-sm text-zinc-100 truncate">{{ s.game?.mName }}</p>
               <p class="text-xs text-zinc-500">
                 {{
-                  s.durationSeconds
+                  s.durationSeconds && s.durationSeconds >= 60
                     ? Math.round(s.durationSeconds / 60) +
                       $t("user.stats.minutesSuffix")
-                    : $t("user.stats.unknownDuration")
+                    : s.durationSeconds && s.durationSeconds > 0
+                      ? $t("user.stats.lessThanMinute")
+                      : $t("user.stats.unknownDuration")
                 }}
               </p>
             </div>
