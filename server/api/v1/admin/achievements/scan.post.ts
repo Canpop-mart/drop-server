@@ -3,7 +3,7 @@ import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
 import aclManager from "~/server/internal/acls";
 import {
   resolveGameVersionDir,
-  setupAchievementsForGame,
+  setupGoldberg,
 } from "~/server/internal/goldberg";
 
 const ScanRequest = type({
@@ -30,9 +30,9 @@ export default defineEventHandler(async (h3) => {
     });
   }
 
-  // setupAchievementsForGame handles the full pipeline:
+  // setupGoldberg handles the full pipeline:
   // local file → Steam API fallback → write to disk → DB records
-  await setupAchievementsForGame(body.gameId, versionDir);
+  await setupGoldberg(body.gameId, versionDir);
 
   return { scanned: true };
 });

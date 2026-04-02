@@ -155,14 +155,14 @@ export async function fetchSteamAchievements(
 ): Promise<GoldbergAchievementDef[]> {
   const url = `https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?appid=${appId}`;
   console.log(
-    `[ACH-SETUP] Fetching achievements from Steam API for AppID ${appId}`,
+    `[GOLDBERG] Fetching achievements from Steam API for AppID ${appId}`,
   );
 
   try {
     const res = await fetch(url);
     if (!res.ok) {
       console.log(
-        `[ACH-SETUP] Steam API returned ${res.status} for AppID ${appId}`,
+        `[GOLDBERG] Steam API returned ${res.status} for AppID ${appId}`,
       );
       return [];
     }
@@ -185,13 +185,13 @@ export async function fetchSteamAchievements(
     const achievements = json.game?.availableGameStats?.achievements;
     if (!achievements || achievements.length === 0) {
       console.log(
-        `[ACH-SETUP] No achievements in Steam API response for AppID ${appId}`,
+        `[GOLDBERG] No achievements in Steam API response for AppID ${appId}`,
       );
       return [];
     }
 
     console.log(
-      `[ACH-SETUP] Got ${achievements.length} achievements from Steam API for AppID ${appId}`,
+      `[GOLDBERG] Got ${achievements.length} achievements from Steam API for AppID ${appId}`,
     );
 
     return achievements.map((a) => ({
@@ -203,7 +203,7 @@ export async function fetchSteamAchievements(
       hidden: a.hidden,
     }));
   } catch (e) {
-    console.log(`[ACH-SETUP] Steam API fetch failed for AppID ${appId}: ${e}`);
+    console.log(`[GOLDBERG] Steam API fetch failed for AppID ${appId}: ${e}`);
     return [];
   }
 }
@@ -211,49 +211,78 @@ export async function fetchSteamAchievements(
 // ── Post-import achievement setup ──────────────────────────────────────────
 
 /**
- * Called after a game version is imported. Handles the full achievement
- * pipeline:
+ * Called after a game version is imported. Sets up everything Goldberg
+ * needs to function:
  *
  * 1. Reads `steam_appid.txt` to get the AppID
- * 2. Reads local `achievements.json` — if missing, fetches from Steam API
- *    and writes it to disk so the Goldberg emulator can use it
- * 3. Creates/updates the `GameExternalLink` for Goldberg
- * 4. Upserts all `Achievement` records in the DB
+ * 2. Reads local `achievements.json` — if missing, fetches from Steam's
+ *    public API and writes it to disk for the emulator
+ * 3. Creates/updates the `GameExternalLink` (Goldberg ↔ AppID)
+ * 4. Upserts all `Achievement` definition records in the DB
  *
- * Failures are logged but never thrown — achievement setup should never
+ * Runtime config (`configs.user.ini`) is handled client-side at launch.
+ *
+ * Failures are logged but never thrown — Goldberg setup should never
  * block a version import.
  */
-export async function setupAchievementsForGame(
+export async function setupGoldberg(
   gameId: string,
   versionDir: string,
 ): Promise<void> {
   try {
-    const appId = readGoldbergAppId(versionDir);
+    // ── 1. Resolve the AppID ─────────────────────────────────────────────
+    // Try the local file first, then fall back to an existing DB link.
+    let appId = readGoldbergAppId(versionDir);
+
     if (!appId) {
-      console.log(`[ACH-SETUP] No steam_appid.txt in ${versionDir}, skipping`);
+      const existingLink = await prisma.gameExternalLink.findUnique({
+        where: {
+          gameId_provider: {
+            gameId,
+            provider: ExternalAccountProvider.Goldberg,
+          },
+        },
+      });
+      if (existingLink) {
+        appId = existingLink.externalGameId;
+        console.log(
+          `[GOLDBERG] No steam_appid.txt, using DB link AppID ${appId}`,
+        );
+      }
+    }
+
+    if (!appId) {
+      console.log(`[GOLDBERG] No AppID for ${versionDir}, skipping`);
       return;
     }
 
     console.log(
-      `[ACH-SETUP] Setting up achievements for game=${gameId} appId=${appId}`,
+      `[GOLDBERG] Setting up game=${gameId} appId=${appId} dir=${versionDir}`,
     );
 
-    // Try local definitions first
+    // ── 2. Ensure steam_settings/ and steam_appid.txt exist on disk ──────
+    const steamSettings = path.join(versionDir, "steam_settings");
+    if (!fs.existsSync(steamSettings)) {
+      fs.mkdirSync(steamSettings, { recursive: true });
+      console.log(`[GOLDBERG] Created ${steamSettings}`);
+    }
+
+    const appIdPath = path.join(steamSettings, "steam_appid.txt");
+    if (!fs.existsSync(appIdPath)) {
+      fs.writeFileSync(appIdPath, appId, "utf-8");
+      console.log(`[GOLDBERG] Wrote steam_appid.txt (${appId})`);
+    }
+
+    // ── 3. Ensure achievements.json exists on disk ───────────────────────
     let definitions = readGoldbergDefinitions(versionDir);
 
-    // If no local file, fetch from Steam and write to disk
     if (definitions.length === 0) {
       console.log(
-        `[ACH-SETUP] No local achievements.json, fetching from Steam API`,
+        `[GOLDBERG] No local achievements.json, fetching from Steam API`,
       );
       definitions = await fetchSteamAchievements(appId);
 
       if (definitions.length > 0) {
-        // Write to disk so the Goldberg emulator can use them
-        const steamSettings = path.join(versionDir, "steam_settings");
-        if (!fs.existsSync(steamSettings)) {
-          fs.mkdirSync(steamSettings, { recursive: true });
-        }
         const achPath = path.join(steamSettings, "achievements.json");
         fs.writeFileSync(
           achPath,
@@ -261,17 +290,12 @@ export async function setupAchievementsForGame(
           "utf-8",
         );
         console.log(
-          `[ACH-SETUP] Wrote ${definitions.length} achievements to ${achPath}`,
+          `[GOLDBERG] Wrote ${definitions.length} achievements to disk`,
         );
       }
     }
 
-    if (definitions.length === 0) {
-      console.log(`[ACH-SETUP] No achievements found for AppID ${appId}`);
-      return;
-    }
-
-    // Create/update the Goldberg external link
+    // ── 4. Create/update the DB external link ────────────────────────────
     await prisma.gameExternalLink.upsert({
       where: {
         gameId_provider: {
@@ -289,7 +313,12 @@ export async function setupAchievementsForGame(
       },
     });
 
-    // Upsert achievement definitions
+    // ── 5. Upsert achievement definitions in DB ──────────────────────────
+    if (definitions.length === 0) {
+      console.log(`[GOLDBERG] No achievements found for AppID ${appId}`);
+      return;
+    }
+
     let count = 0;
     for (const def of definitions) {
       const apiName = def.name ?? "";
@@ -325,11 +354,9 @@ export async function setupAchievementsForGame(
     }
 
     console.log(
-      `[ACH-SETUP] Done: ${count} achievements for game=${gameId} appId=${appId}`,
+      `[GOLDBERG] Done: ${count} achievements for game=${gameId} appId=${appId}`,
     );
   } catch (e) {
-    console.log(
-      `[ACH-SETUP] Achievement setup failed for game=${gameId}: ${e}`,
-    );
+    console.log(`[GOLDBERG] Setup failed for game=${gameId}: ${e}`);
   }
 }

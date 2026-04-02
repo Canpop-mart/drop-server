@@ -19,7 +19,7 @@ import type { WorkingLibrarySource } from "~/server/api/v1/admin/library/sources
 import gameSizeManager from "~/server/internal/gamesize";
 import {
   resolveGameVersionDir,
-  setupAchievementsForGame,
+  setupGoldberg,
 } from "~/server/internal/goldberg";
 import type { ImportVersion } from "~/server/api/v1/admin/import/version/index.post";
 import { GameType, type Platform } from "~/prisma/client/enums";
@@ -583,16 +583,15 @@ class LibraryManager {
             data: { updateAvailable: false },
           });
 
-          // Auto-setup achievements (reads steam_appid.txt, fetches from
-          // Steam API if no local achievements.json, writes to disk, creates
-          // DB records). Never blocks or throws.
+          // Set up Goldberg emulator (fetch achievements from Steam API if
+          // no local file, write to disk, create DB records). Never throws.
           try {
-            const achievementDir = await resolveGameVersionDir(gameId);
-            if (achievementDir) {
-              await setupAchievementsForGame(gameId, achievementDir);
+            const goldbergDir = await resolveGameVersionDir(gameId);
+            if (goldbergDir) {
+              await setupGoldberg(gameId, goldbergDir);
             }
           } catch (e) {
-            logger.warn(`Achievement auto-setup failed for ${gameId}: ${e}`);
+            logger.warn(`Goldberg setup failed for ${gameId}: ${e}`);
           }
 
           notificationSystem.systemPush({
