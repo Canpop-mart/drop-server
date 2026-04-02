@@ -12,8 +12,17 @@ export default defineEventHandler(async (h3) => {
       statusMessage: "No userId in route.",
     });
 
+  // Resolve user first (supports UUID or username)
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [{ id: userId }, { username: userId }],
+    },
+  });
+  if (!user)
+    throw createError({ statusCode: 404, statusMessage: "User not found." });
+
   const favorites = await prisma.favoriteGame.findMany({
-    where: { userId },
+    where: { userId: user.id },
     orderBy: { position: "asc" },
   });
 

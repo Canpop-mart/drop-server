@@ -1,5 +1,5 @@
 <template>
-  <div class="max-w-6xl mx-auto">
+  <div class="max-w-7xl mx-auto px-4">
     <!-- Banner -->
     <div
       v-if="profile?.bannerObjectId"
@@ -15,7 +15,10 @@
     </div>
     <div
       v-else
-      class="h-32 bg-gradient-to-r from-blue-900/50 to-purple-900/50 rounded-t-xl"
+      class="h-32 rounded-t-xl"
+      :style="{
+        background: `linear-gradient(135deg, ${themeColors.from}, ${themeColors.to})`,
+      }"
     />
     <!-- Profile Header -->
     <div class="bg-zinc-900/50 rounded-b-xl p-6 -mt-16 relative">
@@ -71,6 +74,43 @@
         </p>
       </div>
     </div>
+    <!-- Favorite Games -->
+    <div v-if="favorites?.length" class="mb-6">
+      <h2 class="text-lg font-bold font-display text-zinc-100 mb-3">
+        {{ $t("user.favorites.title") }}
+      </h2>
+      <div class="flex gap-3 overflow-x-auto pb-2">
+        <NuxtLink
+          v-for="fav in favorites"
+          :key="fav.gameId"
+          :to="`/store/${fav.game?.id}`"
+          class="group flex-shrink-0"
+        >
+          <div
+            class="w-24 rounded-lg overflow-hidden ring-1 ring-white/5 hover:ring-blue-500/30 transition-all"
+          >
+            <div class="aspect-[2/3]">
+              <img
+                v-if="fav.game?.mCoverObjectId"
+                :src="useObject(fav.game.mCoverObjectId)"
+                :alt="fav.game?.mName"
+                class="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+              />
+              <div
+                v-else
+                class="size-full bg-zinc-800 flex items-center justify-center text-zinc-600"
+              >
+                <SparklesIcon class="size-6" />
+              </div>
+            </div>
+          </div>
+          <p class="text-xs text-zinc-400 text-center mt-1 truncate w-24">
+            {{ fav.game?.mName }}
+          </p>
+        </NuxtLink>
+      </div>
+    </div>
+
     <!-- Showcase -->
     <div v-if="showcase?.items?.length" class="mb-6">
       <h2 class="text-lg font-bold font-display text-zinc-100 mb-3">
@@ -98,8 +138,66 @@
               <SparklesIcon class="size-8" />
             </div>
           </div>
-          <!-- Overlay -->
+          <!-- Achievement overlay -->
           <div
+            v-if="item.type === 'Achievement' && item.achievement"
+            class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-950/95 to-transparent p-2"
+          >
+            <div class="flex items-center gap-1.5 mb-0.5">
+              <img
+                v-if="item.achievement.iconUrl"
+                :src="item.achievement.iconUrl"
+                class="size-4 rounded-sm"
+              />
+              <TrophyIcon v-else class="size-4 text-yellow-500" />
+              <p class="text-xs font-medium text-zinc-200 truncate">
+                {{ item.achievement.title }}
+              </p>
+            </div>
+            <p class="text-[10px] text-zinc-400">
+              {{ item.game?.mName }}
+            </p>
+          </div>
+          <!-- GameStats overlay -->
+          <div
+            v-else-if="item.type === 'GameStats' && item.gameStats"
+            class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-950/95 to-transparent p-2"
+          >
+            <p class="text-xs font-medium text-zinc-200 truncate mb-1">
+              {{ item.game?.mName }}
+            </p>
+            <p class="text-[10px] text-blue-400">
+              {{
+                item.gameStats.playtimeSeconds
+                  ? Math.round(item.gameStats.playtimeSeconds / 3600) +
+                    $t("community.stats.hoursSuffix")
+                  : $t("user.stats.noPlaytime")
+              }}
+            </p>
+            <div v-if="item.gameStats.achievementsTotal > 0" class="mt-1">
+              <div class="h-1 rounded-full bg-zinc-700 overflow-hidden">
+                <div
+                  class="h-full rounded-full bg-blue-500"
+                  :style="{
+                    width:
+                      Math.round(
+                        (item.gameStats.achievementsUnlocked /
+                          item.gameStats.achievementsTotal) *
+                          100,
+                      ) + '%',
+                  }"
+                />
+              </div>
+              <p class="text-[10px] text-zinc-500 mt-0.5">
+                {{ item.gameStats.achievementsUnlocked }}/{{
+                  item.gameStats.achievementsTotal
+                }}
+              </p>
+            </div>
+          </div>
+          <!-- Default overlay (FavoriteGame / Custom) -->
+          <div
+            v-else
             class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-950/90 to-transparent p-2"
           >
             <p class="text-xs font-medium text-zinc-200 truncate">
@@ -108,6 +206,27 @@
             <p class="text-[10px] text-zinc-400 uppercase tracking-wide">
               {{ showcaseTypeLabels[item.type] }}
             </p>
+          </div>
+          <!-- Completion badge for game items -->
+          <div
+            v-if="
+              item.type !== 'GameStats' && item.gameStats?.achievementsTotal > 0
+            "
+            class="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold"
+            :class="
+              item.gameStats.achievementsUnlocked >=
+              item.gameStats.achievementsTotal
+                ? 'bg-yellow-500/90 text-yellow-950'
+                : 'bg-zinc-900/80 text-zinc-300'
+            "
+          >
+            {{
+              Math.round(
+                (item.gameStats.achievementsUnlocked /
+                  item.gameStats.achievementsTotal) *
+                  100,
+              )
+            }}%
           </div>
         </NuxtLink>
       </div>
@@ -226,6 +345,17 @@ const showcaseTypeLabels = computed<Record<string, string>>(() => ({
   GameStats: t("user.showcase.types.GameStats"),
 }));
 
+const THEME_MAP: Record<string, { from: string; to: string }> = {
+  default: { from: "#1e3a5f", to: "#581c87" },
+  ocean: { from: "#0c4a6e", to: "#164e63" },
+  sunset: { from: "#9a3412", to: "#831843" },
+  forest: { from: "#14532d", to: "#1a2e05" },
+  ember: { from: "#7c2d12", to: "#451a03" },
+  arctic: { from: "#0e7490", to: "#1e40af" },
+  midnight: { from: "#1e1b4b", to: "#0f172a" },
+  rose: { from: "#9f1239", to: "#4c0519" },
+};
+
 const route = useRoute();
 const id = (route.params.id ?? "") as string;
 const loading = ref(true);
@@ -237,7 +367,11 @@ const profile = (await $dropFetch(`/api/v1/user/${id}`).catch(() => null)) as {
   bio?: string;
   profilePictureObjectId?: string;
   bannerObjectId?: string;
+  profileTheme?: string;
 } | null;
+const themeColors = computed(
+  () => THEME_MAP[profile?.profileTheme ?? "default"] ?? THEME_MAP.default,
+);
 const userStats = await $dropFetch(`/api/v1/user/${id}/stats`).catch(
   () => null,
 );
@@ -252,6 +386,17 @@ const activity = (await $dropFetch(`/api/v1/user/${id}/activity`).catch(
 const showcase = await $dropFetch(`/api/v1/user/${id}/showcase`).catch(
   () => null,
 );
+const favorites = (await $dropFetch(`/api/v1/user/${id}/favorites`).catch(
+  () => null,
+)) as Array<{
+  gameId: string;
+  game?: {
+    id: string;
+    mName: string;
+    mCoverObjectId?: string;
+    mIconObjectId?: string;
+  } | null;
+}> | null;
 const activityLoading = ref(false);
 
 // Achievement icon error tracking — show trophy fallback when URL fails or is empty

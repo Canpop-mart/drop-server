@@ -12,13 +12,17 @@ export default defineEventHandler(async (h3) => {
       statusMessage: "No userId in route.",
     });
 
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [{ id: userId }, { username: userId }],
+    },
+  });
   if (!user)
     throw createError({ statusCode: 404, statusMessage: "User not found." });
 
   // Total playtime
   const playtimeRecords = await prisma.playtime.findMany({
-    where: { userId },
+    where: { userId: user.id },
     select: { seconds: true },
   });
   const totalPlaytimeSeconds = playtimeRecords.reduce(
@@ -31,12 +35,12 @@ export default defineEventHandler(async (h3) => {
 
   // Achievements unlocked
   const achievementsUnlocked = await prisma.userAchievement.count({
-    where: { userId },
+    where: { userId: user.id },
   });
 
   // Recent sessions
   const recentSessions = await prisma.playSession.findMany({
-    where: { userId },
+    where: { userId: user.id },
     orderBy: { startedAt: "desc" },
     take: 5,
     select: {

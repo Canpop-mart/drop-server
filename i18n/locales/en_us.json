@@ -10,6 +10,13 @@
       "sync": "Sync Now",
       "title": "Achievements"
     },
+    "favorites": {
+      "description": "Pick up to 10 games to feature on your profile.",
+      "save": "Save Favorites",
+      "saved": "Favorites saved!",
+      "searchPlaceholder": "Search for a game to add...",
+      "title": "Favorite Games"
+    },
     "devices": {
       "capabilities": "Capabilities",
       "lastConnected": "Last Connected",
@@ -20,12 +27,14 @@
       "title": "Devices"
     },
     "home": {
+      "avatarUpload": "Upload Avatar",
       "bannerUpload": "Upload Banner",
       "bio": "Bio",
       "bioPlaceholder": "Write something about yourself...",
       "displayName": "Display Name",
       "profileSaved": "Profile saved!",
       "profileSection": "Edit Profile",
+      "profileTheme": "Profile Theme",
       "saveProfile": "Save Profile",
       "title": "Profile"
     },
@@ -78,6 +87,8 @@
       "description": "Choose up to 6 items to feature on your profile.",
       "save": "Save Showcase",
       "saved": "Showcase saved!",
+      "noAchievements": "No achievements found for this game.",
+      "selectAchievement": "Select an achievement",
       "selectGame": "Select a game",
       "title": "Showcase",
       "type": "Type"
@@ -949,6 +960,9 @@
     "notFound": "User not found",
     "recent": "Recent activity (TODO)",
     "recentSub": "Recent activity by this user",
+    "favorites": {
+      "title": "Favorite Games"
+    },
     "showcase": {
       "custom": "Custom",
       "title": "Showcase",
@@ -964,6 +978,7 @@
       "gamesPlayed": "Games Played",
       "minutesSuffix": "min",
       "noAchievements": "No achievements yet",
+      "noPlaytime": "No playtime",
       "noSessions": "No sessions yet",
       "playtime": "Playtime",
       "recentAchievements": "Recent Achievements",

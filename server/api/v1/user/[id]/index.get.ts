@@ -12,8 +12,11 @@ export default defineEventHandler(async (h3) => {
       statusMessage: "No userId in route.",
     });
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
+  // Support lookup by UUID or username
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [{ id: userId }, { username: userId }],
+    },
     select: {
       id: true,
       username: true,
