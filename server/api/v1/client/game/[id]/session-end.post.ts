@@ -54,6 +54,8 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
         matchingLink.externalGameId,
       );
     }
+    // Goldberg achievements are synced client-side via achievements-report
+    // endpoint, not here — the server cannot read client %APPDATA%.
   }
 
   return { synced: totalSynced };

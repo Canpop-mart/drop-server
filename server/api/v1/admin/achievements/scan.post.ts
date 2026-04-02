@@ -3,10 +3,14 @@ import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
 import { ExternalAccountProvider } from "~/prisma/client/enums";
+import {
+  resolveGameVersionDir,
+  readGoldbergDefinitions,
+} from "~/server/internal/goldberg";
 
 const ScanRequest = type({
   gameId: "string",
-  provider: "'Steam' | 'RetroAchievements'",
+  provider: "'Steam' | 'RetroAchievements' | 'Goldberg'",
 }).configure(throwingArktype);
 
 export default defineEventHandler(async (h3) => {
@@ -38,6 +42,8 @@ export default defineEventHandler(async (h3) => {
     scanned = await scanRetroAchievements(body.gameId, link.externalGameId);
   } else if (body.provider === "Steam") {
     scanned = await scanSteamAchievements(body.gameId, link.externalGameId);
+  } else if (body.provider === "Goldberg") {
+    scanned = await scanGoldbergAchievements(body.gameId);
   }
 
   return { scanned };
@@ -191,6 +197,72 @@ async function scanRetroAchievements(
         iconUrl,
         iconLockedUrl,
         displayOrder,
+      },
+    });
+    count++;
+  }
+
+  return count;
+}
+
+/**
+ * Scan Goldberg achievement definitions from the game's steam_settings
+ * directory on the NAS. This reads the static definition file — unlock
+ * state is handled separately by the client or session-end sync.
+ */
+async function scanGoldbergAchievements(gameId: string): Promise<number> {
+  const versionDir = await resolveGameVersionDir(gameId);
+  if (!versionDir) {
+    throw createError({
+      statusCode: 400,
+      statusMessage:
+        "Cannot resolve game files on disk. Is the library filesystem-backed?",
+    });
+  }
+
+  const definitions = readGoldbergDefinitions(versionDir);
+  if (definitions.length === 0) {
+    throw createError({
+      statusCode: 404,
+      statusMessage:
+        "No steam_settings/achievements.json found in game directory.",
+    });
+  }
+
+  let count = 0;
+  for (const def of definitions) {
+    const apiName = def.name ?? "";
+    if (!apiName) continue;
+
+    const title = def.displayName ?? apiName;
+    const description = def.description ?? "";
+    const iconUrl = def.icon ?? "";
+    const iconLockedUrl = def.icon_gray ?? "";
+
+    await prisma.achievement.upsert({
+      where: {
+        gameId_provider_externalId: {
+          gameId,
+          provider: ExternalAccountProvider.Goldberg,
+          externalId: apiName,
+        },
+      },
+      create: {
+        gameId,
+        provider: ExternalAccountProvider.Goldberg,
+        externalId: apiName,
+        title,
+        description,
+        iconUrl,
+        iconLockedUrl,
+        displayOrder: count,
+      },
+      update: {
+        title,
+        description,
+        iconUrl,
+        iconLockedUrl,
+        displayOrder: count,
       },
     });
     count++;
