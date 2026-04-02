@@ -24,11 +24,11 @@ export default defineEventHandler(async (h3) => {
     const carouselIds = game.mImageLibraryObjectIds.slice(1, 11);
     if (carouselIds.length === 0) continue;
 
-    await prisma.game.update({
+    const result = await prisma.game.updateMany({
       where: { id: game.id },
       data: { mImageCarouselObjectIds: carouselIds },
     });
-    updated++;
+    if (result.count > 0) updated++;
   }
 
   return { updated, total: games.length };

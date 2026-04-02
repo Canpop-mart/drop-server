@@ -241,9 +241,14 @@ const profile = (await $dropFetch(`/api/v1/user/${id}`).catch(() => null)) as {
 const userStats = await $dropFetch(`/api/v1/user/${id}/stats`).catch(
   () => null,
 );
-const activity = await $dropFetch(`/api/v1/user/${id}/activity`).catch(
+type ActivityAchievement = {
+  id: string;
+  achievement?: { title?: string; iconUrl?: string };
+  game?: { id: string; mName: string; mIconObjectId?: string };
+};
+const activity = (await $dropFetch(`/api/v1/user/${id}/activity`).catch(
   () => null,
-);
+)) as { achievements?: ActivityAchievement[] } | null;
 const showcase = await $dropFetch(`/api/v1/user/${id}/showcase`).catch(
   () => null,
 );
@@ -260,7 +265,7 @@ const achievementIcon = (a: { achievement?: { iconUrl?: string } }) => {
 const selectedAchGameId = ref("");
 const achievementGames = computed(() => {
   const seen = new Map<string, { id: string; mName: string }>();
-  for (const a of (activity as any)?.achievements ?? []) {
+  for (const a of activity?.achievements ?? []) {
     if (a.game && !seen.has(a.game.id)) {
       seen.set(a.game.id, { id: a.game.id, mName: a.game.mName });
     }
@@ -268,11 +273,7 @@ const achievementGames = computed(() => {
   return [...seen.values()].sort((x, y) => x.mName.localeCompare(y.mName));
 });
 const filteredAchievements = computed(() => {
-  const all = ((activity as any)?.achievements ?? []) as {
-    id: string;
-    achievement?: { title?: string; iconUrl?: string };
-    game?: { id: string; mName: string };
-  }[];
+  const all = activity?.achievements ?? [];
   const filtered = selectedAchGameId.value
     ? all.filter((a) => a.game?.id === selectedAchGameId.value)
     : all;
