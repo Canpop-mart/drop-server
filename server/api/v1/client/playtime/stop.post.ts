@@ -42,13 +42,19 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   );
 
   // Finalize the session
-  await prisma.playSession.update({
-    where: { id: session.id },
+  const updated = await prisma.playSession.updateMany({
+    where: { id: session.id, userId: user.id },
     data: {
       endedAt: now,
       durationSeconds,
     },
   });
+
+  if (updated.count === 0)
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Session not found.",
+    });
 
   // Upsert cumulative playtime for this game/user pair
   await prisma.playtime.upsert({

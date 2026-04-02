@@ -104,22 +104,38 @@
           <!-- Achievement overlay -->
           <div
             v-if="item.type === 'Achievement' && item.achievement"
-            class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-950/95 to-transparent p-2"
+            class="absolute inset-0 flex flex-col"
           >
-            <div class="flex items-center gap-1.5 mb-0.5">
-              <img
-                v-if="item.achievement.iconUrl"
-                :src="item.achievement.iconUrl"
-                class="size-4 rounded-sm"
-              />
-              <TrophyIcon v-else class="size-4 text-yellow-500" />
-              <p class="text-xs font-medium text-zinc-200 truncate">
-                {{ item.achievement.title }}
+            <!-- Top badge -->
+            <div
+              class="flex items-center gap-1 mx-1.5 mt-1.5 px-1.5 py-0.5 rounded-full bg-yellow-500/20 ring-1 ring-yellow-500/40 self-start"
+            >
+              <TrophyIcon class="size-3 text-yellow-400" />
+              <span
+                class="text-[9px] font-semibold text-yellow-300 uppercase tracking-wider"
+                >{{ $t("user.showcase.types.Achievement") }}</span
+              >
+            </div>
+            <div class="flex-1" />
+            <!-- Bottom info -->
+            <div
+              class="bg-gradient-to-t from-zinc-950/95 via-zinc-950/80 to-transparent p-2 pt-6"
+            >
+              <div class="flex items-center gap-1.5 mb-0.5">
+                <img
+                  v-if="item.achievement.iconUrl"
+                  :src="item.achievement.iconUrl"
+                  class="size-5 rounded-sm ring-1 ring-white/20"
+                />
+                <TrophyIcon v-else class="size-5 text-yellow-500" />
+                <p class="text-xs font-semibold text-zinc-100 truncate">
+                  {{ item.achievement.title }}
+                </p>
+              </div>
+              <p class="text-[10px] text-zinc-400">
+                {{ item.game?.mName }}
               </p>
             </div>
-            <p class="text-[10px] text-zinc-400">
-              {{ item.game?.mName }}
-            </p>
           </div>
           <!-- Default overlay (FavoriteGame / Custom) -->
           <div

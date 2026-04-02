@@ -238,6 +238,47 @@
       </div>
     </section>
 
+    <!-- Achievements section -->
+    <section>
+      <h2 class="text-xl font-bold font-display text-zinc-100 mb-1">
+        {{ $t("account.achievements.title") }}
+      </h2>
+      <p class="text-sm text-zinc-400 mb-6">
+        {{ $t("account.achievements.resetDescription") }}
+      </p>
+
+      <div class="space-y-3">
+        <!-- Per-game reset -->
+        <div class="flex items-center gap-3">
+          <select
+            v-model="resetGameId"
+            class="flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
+          >
+            <option value="">
+              {{ $t("account.achievements.allGames") }}
+            </option>
+            <option
+              v-for="game in allGames?.results ?? []"
+              :key="game.id"
+              :value="game.id"
+            >
+              {{ game.mName }}
+            </option>
+          </select>
+          <LoadingButton
+            :loading="achievementResetting"
+            class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-md text-sm font-medium transition-colors whitespace-nowrap"
+            @click="resetAchievements"
+          >
+            {{ $t("account.achievements.resetButton") }}
+          </LoadingButton>
+        </div>
+        <span v-if="achievementResetMessage" class="text-sm text-green-400">
+          {{ achievementResetMessage }}
+        </span>
+      </div>
+    </section>
+
     <!-- Add showcase item dialog -->
     <TransitionRoot as="template" :show="addDialogOpen">
       <Dialog as="div" class="relative z-50" @close="addDialogOpen = false">
@@ -518,6 +559,38 @@ async function uploadBanner(e: Event) {
     await updateUser();
   } finally {
     bannerUploading.value = false;
+  }
+}
+
+// ── Achievement reset ──────────────────────────────────────────────────────
+const resetGameId = ref("");
+const achievementResetting = ref(false);
+const achievementResetMessage = ref("");
+
+async function resetAchievements() {
+  const confirmed = window.confirm(
+    resetGameId.value
+      ? t("account.achievements.confirmGame")
+      : t("account.achievements.confirmAll"),
+  );
+  if (!confirmed) return;
+  achievementResetting.value = true;
+  achievementResetMessage.value = "";
+  try {
+    const query: Record<string, string> = {};
+    if (resetGameId.value) query.gameId = resetGameId.value;
+    const result = await $dropFetch<{ deleted: number }>(
+      "/api/v1/user/achievements/reset",
+      { method: "DELETE", query },
+    );
+    achievementResetMessage.value = t("account.achievements.resetSuccess", {
+      count: result?.deleted ?? 0,
+    });
+    setTimeout(() => {
+      achievementResetMessage.value = "";
+    }, 5000);
+  } finally {
+    achievementResetting.value = false;
   }
 }
 

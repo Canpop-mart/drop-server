@@ -70,6 +70,16 @@ export default defineEventHandler(async (h3) => {
     achievementsUnlocked,
     recentSessions: recentSessions.map((s) => ({
       ...s,
+      // Compute duration from timestamps if durationSeconds is missing
+      durationSeconds:
+        s.durationSeconds ??
+        (s.endedAt
+          ? Math.floor(
+              (new Date(s.endedAt).getTime() -
+                new Date(s.startedAt).getTime()) /
+                1000,
+            )
+          : null),
       game: gameMap[s.gameId] ?? null,
     })),
   };

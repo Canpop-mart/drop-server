@@ -2,7 +2,12 @@
   "account": {
     "achievements": {
       "allGames": "All Games",
+      "confirmAll": "This will reset ALL of your achievements across every game. Are you sure?",
+      "confirmGame": "This will reset all achievements for the selected game. Are you sure?",
       "empty": "No achievements unlocked yet. Play some games!",
+      "resetButton": "Reset Achievements",
+      "resetDescription": "Reset your unlocked achievements. You can reset all achievements or pick a specific game.",
+      "resetSuccess": "Achievements reset successfully.",
       "sortGame": "By Game",
       "sortNewest": "Newest",
       "sortOldest": "Oldest",
