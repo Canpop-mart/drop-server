@@ -1,4 +1,6 @@
 enum ExternalAccountProvider {
+    Steam
+    RetroAchievements
     Goldberg
 }
 
