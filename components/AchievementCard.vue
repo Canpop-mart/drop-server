@@ -43,7 +43,7 @@
             class="text-[10px] font-medium shrink-0"
             :class="rarityTextColor"
           >
-            {{ rarity }}%
+            {{ $t("achievements.rarity", { value: rarity }) }}
           </span>
         </div>
       </div>
@@ -75,7 +75,12 @@ const formatDate = (d: Date | string) => new Date(d).toLocaleDateString();
 
 // Track whether the image URL failed to load — if so, show trophy fallback
 const iconErrored = ref(false);
-watch(() => props.achievement.id, () => { iconErrored.value = false; });
+watch(
+  () => props.achievement.id,
+  () => {
+    iconErrored.value = false;
+  },
+);
 
 // Pick the best icon URL — prefer unlocked icon when unlocked, locked icon when locked
 const iconSrc = computed(() => {

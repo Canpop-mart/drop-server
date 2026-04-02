@@ -259,13 +259,13 @@
                 <button
                   v-for="tab in tabs"
                   :key="tab"
-                  @click="activeTab = tab"
                   :class="[
                     activeTab === tab
                       ? 'border-blue-400 text-blue-400'
                       : 'border-transparent text-zinc-400 hover:text-zinc-200',
                     'pb-2 px-1 border-b-2 text-sm font-medium',
                   ]"
+                  @click="activeTab = tab"
                 >
                   {{ tabLabels[tab] }}
                 </button>

@@ -99,6 +99,7 @@
   },
   "achievements": {
     "locked": "Locked",
+    "rarity": "{value}%",
     "unlocked": "Achievement Unlocked!"
   },
   "actions": "Actions",
@@ -805,10 +806,13 @@
     "welcomeDescription": "Welcome to Drop setup wizard. It will walk you through configuring Drop for the first time, and how it works."
   },
   "store": {
+    "about": "About",
     "commingSoon": "coming soon",
+    "details": "Details",
     "developers": "Developers | Developer | Developers",
     "featured": "Featured",
     "images": "Game Images",
+    "viewFullscreen": "View Fullscreen",
     "leaderboard": {
       "empty": "No leaderboards yet for this game.",
       "error": "Could not load leaderboard.",

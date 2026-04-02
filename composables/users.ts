@@ -17,8 +17,6 @@ export const useUsers = () =>
 export const fetchUsers = async () => {
   const users = useUsers();
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore forget why this ignor exists
   const newValue: User[] = await $dropFetch("/api/v1/admin/users");
   users.value = newValue;
   return newValue;

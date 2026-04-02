@@ -121,18 +121,67 @@ export default defineEventHandler(async (h3) => {
   const hasSearch = searchTerm && searchTerm.length > 0;
 
   /**
-   * Relational data included in all game result sets
+   * Stitches tags and latest-version data onto a list of bare game rows.
+   * Uses two IN-clause queries instead of Prisma's include (which generates
+   * a slow lateral join in Postgres when `take: 1` is used on a relation).
    */
-  const gameInclude = {
-    tags: {
-      select: { id: true, name: true },
-    },
-    versions: {
-      select: { displayName: true, versionIndex: true },
-      orderBy: { versionIndex: "desc" as const },
-      take: 1,
-    },
-  } satisfies Prisma.GameInclude;
+  async function attachRelations<T extends { id: string }>(
+    games: T[],
+  ): Promise<
+    (T & {
+      tags: { id: string; name: string }[];
+      versions: { displayName: string | null; versionIndex: number }[];
+    })[]
+  > {
+    if (games.length === 0) return [];
+
+    const gameIds = games.map((g) => g.id);
+
+    const [tagLinks, allVersions] = await Promise.all([
+      // Single JOIN query for all tags across the result set
+      prisma.$queryRaw<{ gameId: string; id: string; name: string }[]>`
+        SELECT j."A" AS "gameId", t.id, t.name
+        FROM "_GameToGameTag" j
+        JOIN "GameTag" t ON t.id = j."B"
+        WHERE j."A" = ANY(${gameIds}::text[])
+      `,
+      // All versions ordered desc — we pick the latest per game in JS
+      prisma.gameVersion.findMany({
+        where: { gameId: { in: gameIds } },
+        select: { gameId: true, displayName: true, versionIndex: true },
+        orderBy: { versionIndex: "desc" as const },
+      }),
+    ]);
+
+    // Build O(1) lookup maps
+    const tagsByGame = new Map<string, { id: string; name: string }[]>();
+    for (const row of tagLinks) {
+      const arr = tagsByGame.get(row.gameId) ?? [];
+      arr.push({ id: row.id, name: row.name });
+      tagsByGame.set(row.gameId, arr);
+    }
+
+    const latestVersionByGame = new Map<
+      string,
+      { displayName: string | null; versionIndex: number }
+    >();
+    for (const v of allVersions) {
+      if (!latestVersionByGame.has(v.gameId)) {
+        latestVersionByGame.set(v.gameId, {
+          displayName: v.displayName,
+          versionIndex: v.versionIndex,
+        });
+      }
+    }
+
+    return games.map((g) => ({
+      ...g,
+      tags: tagsByGame.get(g.id) ?? [],
+      versions: latestVersionByGame.has(g.id)
+        ? [latestVersionByGame.get(g.id)!]
+        : [],
+    }));
+  }
 
   /**
    * Query
@@ -150,24 +199,24 @@ export default defineEventHandler(async (h3) => {
       type: GameType.Game,
     };
 
-    // Use parameterized Prisma queries - no SQL interpolation
-    const [results, count] = await prisma.$transaction([
+    const searchFilter = {
+      ...baseFilter,
+      OR: [
+        { mName: { contains: searchTerm, mode: "insensitive" as const } },
+        {
+          mShortDescription: {
+            contains: searchTerm,
+            mode: "insensitive" as const,
+          },
+        },
+      ],
+    } satisfies Prisma.GameWhereInput;
+
+    const [games, count] = await prisma.$transaction([
       prisma.game.findMany({
         skip: options.skip,
         take: Math.min(options.take, 50),
-        where: {
-          ...baseFilter,
-          OR: [
-            { mName: { contains: searchTerm, mode: "insensitive" as const } },
-            {
-              mShortDescription: {
-                contains: searchTerm,
-                mode: "insensitive" as const,
-              },
-            },
-          ],
-        },
-        include: gameInclude,
+        where: searchFilter,
         orderBy:
           effectiveSort === "name"
             ? { mName: options.order }
@@ -177,23 +226,10 @@ export default defineEventHandler(async (h3) => {
                 ? { created: options.order }
                 : { mName: "asc" },
       }),
-      prisma.game.count({
-        where: {
-          ...baseFilter,
-          OR: [
-            { mName: { contains: searchTerm, mode: "insensitive" as const } },
-            {
-              mShortDescription: {
-                contains: searchTerm,
-                mode: "insensitive" as const,
-              },
-            },
-          ],
-        },
-      }),
+      prisma.game.count({ where: searchFilter }),
     ]);
 
-    return { results, count };
+    return { results: await attachRelations(games), count };
   }
 
   const finalFilter: Prisma.GameWhereInput = {
@@ -218,16 +254,15 @@ export default defineEventHandler(async (h3) => {
       break;
   }
 
-  const [results, count] = await prisma.$transaction([
+  const [games, count] = await prisma.$transaction([
     prisma.game.findMany({
       skip: options.skip,
       take: Math.min(options.take, 50),
       where: finalFilter,
-      include: gameInclude,
       orderBy: sort,
     }),
     prisma.game.count({ where: finalFilter }),
   ]);
 
-  return { results, count };
+  return { results: await attachRelations(games), count };
 });

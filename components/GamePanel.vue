@@ -28,35 +28,29 @@
       class="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-200 pointer-events-none"
     />
 
-    <!-- Update available badge (always visible) -->
+    <!-- Top badges row — update badge always visible; genre + version on hover -->
     <div
-      v-if="game?.updateAvailable"
-      class="absolute top-2 right-2 z-20 pointer-events-none"
+      class="absolute top-2 left-2 right-2 flex items-start justify-between gap-1 z-10"
     >
-      <span
-        class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500 text-white leading-tight shadow-lg"
-      >
-        {{ $t("store.updateAvailable") }}
-      </span>
-    </div>
-
-    <!-- Top badges row (hover only) -->
-    <div
-      class="absolute top-2 left-2 right-2 flex items-start justify-between gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-    >
-      <!-- Genre tag badge (top-left) -->
+      <!-- Genre tag badge (top-left, hover only) -->
       <span
         v-if="firstTag"
-        class="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-black/65 text-zinc-300 leading-tight max-w-[55%] truncate"
+        class="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-black/65 text-zinc-300 leading-tight max-w-[55%] truncate opacity-0 group-hover:opacity-100 transition-opacity duration-200"
       >
         {{ firstTag }}
       </span>
       <span v-else class="shrink-0" />
 
-      <!-- Version badge (top-right) -->
+      <!-- Update available badge (always visible) OR version badge (hover only) -->
       <span
-        v-if="versionLabel"
-        class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-green-700 text-white leading-tight shrink-0 whitespace-nowrap"
+        v-if="game?.updateAvailable"
+        class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500 text-white leading-tight shrink-0 whitespace-nowrap shadow-lg"
+      >
+        {{ $t("store.updateAvailable") }}
+      </span>
+      <span
+        v-else-if="versionLabel"
+        class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-green-700 text-white leading-tight shrink-0 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200"
       >
         {{ versionLabel }}
       </span>

@@ -185,13 +185,11 @@ type AchievementData = {
   displayOrder: number;
 };
 
-// Load all games for the selector
-const gamesResponse = (await $dropFetch("/api/v1/store", {
-  query: { limit: 500 },
-}).catch(() => ({ items: [] }))) as {
-  items: { id: string; mName: string }[];
-};
-const games = gamesResponse.items ?? [];
+// Load all games for the selector (uses admin endpoint — no pagination cap)
+const games = (await $dropFetch("/api/v1/admin/game").catch(() => [])) as {
+  id: string;
+  mName: string;
+}[];
 
 const selectedGameId = ref("");
 const links = ref<GameExternalLinkData[]>([]);

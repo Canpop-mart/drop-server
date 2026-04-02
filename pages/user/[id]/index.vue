@@ -2,8 +2,8 @@
   <div class="max-w-6xl mx-auto">
     <!-- Banner -->
     <div
-      class="relative h-48 rounded-t-xl overflow-hidden"
       v-if="profile?.bannerObjectId"
+      class="relative h-48 rounded-t-xl overflow-hidden"
     >
       <img
         :src="useObject(profile.bannerObjectId)"
@@ -167,9 +167,17 @@
             class="flex items-center gap-3 p-3 bg-zinc-800/30 rounded mb-2"
           >
             <img
-              :src="a.achievement?.iconUrl || '/favicon.ico'"
+              v-if="achievementIcon(a) && !achievementIconErrors[a.id]"
+              :src="achievementIcon(a)"
               class="size-8 rounded"
+              @error="achievementIconErrors[a.id] = true"
             />
+            <div
+              v-else
+              class="size-8 rounded shrink-0 bg-zinc-700/50 flex items-center justify-center"
+            >
+              <TrophyIcon class="size-4 text-zinc-500" />
+            </div>
             <div class="flex-1 min-w-0">
               <p class="text-sm text-zinc-100 truncate">
                 {{ a.achievement?.title }}
@@ -191,6 +199,7 @@
 
 <script setup lang="ts">
 import { SparklesIcon } from "@heroicons/vue/24/outline";
+import { TrophyIcon } from "@heroicons/vue/24/solid";
 import { useObject } from "~/composables/objects";
 import { useUser } from "~/composables/user";
 
@@ -225,6 +234,13 @@ const showcase = await $dropFetch(`/api/v1/user/${id}/showcase`).catch(
   () => null,
 );
 const activityLoading = ref(false);
+
+// Achievement icon error tracking — show trophy fallback when URL fails or is empty
+const achievementIconErrors = reactive<Record<string, boolean>>({});
+const achievementIcon = (a: { achievement?: { iconUrl?: string } }) => {
+  const url = a.achievement?.iconUrl;
+  return url && url.trim() !== "" ? url : null;
+};
 
 loading.value = false;
 const current = useUser();
