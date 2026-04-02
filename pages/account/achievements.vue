@@ -130,9 +130,9 @@
           </option>
         </select>
         <button
-          @click="resetAchievements"
           :disabled="resetting"
           class="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          @click="resetAchievements"
         >
           {{
             resetting
@@ -167,9 +167,9 @@
           </option>
         </select>
         <button
-          @click="runDiagnostic"
           :disabled="debugLoading || !debugGameId"
           class="rounded-md bg-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-100 shadow-sm hover:bg-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          @click="runDiagnostic"
         >
           {{
             debugLoading
@@ -444,9 +444,6 @@ const formatDate = (d: string) => new Date(d).toLocaleDateString();
 // ── Achievement Reset ─────────────────────────────────────────────────────
 
 async function resetAchievements() {
-  const gameName =
-    gamesWithAchievements.value.find((g) => g.id === resetGameId.value)
-      ?.mName ?? t("account.achievements.allGames");
   const msg = resetGameId.value
     ? t("account.achievements.confirmGame")
     : t("account.achievements.confirmAll");
