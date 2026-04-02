@@ -121,11 +121,7 @@
           class="flex-1 sm:flex-initial sm:w-64 rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
         >
           <option value="">{{ $t("account.achievements.allGames") }}</option>
-          <option
-            v-for="g in gamesWithAchievements"
-            :key="g.id"
-            :value="g.id"
-          >
+          <option v-for="g in gamesWithAchievements" :key="g.id" :value="g.id">
             {{ g.mName }}
           </option>
         </select>
@@ -367,9 +363,11 @@ const debugResult = ref<{
 
 // All games list (for diagnostics — not limited to games with unlocked achievements)
 const allGames = ref<{ id: string; mName: string }[]>([]);
-const storeData = (await $dropFetch("/api/v1/store?sort=name&order=asc&limit=200").catch(
-  () => ({ results: [] }),
-)) as { results: { id: string; mName: string }[] };
+const storeData = (await $dropFetch(
+  "/api/v1/store?sort=name&order=asc&limit=200",
+).catch(() => ({ results: [] }))) as {
+  results: { id: string; mName: string }[];
+};
 allGames.value = (storeData.results ?? []).map((g) => ({
   id: g.id,
   mName: g.mName,
@@ -455,10 +453,9 @@ async function resetAchievements() {
 
   try {
     const query = resetGameId.value ? `?gameId=${resetGameId.value}` : "";
-    const res = (await $dropFetch(
-      `/api/v1/user/achievements/reset${query}`,
-      { method: "DELETE" },
-    )) as { deleted: number };
+    const res = (await $dropFetch(`/api/v1/user/achievements/reset${query}`, {
+      method: "DELETE",
+    })) as { deleted: number };
 
     resetMessage.value = `${t("account.achievements.resetSuccess")} (${res.deleted})`;
 
