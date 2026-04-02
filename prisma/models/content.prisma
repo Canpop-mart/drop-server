@@ -178,6 +178,7 @@ model SaveSlot {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   index  Int
 
+  name      String   @default("")
   createdAt DateTime @default(now())
   playtime  Float    @default(0) // hours
 

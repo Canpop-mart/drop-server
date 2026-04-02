@@ -42,11 +42,16 @@ export default defineEventHandler(async (h3) => {
     if (firstIndex === save.index) firstIndex++;
   }
 
+  const body = await readBody(h3).catch(() => ({}));
+  const name =
+    typeof body?.name === "string" ? body.name.slice(0, 64).trim() : "";
+
   const newSlot = await prisma.saveSlot.create({
     data: {
       userId: user.id,
       gameId,
       index: firstIndex,
+      name,
     },
   });
 

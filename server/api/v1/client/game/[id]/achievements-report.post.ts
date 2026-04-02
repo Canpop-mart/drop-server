@@ -22,8 +22,16 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const rawBody = await readBody(h3);
   const body = AchievementReport(rawBody);
   if (body instanceof ArkErrors) {
+    console.warn(
+      `[ACH] Report validation failed for game ${gameId}:`,
+      body.summary,
+    );
     throw createError({ statusCode: 400, statusMessage: body.summary });
   }
+
+  console.log(
+    `[ACH] Report received: game=${gameId} user=${user.id} count=${body.achievements.length} ids=[${body.achievements.map((a) => a.externalId).join(", ")}]`,
+  );
 
   // Fetch game name once for notifications
   const game = await prisma.game.findUnique({
@@ -46,7 +54,12 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
       },
     });
 
-    if (!achievement) continue;
+    if (!achievement) {
+      console.warn(
+        `[ACH] Achievement NOT FOUND in DB: gameId=${gameId} provider=${report.provider} externalId=${report.externalId}`,
+      );
+      continue;
+    }
 
     // Check if already unlocked for this specific achievement record
     const existing = await prisma.userAchievement.findUnique({
@@ -115,6 +128,10 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
         // Non-critical — don't fail the report if notification fails
       });
   }
+
+  console.log(
+    `[ACH] Report complete: game=${gameId} recorded=${recorded} newlyUnlocked=${newlyUnlocked.length}`,
+  );
 
   return { recorded };
 });

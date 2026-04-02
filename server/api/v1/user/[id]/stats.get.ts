@@ -64,20 +64,49 @@ export default defineEventHandler(async (h3) => {
   });
   const gameMap = Object.fromEntries(games.map((g) => [g.id, g]));
 
-  // Auto-close orphaned sessions (started more than 24h ago with no endedAt)
-  const orphanedIds = recentSessions
-    .filter(
-      (s) =>
-        !s.endedAt &&
-        Date.now() - new Date(s.startedAt).getTime() > 24 * 60 * 60 * 1000,
-    )
-    .map((s) => s.id);
+  // Auto-close orphaned sessions (started more than 4h ago with no endedAt).
+  // Also compute durationSeconds and update cumulative playtime.
+  const orphanedSessions = recentSessions.filter(
+    (s) =>
+      !s.endedAt &&
+      Date.now() - new Date(s.startedAt).getTime() > 4 * 60 * 60 * 1000,
+  );
 
-  if (orphanedIds.length > 0) {
-    await prisma.playSession.updateMany({
-      where: { id: { in: orphanedIds } },
-      data: { endedAt: new Date() },
+  for (const orphan of orphanedSessions) {
+    const endedAt = new Date(
+      Math.min(
+        new Date(orphan.startedAt).getTime() + 24 * 60 * 60 * 1000,
+        Date.now(),
+      ),
+    );
+    const durationSeconds = Math.floor(
+      (endedAt.getTime() - new Date(orphan.startedAt).getTime()) / 1000,
+    );
+
+    await prisma.playSession.update({
+      where: { id: orphan.id },
+      data: { endedAt, durationSeconds },
     });
+
+    // Upsert cumulative playtime for the game/user pair
+    await prisma.playtime.upsert({
+      where: {
+        gameId_userId: { gameId: orphan.gameId, userId: user.id },
+      },
+      create: {
+        gameId: orphan.gameId,
+        userId: user.id,
+        seconds: durationSeconds,
+      },
+      update: {
+        seconds: { increment: durationSeconds },
+      },
+    });
+
+    // Update in-memory copy so the response reflects the fix
+    (orphan as { endedAt: Date | null }).endedAt = endedAt;
+    (orphan as { durationSeconds: number | null }).durationSeconds =
+      durationSeconds;
   }
 
   return {

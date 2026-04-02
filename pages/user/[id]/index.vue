@@ -10,7 +10,10 @@
         class="w-full h-full object-cover"
       />
       <div
-        class="absolute inset-0 bg-gradient-to-t from-zinc-950/90 to-transparent"
+        class="absolute inset-0"
+        :style="{
+          background: `linear-gradient(to top, ${themeColors.from}ee, ${themeColors.to}44, transparent)`,
+        }"
       />
     </div>
     <div
@@ -187,14 +190,7 @@
             <div class="flex-1 min-w-0">
               <p class="text-sm text-zinc-100 truncate">{{ s.game?.mName }}</p>
               <p class="text-xs text-zinc-500">
-                {{
-                  s.durationSeconds && s.durationSeconds >= 60
-                    ? Math.round(s.durationSeconds / 60) +
-                      $t("user.stats.minutesSuffix")
-                    : s.durationSeconds && s.durationSeconds > 0
-                      ? $t("user.stats.lessThanMinute")
-                      : $t("user.stats.unknownDuration")
-                }}
+                {{ timeAgo(s.startedAt) }}
               </p>
             </div>
           </div>
@@ -280,6 +276,20 @@ const THEME_MAP: Record<string, { from: string; to: string }> = {
   midnight: { from: "#1e1b4b", to: "#0f172a" },
   rose: { from: "#9f1239", to: "#4c0519" },
 };
+
+function timeAgo(dateStr: string | Date): string {
+  const ms = Date.now() - new Date(dateStr).getTime();
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return "just now";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hrs = Math.floor(min / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
 
 const route = useRoute();
 const id = (route.params.id ?? "") as string;

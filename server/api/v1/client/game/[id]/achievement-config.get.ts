@@ -53,7 +53,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     where: { gameId },
   });
 
-  return {
+  const result = {
     achievements: dedupedEntries.map(({ best, allIds }) => ({
       ...best,
       // Unlocked if ANY provider variant is unlocked for this user
@@ -61,4 +61,10 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     })),
     externalLinks,
   };
+
+  console.log(
+    `[ACH] Config served: game=${gameId} user=${user.id} total=${result.achievements.length} unlocked=${result.achievements.filter((a) => a.unlocked).length} goldbergLinks=${externalLinks.filter((l) => l.provider === "Goldberg").length}`,
+  );
+
+  return result;
 });
