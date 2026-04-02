@@ -82,7 +82,6 @@ export const $dropFetch: DropFetch = async (rawRequest, opts) => {
   }
 
   const headers = useRequestHeaders(["cookie", "authorization"]);
-  // @ts-expect-error — Nuxt route-type union depth exceeds TS limit (TS2589)
   const data = await $fetch(request, {
     ...opts,
     headers: { ...headers, ...opts?.headers },

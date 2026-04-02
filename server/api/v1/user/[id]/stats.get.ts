@@ -83,7 +83,7 @@ export default defineEventHandler(async (h3) => {
       (endedAt.getTime() - new Date(orphan.startedAt).getTime()) / 1000,
     );
 
-    await prisma.playSession.update({
+    await prisma.playSession.updateMany({
       where: { id: orphan.id },
       data: { endedAt, durationSeconds },
     });

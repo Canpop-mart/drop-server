@@ -27,12 +27,17 @@ export default defineEventHandler(async (h3) => {
     });
   }
 
-  const slot = await prisma.saveSlot.update({
-    where: {
-      id: { gameId, userId: user.id, index: slotIndex },
-    },
+  const result = await prisma.saveSlot.updateMany({
+    where: { gameId, userId: user.id, index: slotIndex },
     data: updates,
   });
 
-  return slot;
+  if (result.count === 0) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Save slot not found",
+    });
+  }
+
+  return { updated: result.count };
 });
