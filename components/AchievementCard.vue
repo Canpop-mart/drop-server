@@ -10,14 +10,18 @@
       "
     >
       <img
-        :src="
-          unlockedAt
-            ? achievement.iconUrl || achievement.iconLockedUrl
-            : achievement.iconLockedUrl || achievement.iconUrl
-        "
-        class="size-10 rounded"
+        v-if="iconSrc"
+        :src="iconSrc"
+        class="size-10 rounded shrink-0"
         :class="{ grayscale: !unlockedAt }"
       />
+      <div
+        v-else
+        class="size-10 rounded shrink-0 bg-zinc-700/50 flex items-center justify-center"
+        :class="{ grayscale: !unlockedAt, 'opacity-50': !unlockedAt }"
+      >
+        <TrophyIcon class="size-5 text-zinc-500" />
+      </div>
       <div class="flex-1 min-w-0">
         <p class="text-sm font-medium text-zinc-100 truncate">
           {{ achievement.title }}
@@ -52,6 +56,8 @@
   </div>
 </template>
 <script setup lang="ts">
+import { TrophyIcon } from "@heroicons/vue/24/solid";
+
 const props = defineProps<{
   achievement: {
     id: string;
@@ -65,6 +71,14 @@ const props = defineProps<{
 }>();
 
 const formatDate = (d: Date | string) => new Date(d).toLocaleDateString();
+
+// Pick the best icon URL — prefer unlocked icon when unlocked, locked icon when locked
+const iconSrc = computed(() => {
+  const primary = props.unlockedAt
+    ? props.achievement.iconUrl || props.achievement.iconLockedUrl
+    : props.achievement.iconLockedUrl || props.achievement.iconUrl;
+  return primary || null; // Return null (not empty string) so v-if hides the img
+});
 
 // Color by rarity tier
 const rarityBarColor = computed(() => {

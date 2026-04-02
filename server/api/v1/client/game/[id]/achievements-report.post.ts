@@ -48,7 +48,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
 
     if (!achievement) continue;
 
-    // Check if already unlocked before upserting
+    // Check if already unlocked for this specific achievement record
     const existing = await prisma.userAchievement.findUnique({
       where: {
         userId_achievementId: {
@@ -57,6 +57,22 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
         },
       },
     });
+
+    // Check if ANY provider variant of this externalId is already unlocked
+    // (prevents duplicate notifications when Steam + Goldberg both report the same achievement)
+    const anyProviderUnlocked = existing
+      ? true
+      : await prisma.userAchievement
+          .findFirst({
+            where: {
+              userId: user.id,
+              achievement: {
+                gameId,
+                externalId: report.externalId,
+              },
+            },
+          })
+          .then((r) => !!r);
 
     await prisma.userAchievement.upsert({
       where: {
@@ -75,8 +91,8 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
 
     recorded++;
 
-    // Track newly unlocked achievements for notifications
-    if (!existing) {
+    // Track newly unlocked achievements for notifications — only if no provider variant was previously unlocked
+    if (!anyProviderUnlocked) {
       newlyUnlocked.push({
         title: achievement.title,
         iconUrl: achievement.iconUrl ?? "",

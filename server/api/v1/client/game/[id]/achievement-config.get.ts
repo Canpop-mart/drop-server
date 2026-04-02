@@ -1,6 +1,13 @@
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
 
+// Lower number = higher priority when deduplicating cross-provider achievements
+const PROVIDER_PRIORITY: Record<string, number> = {
+  Steam: 0,
+  RetroAchievements: 1,
+  Goldberg: 2,
+};
+
 export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const user = await fetchUser();
 
@@ -14,12 +21,31 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     orderBy: { displayOrder: "asc" },
   });
 
-  // Get user's unlocks
-  const achievementIds = achievements.map((a) => a.id);
+  // Deduplicate by externalId across providers (Steam + Goldberg can both store the same achievement)
+  const dedupedMap = new Map<
+    string,
+    { best: (typeof achievements)[0]; allIds: string[] }
+  >();
+  for (const a of achievements) {
+    const entry = dedupedMap.get(a.externalId);
+    if (!entry) {
+      dedupedMap.set(a.externalId, { best: a, allIds: [a.id] });
+    } else {
+      entry.allIds.push(a.id);
+      const newPriority = PROVIDER_PRIORITY[a.provider] ?? 99;
+      const bestPriority = PROVIDER_PRIORITY[entry.best.provider] ?? 99;
+      if (newPriority < bestPriority) entry.best = a;
+    }
+  }
+
+  const dedupedEntries = [...dedupedMap.values()];
+  const allAchievementIds = achievements.map((a) => a.id);
+
+  // Get user's unlocks — merged across all provider variants per externalId
   const userAchievements = await prisma.userAchievement.findMany({
     where: {
       userId: user.id,
-      achievementId: { in: achievementIds },
+      achievementId: { in: allAchievementIds },
     },
   });
   const unlockedSet = new Set(userAchievements.map((ua) => ua.achievementId));
@@ -30,9 +56,10 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   });
 
   return {
-    achievements: achievements.map((a) => ({
-      ...a,
-      unlocked: unlockedSet.has(a.id),
+    achievements: dedupedEntries.map(({ best, allIds }) => ({
+      ...best,
+      // Unlocked if ANY provider variant is unlocked for this user
+      unlocked: allIds.some((id) => unlockedSet.has(id)),
     })),
     externalLinks,
   };

@@ -1,6 +1,13 @@
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
 
+// Lower number = higher priority when deduplicating cross-provider achievements
+const PROVIDER_PRIORITY: Record<string, number> = {
+  Steam: 0,
+  RetroAchievements: 1,
+  Goldberg: 2,
+};
+
 export default defineEventHandler(async (h3) => {
   const userId = await aclManager.getUserIdACL(h3, ["store:read"]);
   if (!userId) throw createError({ statusCode: 403 });
@@ -14,15 +21,39 @@ export default defineEventHandler(async (h3) => {
     orderBy: { displayOrder: "asc" },
   });
 
-  // Get user's unlocks for this game
-  const achievementIds = achievements.map((a) => a.id);
+  // Deduplicate by externalId — a game can have the same achievement stored
+  // from multiple providers (Steam + Goldberg, etc.). Keep the highest-priority
+  // provider's metadata for display, but track all IDs so we can merge unlock data.
+  const dedupedMap = new Map<
+    string,
+    { best: (typeof achievements)[0]; allIds: string[] }
+  >();
+  for (const a of achievements) {
+    const entry = dedupedMap.get(a.externalId);
+    if (!entry) {
+      dedupedMap.set(a.externalId, { best: a, allIds: [a.id] });
+    } else {
+      entry.allIds.push(a.id);
+      const newPriority = PROVIDER_PRIORITY[a.provider] ?? 99;
+      const bestPriority = PROVIDER_PRIORITY[entry.best.provider] ?? 99;
+      if (newPriority < bestPriority) {
+        entry.best = a;
+      }
+    }
+  }
+
+  const dedupedEntries = [...dedupedMap.values()];
+  const allAchievementIds = achievements.map((a) => a.id);
+
+  // Get user's unlocks — check across ALL provider IDs for each externalId group
   const userAchievements = await prisma.userAchievement.findMany({
     where: {
       userId,
-      achievementId: { in: achievementIds },
+      achievementId: { in: allAchievementIds },
     },
   });
-  const unlockedMap = Object.fromEntries(
+  // Map: achievementId -> unlockedAt
+  const unlockedByAchId = Object.fromEntries(
     userAchievements.map((ua) => [ua.achievementId, ua.unlockedAt]),
   );
 
@@ -34,22 +65,37 @@ export default defineEventHandler(async (h3) => {
   });
   const ownerCount = Math.max(totalOwners.length, 1);
 
-  // Count unlocks per achievement in a single query
+  // Count unlocks per achievement across all provider variants
   const unlockCounts = await prisma.userAchievement.groupBy({
     by: ["achievementId"],
-    where: { achievementId: { in: achievementIds } },
+    where: { achievementId: { in: allAchievementIds } },
     _count: true,
   });
-  const unlockCountMap = Object.fromEntries(
+  const unlockCountByAchId = Object.fromEntries(
     unlockCounts.map((uc) => [uc.achievementId, uc._count]),
   );
 
-  return achievements.map((a) => {
-    const unlocks = unlockCountMap[a.id] ?? 0;
+  return dedupedEntries.map(({ best, allIds }) => {
+    // Merge unlock status: unlocked if ANY provider variant is unlocked
+    let unlockedAt: Date | null = null;
+    for (const id of allIds) {
+      const t = unlockedByAchId[id];
+      if (t && (!unlockedAt || t < unlockedAt)) {
+        // Use the earliest unlock time if multiple providers reported it
+        unlockedAt = t;
+      }
+    }
+
+    // Merge unlock counts: sum across all provider variants
+    const unlocks = allIds.reduce(
+      (sum, id) => sum + (unlockCountByAchId[id] ?? 0),
+      0,
+    );
+
     return {
-      ...a,
-      unlocked: !!unlockedMap[a.id],
-      unlockedAt: unlockedMap[a.id] ?? null,
+      ...best,
+      unlocked: !!unlockedAt,
+      unlockedAt,
       rarity: Math.round((unlocks / ownerCount) * 100 * 10) / 10,
       unlockCount: unlocks,
     };
