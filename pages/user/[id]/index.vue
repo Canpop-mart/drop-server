@@ -270,8 +270,6 @@ import { TrophyIcon } from "@heroicons/vue/24/solid";
 import { useObject } from "~/composables/objects";
 import { useUser } from "~/composables/user";
 
-const { t } = useI18n();
-// Static map — avoids @intlify/vue-i18n/no-dynamic-keys violation
 const THEME_MAP: Record<string, { from: string; to: string }> = {
   default: { from: "#1e3a5f", to: "#581c87" },
   ocean: { from: "#0c4a6e", to: "#164e63" },
