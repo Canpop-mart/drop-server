@@ -70,7 +70,7 @@ async function scanSteamAchievements(
   if (!achievements || !Array.isArray(achievements)) return 0;
 
   // Also fetch global achievement percentages for rarity
-  let globalStats: Record<string, number> = {};
+  const globalStats: Record<string, number> = {};
   try {
     const globalUrl = `https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid=${steamAppId}&format=json`;
     const globalRes = await fetch(globalUrl);

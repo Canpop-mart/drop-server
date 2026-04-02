@@ -128,12 +128,20 @@ const activityFilter = ref<"all" | "session" | "achievement" | "request">(
   "all",
 );
 
-const activityFilters = computed(() => [
-  { value: "all", label: t("community.activity.filterAll") },
-  { value: "session", label: t("community.activity.filterSessions") },
-  { value: "achievement", label: t("community.activity.filterAchievements") },
-  { value: "request", label: t("community.activity.filterRequests") },
-]);
+const activityFilters = computed(
+  (): {
+    value: "all" | "session" | "achievement" | "request";
+    label: string;
+  }[] => [
+    { value: "all", label: t("community.activity.filterAll") },
+    { value: "session", label: t("community.activity.filterSessions") },
+    {
+      value: "achievement",
+      label: t("community.activity.filterAchievements"),
+    },
+    { value: "request", label: t("community.activity.filterRequests") },
+  ],
+);
 
 const filteredActivity = computed(() =>
   activityFilter.value === "all"

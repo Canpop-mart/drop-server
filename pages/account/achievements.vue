@@ -144,11 +144,13 @@ const selectedGameId = ref("");
 const sortBy = ref<"newest" | "oldest" | "game">("newest");
 const syncing = ref(false);
 
-const sortOptions = computed(() => [
-  { value: "newest", label: t("account.achievements.sortNewest") },
-  { value: "oldest", label: t("account.achievements.sortOldest") },
-  { value: "game", label: t("account.achievements.sortGame") },
-]);
+const sortOptions = computed(
+  (): { value: "newest" | "oldest" | "game"; label: string }[] => [
+    { value: "newest", label: t("account.achievements.sortNewest") },
+    { value: "oldest", label: t("account.achievements.sortOldest") },
+    { value: "game", label: t("account.achievements.sortGame") },
+  ],
+);
 
 // Load achievements
 const data = (await $dropFetch("/api/v1/user/achievements/list").catch(

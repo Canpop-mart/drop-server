@@ -69,7 +69,7 @@ watch(
         const toast: AchievementToastItem = {
           id: notif.nonce,
           title: notif.title,
-          iconUrl: notif.actions ?? undefined,
+          iconUrl: notif.actions?.[0] ?? undefined,
           gameName: notif.description ?? undefined,
         };
         toasts.value.push(toast);

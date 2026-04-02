@@ -89,11 +89,11 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     await notificationSystem
       .push(user.id, {
         title: unlock.title,
-        description: game?.mName ?? null,
+        description: game?.mName ?? "",
         // Store icon URL in actions field for the toast to use
-        actions: unlock.iconUrl || null,
+        actions: unlock.iconUrl ? [unlock.iconUrl] : [],
         nonce: `achievement-unlock:${gameId}:${unlock.title}:${Date.now()}`,
-        acls: ["store:read"],
+        acls: ["user:store:read"],
       })
       .catch(() => {
         // Non-critical — don't fail the report if notification fails
