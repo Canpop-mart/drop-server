@@ -12,8 +12,17 @@ import prisma from "~/server/internal/db/database";
  * The Steam AppID is stored in:
  *   <versionDir>/steam_settings/steam_appid.txt
  *
- * On a player's Windows machine the *unlock state* is saved by GSE at:
- *   %APPDATA%/GSE saves/<AppID>/achievements.json
+ * On a player's machine the *unlock state* is saved by the emulator.
+ * Drop configures Goldberg to use a controlled save directory by writing
+ * `saves_folder_name=drop-goldberg` into the game's `steam_settings/configs.user.ini`.
+ * This makes unlocks land at:
+ *   %APPDATA%/drop-goldberg/<AppID>/achievements.json  (Windows)
+ *   ~/.local/share/drop-goldberg/<AppID>/achievements.json (Linux)
+ *
+ * The client also checks fallback paths for common Goldberg forks
+ * (GSE Saves, Goldberg SteamEmu Saves) in case the game was launched
+ * outside of Drop.
+ *
  * Each entry gains `earned` (boolean) and `earned_time` (unix timestamp)
  * fields once the player unlocks it in-game.
  */
