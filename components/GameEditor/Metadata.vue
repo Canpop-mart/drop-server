@@ -682,7 +682,10 @@ watch(descriptionHTML, (_v) => {
 
 const validAddCarouselImages = computed(() =>
   game.value.mImageLibraryObjectIds.filter(
-    (e) => !game.value.mImageCarouselObjectIds.includes(e),
+    (e) =>
+      !game.value.mImageCarouselObjectIds.includes(e) &&
+      e !== game.value.mBannerObjectId &&
+      e !== game.value.mCoverObjectId,
   ),
 );
 

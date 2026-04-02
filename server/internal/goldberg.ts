@@ -67,23 +67,34 @@ export async function resolveGameVersionDir(
     },
   });
 
-  if (!game || game.versions.length === 0) return undefined;
+  if (!game || game.versions.length === 0) {
+    console.log(`[ACH-SCAN] resolveGameVersionDir: no game or no versions for ${gameId}`);
+    return undefined;
+  }
 
   const backend = game.library.backend;
-  if (backend !== "Filesystem" && backend !== "FlatFilesystem")
+  if (backend !== "Filesystem" && backend !== "FlatFilesystem") {
+    console.log(`[ACH-SCAN] resolveGameVersionDir: unsupported backend "${backend}"`);
     return undefined;
+  }
 
   const options = game.library.options as { baseDir?: string };
-  if (!options.baseDir) return undefined;
+  if (!options.baseDir) {
+    console.log(`[ACH-SCAN] resolveGameVersionDir: no baseDir in library options`);
+    return undefined;
+  }
 
   const versionPath = game.versions[0].versionPath!;
 
   if (backend === "FlatFilesystem") {
-    // FlatFilesystem: baseDir/<libraryPath> (no version subdirectory)
-    return path.join(options.baseDir, game.libraryPath);
+    const resolved = path.join(options.baseDir, game.libraryPath);
+    console.log(`[ACH-SCAN] resolveGameVersionDir: FlatFilesystem => ${resolved}`);
+    return resolved;
   }
 
-  return path.join(options.baseDir, game.libraryPath, versionPath);
+  const resolved = path.join(options.baseDir, game.libraryPath, versionPath);
+  console.log(`[ACH-SCAN] resolveGameVersionDir: Filesystem => baseDir="${options.baseDir}" libraryPath="${game.libraryPath}" versionPath="${versionPath}" => ${resolved}`);
+  return resolved;
 }
 
 /**

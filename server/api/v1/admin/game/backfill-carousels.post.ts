@@ -15,13 +15,20 @@ export default defineEventHandler(async (h3) => {
       mImageCarouselObjectIds: { isEmpty: true },
       NOT: { mImageLibraryObjectIds: { isEmpty: true } },
     },
-    select: { id: true, mImageLibraryObjectIds: true },
+    select: {
+      id: true,
+      mImageLibraryObjectIds: true,
+      mBannerObjectId: true,
+      mCoverObjectId: true,
+    },
   });
 
   let updated = 0;
   for (const game of games) {
-    // Skip cover (index 0), take up to 10 artworks/screenshots
-    const carouselIds = game.mImageLibraryObjectIds.slice(1, 11);
+    // Exclude cover and banner, take up to 10 artworks/screenshots
+    const carouselIds = game.mImageLibraryObjectIds
+      .filter((id) => id !== game.mBannerObjectId && id !== game.mCoverObjectId)
+      .slice(0, 10);
     if (carouselIds.length === 0) continue;
 
     const result = await prisma.game.updateMany({
