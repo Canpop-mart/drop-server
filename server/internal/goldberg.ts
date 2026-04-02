@@ -61,7 +61,8 @@ export async function resolveGameVersionDir(
   if (!game || game.versions.length === 0) return undefined;
 
   const backend = game.library.backend;
-  if (backend !== "Filesystem" && backend !== "FlatFilesystem") return undefined;
+  if (backend !== "Filesystem" && backend !== "FlatFilesystem")
+    return undefined;
 
   const options = game.library.options as { baseDir?: string };
   if (!options.baseDir) return undefined;
@@ -83,11 +84,7 @@ export async function resolveGameVersionDir(
 export function readGoldbergDefinitions(
   versionDir: string,
 ): GoldbergAchievementDef[] {
-  const filePath = path.join(
-    versionDir,
-    "steam_settings",
-    "achievements.json",
-  );
+  const filePath = path.join(versionDir, "steam_settings", "achievements.json");
   if (!fs.existsSync(filePath)) return [];
 
   try {

@@ -63,7 +63,7 @@
 
       <!-- Main content — mirrors client layout: description left, images+achievements right -->
       <div class="mt-8 w-full bg-zinc-900 px-4 sm:px-8 py-6">
-        <div class="grid grid-cols-[2fr,1fr] gap-8">
+        <div class="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-8">
           <!-- Left column: description + metadata + leaderboards + similar -->
           <div class="space-y-4">
             <!-- Collapsible About (matches client style) -->

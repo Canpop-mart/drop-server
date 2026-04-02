@@ -23,31 +23,18 @@
     </div>
 
     <!-- Filter by game -->
-    <div class="flex gap-2 flex-wrap mb-6">
-      <button
-        :class="[
-          'px-3 py-1 rounded-full text-xs font-medium transition-colors',
-          !selectedGameId
-            ? 'bg-blue-600 text-white'
-            : 'bg-zinc-800 text-zinc-400 hover:text-zinc-100',
-        ]"
-        @click="selectedGameId = ''"
+    <div class="mb-6">
+      <select
+        v-model="selectedGameId"
+        class="w-full sm:w-64 rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
       >
-        {{ $t("account.achievements.allGames") }}
-      </button>
-      <button
-        v-for="g in gamesWithAchievements"
-        :key="g.id"
-        :class="[
-          'px-3 py-1 rounded-full text-xs font-medium transition-colors',
-          selectedGameId === g.id
-            ? 'bg-blue-600 text-white'
-            : 'bg-zinc-800 text-zinc-400 hover:text-zinc-100',
-        ]"
-        @click="selectedGameId = g.id"
-      >
-        {{ g.mName }}
-      </button>
+        <option value="">
+          {{ $t("account.achievements.allGames") }}
+        </option>
+        <option v-for="g in gamesWithAchievements" :key="g.id" :value="g.id">
+          {{ g.mName }}
+        </option>
+      </select>
     </div>
 
     <!-- Sort toggle -->

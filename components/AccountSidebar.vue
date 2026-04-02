@@ -41,13 +41,12 @@
 <script setup lang="ts">
 import {
   BellIcon,
-  HomeIcon,
   LockClosedIcon,
   DevicePhoneMobileIcon,
-  SparklesIcon,
   TrophyIcon,
   WrenchScrewdriverIcon,
   CodeBracketIcon,
+  UserCircleIcon,
 } from "@heroicons/vue/24/outline";
 import { UserIcon } from "@heroicons/vue/24/solid";
 import type { Component } from "vue";
@@ -59,9 +58,9 @@ const navigation: Ref<
   (NavigationItem & { icon: Component; count?: number })[]
 > = computed(() => [
   {
-    label: t("account.home.title"),
+    label: t("account.home.profileSection"),
     route: "/account",
-    icon: HomeIcon,
+    icon: UserCircleIcon,
     prefix: "/account",
   },
   {
@@ -75,12 +74,6 @@ const navigation: Ref<
     route: "/account/devices",
     prefix: "/account/devices",
     icon: DevicePhoneMobileIcon,
-  },
-  {
-    label: t("account.showcase.title"),
-    route: "/account/showcase",
-    prefix: "/account/showcase",
-    icon: SparklesIcon,
   },
   {
     label: t("account.achievements.title"),

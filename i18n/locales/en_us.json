@@ -20,7 +20,14 @@
       "title": "Devices"
     },
     "home": {
-      "title": "Home"
+      "bannerUpload": "Upload Banner",
+      "bio": "Bio",
+      "bioPlaceholder": "Write something about yourself...",
+      "displayName": "Display Name",
+      "profileSaved": "Profile saved!",
+      "profileSection": "Edit Profile",
+      "saveProfile": "Save Profile",
+      "title": "Profile"
     },
     "notifications": {
       "all": "View all {arrow}",
