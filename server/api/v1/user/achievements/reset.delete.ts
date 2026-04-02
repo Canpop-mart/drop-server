@@ -6,7 +6,7 @@ import prisma from "~/server/internal/db/database";
  * Optionally accepts a `gameId` query param to reset only one game's achievements.
  */
 export default defineEventHandler(async (h3) => {
-  const user = await aclManager.getUserACL(h3, ["user:store:read"]);
+  const user = await aclManager.getUserACL(h3, ["store:read"]);
   if (!user) throw createError({ statusCode: 403 });
 
   const gameId = getQuery(h3).gameId as string | undefined;
