@@ -822,7 +822,7 @@ type ShowcaseItem = {
   gameId: string | null;
   itemId: string | null;
   title: string;
-  data: { iconUrl?: string } | null;
+  data: Record<string, unknown> | null;
   game?: {
     id: string;
     mName: string;
