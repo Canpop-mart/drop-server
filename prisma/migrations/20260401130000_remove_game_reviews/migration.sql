@@ -12,15 +12,23 @@ DROP INDEX IF EXISTS "GameReview_rating_idx";
 -- DropTable
 DROP TABLE IF EXISTS "GameReview";
 
--- Remove 'Review' from ShowcaseType enum
--- Postgres requires creating a new enum type without the value
+-- Remove 'Review' from ShowcaseType enum (safe: only if both enum and table exist)
 DO $$ BEGIN
-  IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ShowcaseType') THEN
+  IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ShowcaseType')
+     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ProfileShowcase')
+  THEN
     -- Only remove if no rows reference 'Review'
     UPDATE "ProfileShowcase" SET "type" = 'Custom' WHERE "type" = 'Review';
     -- Create replacement enum without 'Review'
     CREATE TYPE "ShowcaseType_new" AS ENUM ('FavoriteGame', 'Achievement', 'GameStats', 'Custom');
     ALTER TABLE "ProfileShowcase" ALTER COLUMN "type" TYPE "ShowcaseType_new" USING ("type"::text::"ShowcaseType_new");
+    DROP TYPE "ShowcaseType";
+    ALTER TYPE "ShowcaseType_new" RENAME TO "ShowcaseType";
+  ELSIF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ShowcaseType')
+        AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ProfileShowcase')
+  THEN
+    -- Table doesn't exist yet — just replace the enum directly
+    CREATE TYPE "ShowcaseType_new" AS ENUM ('FavoriteGame', 'Achievement', 'GameStats', 'Custom');
     DROP TYPE "ShowcaseType";
     ALTER TYPE "ShowcaseType_new" RENAME TO "ShowcaseType";
   END IF;
