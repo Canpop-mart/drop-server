@@ -48,12 +48,30 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
       <!-- Activity feed (2/3 width) -->
       <div class="lg:col-span-2">
-        <h2 class="text-xl font-bold font-display text-zinc-100 mb-4">
-          {{ $t("community.recentActivity") }}
-        </h2>
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+          <h2 class="text-xl font-bold font-display text-zinc-100">
+            {{ $t("community.recentActivity") }}
+          </h2>
+          <!-- Filter pills -->
+          <div class="flex gap-2 flex-wrap">
+            <button
+              v-for="f in activityFilters"
+              :key="f.value"
+              :class="[
+                'px-3 py-1 rounded-full text-xs font-medium transition-colors',
+                activityFilter === f.value
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-zinc-800 text-zinc-400 hover:text-zinc-100',
+              ]"
+              @click="activityFilter = f.value"
+            >
+              {{ f.label }}
+            </button>
+          </div>
+        </div>
         <ActivityFeed
-          :items="activity"
-          :has-more="hasMore"
+          :items="filteredActivity"
+          :has-more="hasMore && activityFilter === 'all'"
           :loading-more="loadingMore"
           @load-more="loadMore"
         />
@@ -100,16 +118,33 @@ type ActivityItem = {
   };
 };
 
-const LIMIT = 30;
+const LIMIT = 15;
 const activity = ref<ActivityItem[]>([]);
 const hasMore = ref(false);
 const loadingMore = ref(false);
+
+// Activity type filter
+const activityFilter = ref<"all" | "session" | "achievement" | "request">(
+  "all",
+);
+
+const activityFilters = computed(() => [
+  { value: "all", label: t("community.activity.filterAll") },
+  { value: "session", label: t("community.activity.filterSessions") },
+  { value: "achievement", label: t("community.activity.filterAchievements") },
+  { value: "request", label: t("community.activity.filterRequests") },
+]);
+
+const filteredActivity = computed(() =>
+  activityFilter.value === "all"
+    ? activity.value
+    : activity.value.filter((item) => item.type === activityFilter.value),
+);
 
 const initialActivity = (await $dropFetch("/api/v1/community/activity", {
   query: { limit: LIMIT + 1 },
 }).catch(() => [])) as ActivityItem[];
 
-// If we got more than LIMIT, there are more pages
 if (initialActivity.length > LIMIT) {
   hasMore.value = true;
   activity.value = initialActivity.slice(0, LIMIT);

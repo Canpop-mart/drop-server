@@ -45,6 +45,7 @@ import {
   LockClosedIcon,
   DevicePhoneMobileIcon,
   SparklesIcon,
+  TrophyIcon,
   WrenchScrewdriverIcon,
   CodeBracketIcon,
 } from "@heroicons/vue/24/outline";
@@ -80,6 +81,12 @@ const navigation: Ref<
     route: "/account/showcase",
     prefix: "/account/showcase",
     icon: SparklesIcon,
+  },
+  {
+    label: t("account.achievements.title"),
+    route: "/account/achievements",
+    prefix: "/account/achievements",
+    icon: TrophyIcon,
   },
   {
     label: t("account.token.title"),

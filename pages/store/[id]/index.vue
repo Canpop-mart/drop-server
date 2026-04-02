@@ -288,6 +288,7 @@
                   :key="a.id"
                   :achievement="a"
                   :unlocked-at="a.unlockedAt"
+                  :rarity="a.rarity"
                 />
                 <div class="mt-4 text-sm text-zinc-400">
                   {{

@@ -36,10 +36,94 @@ export default defineEventHandler(async (h3) => {
 
   if (body.provider === "RetroAchievements") {
     scanned = await scanRetroAchievements(body.gameId, link.externalGameId);
+  } else if (body.provider === "Steam") {
+    scanned = await scanSteamAchievements(body.gameId, link.externalGameId);
   }
 
   return { scanned };
 });
+
+async function scanSteamAchievements(
+  gameId: string,
+  steamAppId: string,
+): Promise<number> {
+  const apiKey = process.env.STEAM_API_KEY;
+  if (!apiKey)
+    throw createError({
+      statusCode: 500,
+      statusMessage: "STEAM_API_KEY not configured.",
+    });
+
+  // Fetch achievement schema (metadata)
+  const schemaUrl = `https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=${apiKey}&appid=${steamAppId}&format=json`;
+  const schemaRes = await fetch(schemaUrl);
+
+  if (!schemaRes.ok) {
+    throw createError({
+      statusCode: 502,
+      statusMessage: "Failed to fetch from Steam API.",
+    });
+  }
+
+  const schemaData = await schemaRes.json();
+  const achievements = schemaData?.game?.availableGameStats?.achievements;
+  if (!achievements || !Array.isArray(achievements)) return 0;
+
+  // Also fetch global achievement percentages for rarity
+  let globalStats: Record<string, number> = {};
+  try {
+    const globalUrl = `https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid=${steamAppId}&format=json`;
+    const globalRes = await fetch(globalUrl);
+    if (globalRes.ok) {
+      const globalData = await globalRes.json();
+      const entries = globalData?.achievementpercentages?.achievements ?? [];
+      for (const entry of entries) {
+        globalStats[entry.name] = entry.percent;
+      }
+    }
+  } catch {
+    // Non-critical — skip global stats
+  }
+
+  let count = 0;
+  for (const ach of achievements) {
+    const apiName = String(ach.name ?? "");
+    const title = String(ach.displayName ?? apiName);
+    const description = String(ach.description ?? "");
+    const iconUrl = ach.icon ? String(ach.icon) : "";
+    const iconLockedUrl = ach.icongray ? String(ach.icongray) : "";
+
+    await prisma.achievement.upsert({
+      where: {
+        gameId_provider_externalId: {
+          gameId,
+          provider: ExternalAccountProvider.Steam,
+          externalId: apiName,
+        },
+      },
+      create: {
+        gameId,
+        provider: ExternalAccountProvider.Steam,
+        externalId: apiName,
+        title,
+        description,
+        iconUrl,
+        iconLockedUrl,
+        displayOrder: count,
+      },
+      update: {
+        title,
+        description,
+        iconUrl,
+        iconLockedUrl,
+        displayOrder: count,
+      },
+    });
+    count++;
+  }
+
+  return count;
+}
 
 async function scanRetroAchievements(
   gameId: string,

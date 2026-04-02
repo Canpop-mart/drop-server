@@ -13,5 +13,15 @@ export default defineEventHandler(async (h3) => {
     where: { gameId },
   });
 
-  return links;
+  const achievementCounts = await prisma.achievement.groupBy({
+    by: ["provider"],
+    where: { gameId },
+    _count: true,
+  });
+
+  return links.map((link) => ({
+    ...link,
+    achievementCount:
+      achievementCounts.find((c) => c.provider === link.provider)?._count ?? 0,
+  }));
 });

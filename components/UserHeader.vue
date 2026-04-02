@@ -227,6 +227,11 @@ const navigation: Ref<Array<NavigationItem>> = computed(() => [
     route: "/news",
     label: t("userHeader.links.news"),
   },
+  {
+    prefix: "/requests",
+    route: "/requests",
+    label: t("userHeader.links.requests"),
+  },
 ]);
 
 const currentPageIndex = useCurrentNavigationIndex(navigation.value);

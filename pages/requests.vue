@@ -1,5 +1,5 @@
 <template>
-  <div class="max-w-4xl mx-auto px-4 py-8">
+  <div class="max-w-6xl mx-auto px-4 py-8">
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
       <div>
@@ -279,8 +279,9 @@ useHead({ title: t("requests.title") });
 
 const requestStatusLabels = computed<Record<string, string>>(() => ({
   Approved: t("requests.status.Approved"),
+  Denied: t("requests.status.Denied"),
   Pending: t("requests.status.Pending"),
-  Rejected: t("requests.status.Rejected"),
+  Withdrawn: t("requests.status.Withdrawn"),
 }));
 
 const user = useUser();

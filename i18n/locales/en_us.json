@@ -1,5 +1,15 @@
 {
   "account": {
+    "achievements": {
+      "allGames": "All Games",
+      "empty": "No achievements unlocked yet. Play some games!",
+      "sortGame": "By Game",
+      "sortNewest": "Newest",
+      "sortOldest": "Oldest",
+      "subtitle": "{count} achievements unlocked",
+      "sync": "Sync Now",
+      "title": "Achievements"
+    },
     "devices": {
       "capabilities": "Capabilities",
       "lastConnected": "Last Connected",
@@ -88,10 +98,32 @@
     }
   },
   "achievements": {
-    "locked": "Locked"
+    "locked": "Locked",
+    "unlocked": "Achievement Unlocked!"
   },
   "actions": "Actions",
   "add": "Add",
+  "admin": {
+    "achievements": {
+      "achievementCount": "{count} achievements",
+      "achievementsList": "Achievements ({count})",
+      "addLink": "Add Link",
+      "chooseGame": "-- Choose a game --",
+      "externalId": "External Game ID",
+      "externalLinks": "External Platform Links",
+      "noAchievements": "No achievements imported yet. Add an external link and scan.",
+      "noLinks": "No external links configured for this game.",
+      "provider": "Provider",
+      "resetAll": "Reset All",
+      "resetConfirm": "Delete all achievements and unlock records for this game? This cannot be undone.",
+      "scan": "Scan",
+      "scanComplete": "Scanned {count} achievements.",
+      "scanFailed": "Scan failed. Check server logs.",
+      "selectGame": "Game",
+      "subtitle": "Manage achievement imports, external links, and scanning.",
+      "title": "Achievements"
+    }
+  },
   "adminTitle": "Admin Dashboard - {0}",
   "adminTitleTemplate": "{0} - Admin - {1}",
   "auth": {
@@ -207,6 +239,10 @@
   "community": {
     "activity": {
       "empty": "No activity yet",
+      "filterAchievements": "Achievements",
+      "filterAll": "All",
+      "filterRequests": "Requests",
+      "filterSessions": "Sessions",
       "in": "in",
       "played": "played",
       "requestApproved": "had their request approved:",
@@ -371,6 +407,7 @@
   },
   "header": {
     "admin": {
+      "achievements": "Achievements",
       "admin": "Admin",
       "home": "Home",
       "library": "Library",
@@ -929,7 +966,8 @@
     "links": {
       "community": "Community",
       "library": "Library",
-      "news": "News"
+      "news": "News",
+      "requests": "Requests"
     },
     "profile": {
       "admin": "Admin Dashboard",
