@@ -241,7 +241,7 @@
               >
                 <img
                   v-if="slot.data?.iconUrl"
-                  :src="slot.data.iconUrl"
+                  :src="String(slot.data.iconUrl)"
                   class="size-full object-cover"
                 />
                 <TrophyIcon v-else class="size-6 text-yellow-500" />
@@ -822,7 +822,8 @@ type ShowcaseItem = {
   gameId: string | null;
   itemId: string | null;
   title: string;
-  data: Record<string, unknown> | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: any;
   game?: {
     id: string;
     mName: string;
