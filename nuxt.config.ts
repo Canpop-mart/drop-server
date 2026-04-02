@@ -247,6 +247,7 @@ export default defineNuxtConfig({
   },
 
   security: {
+    sri: false,
     headers: {
       contentSecurityPolicy: {
         "upgrade-insecure-requests": false,

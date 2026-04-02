@@ -210,20 +210,21 @@
           <!-- Completion badge for game items -->
           <div
             v-if="
-              item.type !== 'GameStats' && item.gameStats?.achievementsTotal > 0
+              item.type !== 'GameStats' &&
+              (item.gameStats?.achievementsTotal ?? 0) > 0
             "
             class="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold"
             :class="
-              item.gameStats.achievementsUnlocked >=
-              item.gameStats.achievementsTotal
+              (item.gameStats?.achievementsUnlocked ?? 0) >=
+              (item.gameStats?.achievementsTotal ?? 1)
                 ? 'bg-yellow-500/90 text-yellow-950'
                 : 'bg-zinc-900/80 text-zinc-300'
             "
           >
             {{
               Math.round(
-                (item.gameStats.achievementsUnlocked /
-                  item.gameStats.achievementsTotal) *
+                ((item.gameStats?.achievementsUnlocked ?? 0) /
+                  (item.gameStats?.achievementsTotal ?? 1)) *
                   100,
               )
             }}%

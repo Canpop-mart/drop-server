@@ -10,13 +10,6 @@
       "sync": "Sync Now",
       "title": "Achievements"
     },
-    "favorites": {
-      "description": "Pick up to 10 games to feature on your profile.",
-      "save": "Save Favorites",
-      "saved": "Favorites saved!",
-      "searchPlaceholder": "Search for a game to add...",
-      "title": "Favorite Games"
-    },
     "devices": {
       "capabilities": "Capabilities",
       "lastConnected": "Last Connected",
@@ -25,6 +18,13 @@
       "revoke": "Revoke",
       "subheader": "Manage the devices authorized to access your Drop account.",
       "title": "Devices"
+    },
+    "favorites": {
+      "description": "Pick up to 10 games to feature on your profile.",
+      "save": "Save Favorites",
+      "saved": "Favorites saved!",
+      "searchPlaceholder": "Search for a game to add...",
+      "title": "Favorite Games"
     },
     "home": {
       "avatarUpload": "Upload Avatar",
@@ -85,9 +85,9 @@
       "addTitle": "Add Showcase Item",
       "customTitle": "Title",
       "description": "Choose up to 6 items to feature on your profile.",
+      "noAchievements": "No achievements found for this game.",
       "save": "Save Showcase",
       "saved": "Showcase saved!",
-      "noAchievements": "No achievements found for this game.",
       "selectAchievement": "Select an achievement",
       "selectGame": "Select a game",
       "title": "Showcase",
@@ -956,13 +956,13 @@
   "uploadFile": "Upload file",
   "user": {
     "editProfile": "Edit profile",
+    "favorites": {
+      "title": "Favorite Games"
+    },
     "noActivity": "No recent activity",
     "notFound": "User not found",
     "recent": "Recent activity (TODO)",
     "recentSub": "Recent activity by this user",
-    "favorites": {
-      "title": "Favorite Games"
-    },
     "showcase": {
       "custom": "Custom",
       "title": "Showcase",
