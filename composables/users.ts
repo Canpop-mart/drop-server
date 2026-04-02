@@ -17,7 +17,10 @@ export const useUsers = () =>
 export const fetchUsers = async () => {
   const users = useUsers();
 
-  const newValue: User[] = await $dropFetch("/api/v1/admin/users");
+  const newValue = (await $dropFetch("/api/v1/admin/users")) as Exclude<
+    typeof users.value,
+    undefined
+  >;
   users.value = newValue;
   return newValue;
 };

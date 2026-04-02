@@ -514,28 +514,28 @@
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Fullscreen image overlay -->
-  <Teleport to="body">
-    <div
-      v-if="fullscreenImage"
-      class="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
-      @click="fullscreenImage = null"
-    >
-      <img
-        :src="useObject(fullscreenImage)"
-        class="max-w-full max-h-full object-contain rounded"
-        @click.stop
-      />
-      <button
-        class="absolute top-4 right-4 text-zinc-400 hover:text-zinc-100 transition-colors"
+    <!-- Fullscreen image overlay — Teleport to body but kept inside single root -->
+    <Teleport to="body">
+      <div
+        v-if="fullscreenImage"
+        class="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
         @click="fullscreenImage = null"
       >
-        <XMarkIcon class="size-8" />
-      </button>
-    </div>
-  </Teleport>
+        <img
+          :src="useObject(fullscreenImage)"
+          class="max-w-full max-h-full object-contain rounded"
+          @click.stop
+        />
+        <button
+          class="absolute top-4 right-4 text-zinc-400 hover:text-zinc-100 transition-colors"
+          @click="fullscreenImage = null"
+        >
+          <XMarkIcon class="size-8" />
+        </button>
+      </div>
+    </Teleport>
+  </div>
 </template>
 
 <script setup lang="ts">

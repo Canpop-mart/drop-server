@@ -239,7 +239,7 @@ const activityLoading = ref(false);
 const achievementIconErrors = reactive<Record<string, boolean>>({});
 const achievementIcon = (a: { achievement?: { iconUrl?: string } }) => {
   const url = a.achievement?.iconUrl;
-  return url && url.trim() !== "" ? url : null;
+  return url && url.trim() !== "" ? url : undefined;
 };
 
 loading.value = false;
