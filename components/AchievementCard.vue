@@ -10,10 +10,11 @@
       "
     >
       <img
-        v-if="iconSrc"
+        v-if="iconSrc && !iconErrored"
         :src="iconSrc"
         class="size-10 rounded shrink-0"
         :class="{ grayscale: !unlockedAt }"
+        @error="iconErrored = true"
       />
       <div
         v-else
@@ -71,6 +72,10 @@ const props = defineProps<{
 }>();
 
 const formatDate = (d: Date | string) => new Date(d).toLocaleDateString();
+
+// Track whether the image URL failed to load — if so, show trophy fallback
+const iconErrored = ref(false);
+watch(() => props.achievement.id, () => { iconErrored.value = false; });
 
 // Pick the best icon URL — prefer unlocked icon when unlocked, locked icon when locked
 const iconSrc = computed(() => {
