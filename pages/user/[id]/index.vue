@@ -272,12 +272,6 @@ import { useUser } from "~/composables/user";
 
 const { t } = useI18n();
 // Static map — avoids @intlify/vue-i18n/no-dynamic-keys violation
-const showcaseTypeLabels = computed<Record<string, string>>(() => ({
-  Achievement: t("user.showcase.types.Achievement"),
-  Custom: t("user.showcase.types.Custom"),
-  FavoriteGame: t("user.showcase.types.FavoriteGame"),
-}));
-
 const THEME_MAP: Record<string, { from: string; to: string }> = {
   default: { from: "#1e3a5f", to: "#581c87" },
   ocean: { from: "#0c4a6e", to: "#164e63" },
@@ -322,9 +316,24 @@ const showcase = (await $dropFetch(`/api/v1/user/${id}/showcase`).catch(
   items?: Array<{
     id: string;
     type: string;
-    game?: any;
-    achievement?: any;
-    gameStats?: any;
+    game?: {
+      id: string;
+      mName: string;
+      mIconObjectId?: string;
+      mCoverObjectId?: string;
+      mBannerObjectId?: string;
+    } | null;
+    achievement?: {
+      id: string;
+      title?: string;
+      description?: string;
+      iconUrl?: string;
+    } | null;
+    gameStats?: {
+      playtimeSeconds: number;
+      achievementsUnlocked: number;
+      achievementsTotal: number;
+    };
     title?: string;
     itemId?: string;
   }>;

@@ -810,11 +810,6 @@ const allGames = await $dropFetch<{
 
 const MAX_SLOTS = 6;
 
-const showcaseTypeLabels = computed<Record<string, string>>(() => ({
-  Achievement: t("user.showcase.types.Achievement"),
-  Custom: t("user.showcase.types.Custom"),
-  FavoriteGame: t("user.showcase.types.FavoriteGame"),
-}));
 // Fetch current showcase
 const currentShowcase = currentUser.value?.id
   ? await $dropFetch(`/api/v1/user/${currentUser.value.id}/showcase`).catch(
@@ -827,7 +822,7 @@ type ShowcaseItem = {
   gameId: string | null;
   itemId: string | null;
   title: string;
-  data: any;
+  data: unknown;
   game?: {
     id: string;
     mName: string;
@@ -838,10 +833,10 @@ type ShowcaseItem = {
 
 // Split current showcase into game and achievement items
 const existingGameItems = (currentShowcase?.items ?? []).filter(
-  (i: any) => i.type === "FavoriteGame",
+  (i: { type?: string }) => i.type === "FavoriteGame",
 );
 const existingAchItems = (currentShowcase?.items ?? []).filter(
-  (i: any) => i.type === "Achievement",
+  (i: { type?: string }) => i.type === "Achievement",
 );
 
 const gameSlots = ref<(ShowcaseItem | null)[]>(
