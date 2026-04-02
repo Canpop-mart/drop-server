@@ -36,7 +36,9 @@ export default defineEventHandler(async (h3) => {
     });
   }
 
-  console.log(`[ACH-SCAN] Scan requested for game=${body.gameId} provider=${body.provider}`);
+  console.log(
+    `[ACH-SCAN] Scan requested for game=${body.gameId} provider=${body.provider}`,
+  );
   const scanned = await scanGoldbergAchievements(body.gameId);
   return { scanned };
 });
@@ -48,7 +50,9 @@ export default defineEventHandler(async (h3) => {
  */
 async function scanGoldbergAchievements(gameId: string): Promise<number> {
   const versionDir = await resolveGameVersionDir(gameId);
-  console.log(`[ACH-SCAN] resolveGameVersionDir => ${versionDir ?? "undefined"}`);
+  console.log(
+    `[ACH-SCAN] resolveGameVersionDir => ${versionDir ?? "undefined"}`,
+  );
   if (!versionDir) {
     throw createError({
       statusCode: 400,
@@ -58,7 +62,9 @@ async function scanGoldbergAchievements(gameId: string): Promise<number> {
   }
 
   const definitions = readGoldbergDefinitions(versionDir);
-  console.log(`[ACH-SCAN] readGoldbergDefinitions => ${definitions.length} definitions from ${versionDir}`);
+  console.log(
+    `[ACH-SCAN] readGoldbergDefinitions => ${definitions.length} definitions from ${versionDir}`,
+  );
   if (definitions.length === 0) {
     throw createError({
       statusCode: 404,
