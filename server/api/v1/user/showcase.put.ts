@@ -3,7 +3,7 @@ import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
 
-const MAX_SHOWCASE_ITEMS = 6;
+const MAX_SHOWCASE_ITEMS = 12;
 
 const ShowcaseItem = type({
   type: "'FavoriteGame' | 'Achievement' | 'Review' | 'GameStats' | 'Custom'",

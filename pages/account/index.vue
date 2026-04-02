@@ -160,20 +160,19 @@
       </div>
     </section>
 
-    <!-- Showcase section (moved from separate page) -->
+    <!-- Game Showcase -->
     <section>
       <h2 class="text-xl font-bold font-display text-zinc-100 mb-1">
-        {{ $t("account.showcase.title") }}
+        {{ $t("account.showcase.gameTitle") }}
       </h2>
       <p class="text-sm text-zinc-400 mb-6">
-        {{ $t("account.showcase.description") }}
+        {{ $t("account.showcase.gameDescription") }}
       </p>
 
-      <!-- Current showcase slots -->
       <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         <div
-          v-for="(slot, idx) in slots"
-          :key="idx"
+          v-for="(slot, idx) in gameSlots"
+          :key="'game-' + idx"
           class="relative rounded-lg overflow-hidden bg-zinc-800/50 ring-1 ring-white/5 group"
         >
           <div class="aspect-[2/3]">
@@ -194,17 +193,12 @@
                 class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-950/90 to-transparent p-2"
               >
                 <p class="text-xs font-medium text-zinc-200 truncate">
-                  {{
-                    slot.title || slot.game?.mName || $t("user.showcase.custom")
-                  }}
-                </p>
-                <p class="text-[10px] text-zinc-400 uppercase tracking-wide">
-                  {{ showcaseTypeLabels[slot.type] }}
+                  {{ slot.game?.mName || slot.title }}
                 </p>
               </div>
               <button
                 class="absolute top-1 right-1 p-1 rounded-full bg-zinc-900/80 text-zinc-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                @click="removeSlot(idx)"
+                @click="removeGameSlot(idx)"
               >
                 <XMarkIcon class="size-4" />
               </button>
@@ -212,7 +206,7 @@
             <template v-else>
               <button
                 class="size-full flex flex-col items-center justify-center text-zinc-600 hover:text-zinc-400 transition-colors"
-                @click="openAddDialog(idx)"
+                @click="openGameAddDialog(idx)"
               >
                 <PlusIcon class="size-6 mb-1" />
                 <span class="text-xs">{{
@@ -221,6 +215,62 @@
               </button>
             </template>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Achievement Showcase -->
+    <section>
+      <h2 class="text-xl font-bold font-display text-zinc-100 mb-1">
+        {{ $t("account.showcase.achievementTitle") }}
+      </h2>
+      <p class="text-sm text-zinc-400 mb-6">
+        {{ $t("account.showcase.achievementDescription") }}
+      </p>
+
+      <div class="grid grid-cols-2 gap-2 mb-6">
+        <div
+          v-for="(slot, idx) in achievementSlots"
+          :key="'ach-' + idx"
+          class="relative rounded-lg bg-zinc-800/50 ring-1 ring-white/5 group"
+        >
+          <template v-if="slot">
+            <div class="flex items-center gap-3 p-3">
+              <div
+                class="shrink-0 size-12 rounded-lg overflow-hidden bg-zinc-700/50 flex items-center justify-center"
+              >
+                <img
+                  v-if="slot.data?.iconUrl"
+                  :src="slot.data.iconUrl"
+                  class="size-full object-cover"
+                />
+                <TrophyIcon v-else class="size-6 text-yellow-500" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-semibold text-zinc-100 truncate">
+                  {{ slot.title }}
+                </p>
+                <p class="text-xs text-zinc-400 truncate">
+                  {{ slot.game?.mName }}
+                </p>
+              </div>
+            </div>
+            <button
+              class="absolute top-1 right-1 p-1 rounded-full bg-zinc-900/80 text-zinc-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+              @click="removeAchievementSlot(idx)"
+            >
+              <XMarkIcon class="size-4" />
+            </button>
+          </template>
+          <template v-else>
+            <button
+              class="w-full flex items-center justify-center gap-2 p-3 text-zinc-600 hover:text-zinc-400 transition-colors"
+              @click="openAchievementAddDialog(idx)"
+            >
+              <PlusIcon class="size-5" />
+              <span class="text-xs">{{ $t("account.showcase.addSlot") }}</span>
+            </button>
+          </template>
         </div>
       </div>
 
@@ -407,36 +457,15 @@
                 <DialogTitle
                   class="text-lg font-bold font-display text-zinc-100 mb-4"
                 >
-                  {{ $t("account.showcase.addTitle") }}
+                  {{
+                    addType === "Achievement"
+                      ? $t("account.showcase.addAchievement")
+                      : $t("account.showcase.addGame")
+                  }}
                 </DialogTitle>
 
-                <!-- Type picker -->
+                <!-- Game picker (shared between both modes) -->
                 <div class="mb-4">
-                  <label class="block text-sm font-medium text-zinc-300 mb-2">
-                    {{ $t("account.showcase.type") }}
-                  </label>
-                  <div class="grid grid-cols-2 gap-2">
-                    <button
-                      v-for="st in showcaseTypes"
-                      :key="st"
-                      :class="[
-                        'px-3 py-2 rounded-md text-sm font-medium transition-colors',
-                        addType === st
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700',
-                      ]"
-                      @click="addType = st"
-                    >
-                      {{ showcaseTypeLabels[st] }}
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Game picker -->
-                <div
-                  v-if="addType === 'FavoriteGame' || addType === 'Achievement'"
-                  class="mb-4"
-                >
                   <label class="block text-sm font-medium text-zinc-300 mb-2">
                     {{ $t("account.showcase.selectGame") }}
                   </label>
@@ -476,7 +505,7 @@
                   </div>
                 </div>
 
-                <!-- Achievement picker (step 2 after game selection) -->
+                <!-- Achievement picker (only in achievement mode) -->
                 <div v-if="addType === 'Achievement' && addGameId" class="mb-4">
                   <label class="block text-sm font-medium text-zinc-300 mb-2">
                     {{ $t("account.showcase.selectAchievement") }}
@@ -525,19 +554,6 @@
                   </div>
                 </div>
 
-                <!-- Custom title -->
-                <div v-if="addType === 'Custom'" class="mb-4">
-                  <label class="block text-sm font-medium text-zinc-300 mb-2">
-                    {{ $t("account.showcase.customTitle") }}
-                  </label>
-                  <input
-                    v-model="addTitle"
-                    type="text"
-                    maxlength="64"
-                    class="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
-                  />
-                </div>
-
                 <!-- Actions -->
                 <div class="flex justify-end gap-2 mt-6">
                   <button
@@ -570,6 +586,7 @@
 
 <script setup lang="ts">
 import { SparklesIcon, XMarkIcon, PlusIcon } from "@heroicons/vue/24/outline";
+import { TrophyIcon } from "@heroicons/vue/24/solid";
 import {
   Dialog,
   DialogPanel,
@@ -798,8 +815,6 @@ const showcaseTypeLabels = computed<Record<string, string>>(() => ({
   Custom: t("user.showcase.types.Custom"),
   FavoriteGame: t("user.showcase.types.FavoriteGame"),
 }));
-const showcaseTypes: ShowcaseType[] = ["FavoriteGame", "Achievement", "Custom"];
-
 // Fetch current showcase
 const currentShowcase = currentUser.value?.id
   ? await $dropFetch(`/api/v1/user/${currentUser.value.id}/showcase`).catch(
@@ -812,7 +827,7 @@ type ShowcaseItem = {
   gameId: string | null;
   itemId: string | null;
   title: string;
-  data: unknown;
+  data: any;
   game?: {
     id: string;
     mName: string;
@@ -821,9 +836,24 @@ type ShowcaseItem = {
   } | null;
 };
 
-const slots = ref<(ShowcaseItem | null)[]>(
+// Split current showcase into game and achievement items
+const existingGameItems = (currentShowcase?.items ?? []).filter(
+  (i: any) => i.type === "FavoriteGame",
+);
+const existingAchItems = (currentShowcase?.items ?? []).filter(
+  (i: any) => i.type === "Achievement",
+);
+
+const gameSlots = ref<(ShowcaseItem | null)[]>(
   Array.from({ length: MAX_SLOTS }, (_, i) =>
-    currentShowcase?.items?.[i] ? { ...currentShowcase.items[i] } : null,
+    existingGameItems[i] ? { ...existingGameItems[i] } : null,
+  ),
+);
+
+const ACHIEVEMENT_SLOTS = 6;
+const achievementSlots = ref<(ShowcaseItem | null)[]>(
+  Array.from({ length: ACHIEVEMENT_SLOTS }, (_, i) =>
+    existingAchItems[i] ? { ...existingAchItems[i] } : null,
   ),
 );
 
@@ -841,9 +871,8 @@ const addSlotIndex = ref(0);
 const addType = ref<ShowcaseType>("FavoriteGame");
 const addGameId = ref<string | null>(null);
 const addItemId = ref<string | null>(null);
-const addTitle = ref("");
 
-// Achievement picker for Achievement showcase type
+// Achievement picker
 type AchievementOption = {
   id: string;
   title: string;
@@ -873,12 +902,21 @@ watch(
   },
 );
 
-function openAddDialog(idx: number) {
+function openGameAddDialog(idx: number) {
   addSlotIndex.value = idx;
   addType.value = "FavoriteGame";
   addGameId.value = null;
   addItemId.value = null;
-  addTitle.value = "";
+  gameSearch.value = "";
+  gameAchievements.value = [];
+  addDialogOpen.value = true;
+}
+
+function openAchievementAddDialog(idx: number) {
+  addSlotIndex.value = idx;
+  addType.value = "Achievement";
+  addGameId.value = null;
+  addItemId.value = null;
   gameSearch.value = "";
   gameAchievements.value = [];
   addDialogOpen.value = true;
@@ -888,28 +926,20 @@ const canAdd = computed(() => {
   if (addType.value === "Achievement") {
     return !!addGameId.value && !!addItemId.value;
   }
-  if (addType.value === "FavoriteGame") {
-    return !!addGameId.value;
-  }
-  if (addType.value === "Custom") {
-    return addTitle.value.trim().length > 0;
-  }
-  return true;
+  return !!addGameId.value;
 });
 
 function confirmAdd() {
   if (!canAdd.value) return;
   const game = allGames?.results?.find((g) => g.id === addGameId.value) ?? null;
   const ach = gameAchievements.value.find((a) => a.id === addItemId.value);
-  slots.value[addSlotIndex.value] = {
+
+  const item: ShowcaseItem = {
     type: addType.value,
     gameId: addGameId.value,
     itemId: addItemId.value,
     title:
-      addTitle.value ||
-      (addType.value === "Achievement" && ach ? ach.title : "") ||
-      game?.mName ||
-      "",
+      addType.value === "Achievement" && ach ? ach.title : game?.mName || "",
     data:
       addType.value === "Achievement" && ach
         ? { iconUrl: ach.iconUrl, description: ach.description }
@@ -923,11 +953,21 @@ function confirmAdd() {
         }
       : null,
   };
+
+  if (addType.value === "FavoriteGame") {
+    gameSlots.value[addSlotIndex.value] = item;
+  } else {
+    achievementSlots.value[addSlotIndex.value] = item;
+  }
   addDialogOpen.value = false;
 }
 
-function removeSlot(idx: number) {
-  slots.value[idx] = null;
+function removeGameSlot(idx: number) {
+  gameSlots.value[idx] = null;
+}
+
+function removeAchievementSlot(idx: number) {
+  achievementSlots.value[idx] = null;
 }
 
 // Save showcase
@@ -938,7 +978,16 @@ async function saveShowcase() {
   showcaseSaving.value = true;
   showcaseSaveMessage.value = "";
   try {
-    const items = slots.value
+    const gameItems = gameSlots.value
+      .filter((s): s is ShowcaseItem => s !== null)
+      .map((s) => ({
+        type: s.type,
+        gameId: s.gameId,
+        itemId: s.itemId,
+        title: s.title,
+        data: s.data,
+      }));
+    const achItems = achievementSlots.value
       .filter((s): s is ShowcaseItem => s !== null)
       .map((s) => ({
         type: s.type,
@@ -949,7 +998,7 @@ async function saveShowcase() {
       }));
     await $dropFetch("/api/v1/user/showcase", {
       method: "PUT",
-      body: { items },
+      body: { items: [...gameItems, ...achItems] },
     });
     showcaseSaveMessage.value = t("account.showcase.saved");
     setTimeout(() => {

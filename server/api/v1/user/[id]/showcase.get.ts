@@ -23,7 +23,7 @@ export default defineEventHandler(async (h3) => {
   const showcases = await prisma.profileShowcase.findMany({
     where: { userId: user.id },
     orderBy: { sortOrder: "asc" },
-    take: 6,
+    take: 12,
     select: {
       id: true,
       type: true,

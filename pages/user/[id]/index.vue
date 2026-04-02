@@ -74,14 +74,14 @@
         </p>
       </div>
     </div>
-    <!-- Showcase -->
-    <div v-if="showcase?.items?.length" class="mb-6">
+    <!-- Game Showcase -->
+    <div v-if="gameShowcaseItems.length" class="mb-6">
       <h2 class="text-lg font-bold font-display text-zinc-100 mb-3">
         {{ $t("user.showcase.title") }}
       </h2>
       <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <NuxtLink
-          v-for="item in showcase.items"
+          v-for="item in gameShowcaseItems"
           :key="item.id"
           :to="item.game ? `/store/${item.game.id}` : undefined"
           class="group relative rounded-lg overflow-hidden bg-zinc-800/50 ring-1 ring-white/5 hover:ring-blue-500/30 transition-all duration-200"
@@ -101,55 +101,14 @@
               <SparklesIcon class="size-8" />
             </div>
           </div>
-          <!-- Achievement overlay -->
           <div
-            v-if="item.type === 'Achievement' && item.achievement"
-            class="absolute inset-0 flex flex-col"
-          >
-            <!-- Top badge -->
-            <div
-              class="flex items-center gap-1 mx-1.5 mt-1.5 px-1.5 py-0.5 rounded-full bg-yellow-500/20 ring-1 ring-yellow-500/40 self-start"
-            >
-              <TrophyIcon class="size-3 text-yellow-400" />
-              <span
-                class="text-[9px] font-semibold text-yellow-300 uppercase tracking-wider"
-                >{{ $t("user.showcase.types.Achievement") }}</span
-              >
-            </div>
-            <div class="flex-1" />
-            <!-- Bottom info -->
-            <div
-              class="bg-gradient-to-t from-zinc-950/95 via-zinc-950/80 to-transparent p-2 pt-6"
-            >
-              <div class="flex items-center gap-1.5 mb-0.5">
-                <img
-                  v-if="item.achievement.iconUrl"
-                  :src="item.achievement.iconUrl"
-                  class="size-5 rounded-sm ring-1 ring-white/20"
-                />
-                <TrophyIcon v-else class="size-5 text-yellow-500" />
-                <p class="text-xs font-semibold text-zinc-100 truncate">
-                  {{ item.achievement.title }}
-                </p>
-              </div>
-              <p class="text-[10px] text-zinc-400">
-                {{ item.game?.mName }}
-              </p>
-            </div>
-          </div>
-          <!-- Default overlay (FavoriteGame / Custom) -->
-          <div
-            v-else
             class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-950/90 to-transparent p-2"
           >
             <p class="text-xs font-medium text-zinc-200 truncate">
-              {{ item.title || item.game?.mName || $t("user.showcase.custom") }}
-            </p>
-            <p class="text-[10px] text-zinc-400 uppercase tracking-wide">
-              {{ showcaseTypeLabels[item.type] }}
+              {{ item.game?.mName || item.title }}
             </p>
           </div>
-          <!-- Completion badge for game items -->
+          <!-- Completion badge -->
           <div
             v-if="(item.gameStats?.achievementsTotal ?? 0) > 0"
             class="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold"
@@ -169,6 +128,39 @@
             }}%
           </div>
         </NuxtLink>
+      </div>
+    </div>
+
+    <!-- Achievement Showcase -->
+    <div v-if="achievementShowcaseItems.length" class="mb-6">
+      <h2 class="text-lg font-bold font-display text-zinc-100 mb-3">
+        {{ $t("user.showcase.achievementTitle") }}
+      </h2>
+      <div class="grid grid-cols-2 gap-2">
+        <div
+          v-for="item in achievementShowcaseItems"
+          :key="item.id"
+          class="group flex items-center gap-3 rounded-lg bg-zinc-800/50 ring-1 ring-white/5 hover:ring-yellow-500/30 p-3 transition-all duration-200"
+        >
+          <div
+            class="shrink-0 size-12 rounded-lg overflow-hidden bg-zinc-700/50 flex items-center justify-center"
+          >
+            <img
+              v-if="item.achievement?.iconUrl"
+              :src="item.achievement.iconUrl"
+              class="size-full object-cover"
+            />
+            <TrophyIcon v-else class="size-6 text-yellow-500" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-semibold text-zinc-100 truncate">
+              {{ item.achievement?.title || item.title }}
+            </p>
+            <p class="text-xs text-zinc-400 truncate">
+              {{ item.game?.mName }}
+            </p>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -324,8 +316,27 @@ type ActivityAchievement = {
 const activity = (await $dropFetch(`/api/v1/user/${id}/activity`).catch(
   () => null,
 )) as { achievements?: ActivityAchievement[] } | null;
-const showcase = await $dropFetch(`/api/v1/user/${id}/showcase`).catch(
+const showcase = (await $dropFetch(`/api/v1/user/${id}/showcase`).catch(
   () => null,
+)) as {
+  items?: Array<{
+    id: string;
+    type: string;
+    game?: any;
+    achievement?: any;
+    gameStats?: any;
+    title?: string;
+    itemId?: string;
+  }>;
+} | null;
+
+const gameShowcaseItems = computed(() =>
+  (showcase?.items ?? []).filter((i) => i.type === "FavoriteGame"),
+);
+const achievementShowcaseItems = computed(() =>
+  (showcase?.items ?? []).filter(
+    (i) => i.type === "Achievement" && i.achievement,
+  ),
 );
 const activityLoading = ref(false);
 

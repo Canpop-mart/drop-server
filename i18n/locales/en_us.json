@@ -85,11 +85,17 @@
     },
     "settings": "Settings",
     "showcase": {
+      "achievementDescription": "Pick up to 6 achievements to feature on your profile.",
+      "achievementTitle": "Achievement Showcase",
       "add": "Add",
+      "addAchievement": "Add Achievement",
+      "addGame": "Add Game",
       "addSlot": "Add item",
       "addTitle": "Add Showcase Item",
       "customTitle": "Title",
       "description": "Choose up to 6 items to feature on your profile.",
+      "gameDescription": "Pick up to 6 games to feature on your profile.",
+      "gameTitle": "Game Showcase",
       "noAchievements": "No achievements found for this game.",
       "save": "Save Showcase",
       "saved": "Showcase saved!",
@@ -969,8 +975,9 @@
     "recent": "Recent activity (TODO)",
     "recentSub": "Recent activity by this user",
     "showcase": {
+      "achievementTitle": "Achievement Showcase",
       "custom": "Custom",
-      "title": "Showcase",
+      "title": "Game Showcase",
       "types": {
         "Achievement": "Achievement",
         "Custom": "Custom",
