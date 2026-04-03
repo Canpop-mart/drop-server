@@ -8,10 +8,9 @@
  * @see https://github.com/Detanup01/gbe_fork
  */
 
-import fs from "fs";
+import fs, { createWriteStream } from "fs";
 import path from "path";
 import { pipeline } from "stream/promises";
-import { createWriteStream } from "fs";
 import { systemConfig } from "./config/sys-conf";
 
 const GBE_REPO = "Detanup01/gbe_fork";
