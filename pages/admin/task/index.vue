@@ -271,6 +271,16 @@ const scheduledTasks: {
     description:
       "Verifies every game has the files and DB records needed for achievements. Auto-fixes missing setup where possible.",
   },
+  "download:gbe": {
+    name: "Download GBE DLLs",
+    description:
+      "Downloads the latest GBE (Goldberg fork) release from GitHub for use in SSE → GBE upgrades.",
+  },
+  "upgrade:all-to-gbe": {
+    name: "Upgrade All SSE Games to GBE",
+    description:
+      "Scans all games for SmartSteamEmu and replaces it with GBE for proper achievement support. Creates backups of original files.",
+  },
 };
 
 async function startTask(taskGroup: string) {

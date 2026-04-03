@@ -26,6 +26,12 @@ export const taskGroups = {
   "check:goldberg-status": {
     concurrency: false,
   },
+  "download:gbe": {
+    concurrency: false,
+  },
+  "upgrade:all-to-gbe": {
+    concurrency: false,
+  },
 } as const;
 
 export type TaskGroup = keyof typeof taskGroups;

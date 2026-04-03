@@ -43,6 +43,8 @@ export default defineEventHandler(async (h3) => {
     "import:check-integrity",
     "check:game-updates",
     "check:goldberg-status",
+    "download:gbe",
+    "upgrade:all-to-gbe",
   ];
 
   return { runningTasks, historicalTasks, dailyTasks, weeklyTasks, other };
