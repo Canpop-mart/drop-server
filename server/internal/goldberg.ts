@@ -15,12 +15,11 @@ import { ExternalAccountProvider } from "~/prisma/client/enums";
  *
  * On a player's machine the *unlock state* is saved by the emulator.
  * Drop configures Goldberg to use a controlled save directory by writing
- * `saves_folder_name=drop-goldberg` into the game's `steam_settings/configs.user.ini`.
+ * `local_save_path=./drop-goldberg` into the game's `steam_settings/configs.user.ini`.
  * This makes unlocks land at:
- *   %APPDATA%/drop-goldberg/<AppID>/achievements.json  (Windows)
- *   ~/.local/share/drop-goldberg/<AppID>/achievements.json (Linux)
+ *   <install_dir>/drop-goldberg/<AppID>/achievements.json
  *
- * The client also checks fallback paths for common Goldberg forks
+ * The client also checks fallback paths in AppData for common Goldberg forks
  * (GSE Saves, Goldberg SteamEmu Saves) in case the game was launched
  * outside of Drop.
  *
