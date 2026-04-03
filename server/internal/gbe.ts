@@ -81,17 +81,12 @@ interface GhRelease {
 /**
  * Fetches the latest GBE release from GitHub and caches the DLLs locally.
  *
- * GBE releases contain zip archives with names like:
+ * GBE releases contain archives with names like:
  *   - `emu-win-release.7z` (Windows 64-bit)
  *   - `emu-win32-release.7z` (Windows 32-bit)
  *   - `emu-linux-release.tar.gz` (Linux)
  *
- * Since we can't easily extract 7z in Node, we look for plain zip or
- * fall back to downloading individual DLLs from the repo.
- *
- * For now: this function downloads the release info and extracts what we need.
- * The actual DLL extraction may need the admin to manually place the DLLs
- * if automated extraction isn't feasible.
+ * Extracts archives using p7zip (installed in the Docker image).
  */
 export async function fetchLatestRelease(): Promise<GhRelease | null> {
   try {
@@ -137,9 +132,7 @@ async function downloadFile(url: string, dest: string): Promise<boolean> {
  *
  * Returns the tag name of the downloaded release, or null on failure.
  *
- * NOTE: GBE releases use .7z format which requires an external tool to
- * extract. If the release contains .zip files we extract those; otherwise
- * the admin needs to manually place the DLLs in the cache directory.
+ * Supports .zip (unzip), .7z (7z from p7zip-full), and .tar.gz (tar).
  */
 export async function downloadGbeDlls(): Promise<string | null> {
   const release = await fetchLatestRelease();
@@ -154,81 +147,97 @@ export async function downloadGbeDlls(): Promise<string | null> {
     fs.mkdirSync(archDir(arch), { recursive: true });
   }
 
-  // Look for zip assets we can extract
+  // We only need the "emu-win-release" archive (contains both 32 and 64-bit DLLs)
+  // Prioritise: .zip > .7z > .tar.gz
+  const emuAssets = release.assets.filter((a) => {
+    const name = a.name.toLowerCase();
+    return (
+      name.startsWith("emu-") &&
+      name.includes("release") &&
+      !name.includes("debug") &&
+      (name.endsWith(".zip") ||
+        name.endsWith(".7z") ||
+        name.endsWith(".tar.gz"))
+    );
+  });
+
+  // Sort by extension preference
+  const extPriority = (name: string) =>
+    name.endsWith(".zip") ? 0 : name.endsWith(".7z") ? 1 : 2;
+  emuAssets.sort(
+    (a, b) =>
+      extPriority(a.name.toLowerCase()) - extPriority(b.name.toLowerCase()),
+  );
+
   let downloaded = false;
-  for (const asset of release.assets) {
-    const name = asset.name.toLowerCase();
 
-    if (name.endsWith(".zip")) {
-      // Try to download and extract zip files
-      const tmpPath = path.join(cacheRoot(), asset.name);
-      console.log(`[GBE] Downloading ${asset.name} (${asset.size} bytes)...`);
+  for (const asset of emuAssets) {
+    const tmpPath = path.join(cacheRoot(), asset.name);
+    console.log(`[GBE] Downloading ${asset.name} (${asset.size} bytes)...`);
 
-      if (await downloadFile(asset.browser_download_url, tmpPath)) {
-        try {
-          await extractZipDlls(tmpPath);
-          downloaded = true;
-        } catch (e) {
-          console.log(`[GBE] Failed to extract ${asset.name}: ${e}`);
-        }
-        // Clean up zip
-        try {
-          fs.unlinkSync(tmpPath);
-        } catch {
-          /* ignore */
-        }
-      }
+    if (!(await downloadFile(asset.browser_download_url, tmpPath))) {
+      continue;
     }
+
+    try {
+      await extractArchiveDlls(tmpPath, asset.name);
+      downloaded = true;
+    } catch (e) {
+      console.log(`[GBE] Failed to extract ${asset.name}: ${e}`);
+    }
+
+    // Clean up archive
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch {
+      /* ignore */
+    }
+
+    if (downloaded) break;
   }
 
   if (!downloaded) {
-    // GBE uses .7z — provide instructions for manual placement
     console.log(
-      `[GBE] No .zip assets found in release ${release.tag_name}. ` +
-        `GBE uses .7z archives which require manual extraction. ` +
-        `Download from: https://github.com/${GBE_REPO}/releases/tag/${release.tag_name} ` +
-        `and place DLLs in: ${cacheRoot()}/<arch>/`,
+      `[GBE] Could not extract DLLs from release ${release.tag_name}. ` +
+        `Ensure p7zip-full is installed (apt-get install p7zip-full).`,
     );
-
-    // Download .7z files so the admin can extract them manually
-    for (const asset of release.assets) {
-      const name = asset.name.toLowerCase();
-      if (name.endsWith(".7z") || name.endsWith(".tar.gz")) {
-        const destPath = path.join(cacheRoot(), asset.name);
-        if (!fs.existsSync(destPath)) {
-          console.log(
-            `[GBE] Downloading ${asset.name} for manual extraction...`,
-          );
-          await downloadFile(asset.browser_download_url, destPath);
-        }
-      }
-    }
   }
 
   // Write version marker
   const versionFile = path.join(cacheRoot(), "version.txt");
   fs.writeFileSync(versionFile, release.tag_name, "utf-8");
 
-  return release.tag_name;
+  return downloaded ? release.tag_name : null;
 }
 
 /**
- * Extracts steam_api DLLs from a zip file into the cache directory.
+ * Extracts steam_api DLLs from an archive into the cache directory.
+ * Supports .zip, .7z, and .tar.gz.
  */
-async function extractZipDlls(zipPath: string): Promise<void> {
-  // Use Node's built-in unzip via child_process
+async function extractArchiveDlls(
+  archivePath: string,
+  fileName: string,
+): Promise<void> {
   const { execSync } = await import("child_process");
-
-  const tmpDir = zipPath + "_extracted";
+  const tmpDir = archivePath + "_extracted";
   fs.mkdirSync(tmpDir, { recursive: true });
 
   try {
-    execSync(`unzip -o "${zipPath}" -d "${tmpDir}"`, { stdio: "pipe" });
+    const lower = fileName.toLowerCase();
+    if (lower.endsWith(".zip")) {
+      execSync(`unzip -o "${archivePath}" -d "${tmpDir}"`, { stdio: "pipe" });
+    } else if (lower.endsWith(".7z")) {
+      // p7zip-full is installed in the Docker image
+      execSync(`7z x -y -o"${tmpDir}" "${archivePath}"`, { stdio: "pipe" });
+    } else if (lower.endsWith(".tar.gz")) {
+      execSync(`tar xzf "${archivePath}" -C "${tmpDir}"`, { stdio: "pipe" });
+    } else {
+      throw new Error(`Unsupported archive format: ${fileName}`);
+    }
 
-    // Find and copy DLL files
+    console.log(`[GBE] Extracted ${fileName}, scanning for DLLs...`);
     findAndCacheDlls(tmpDir);
   } finally {
-    // Clean up extracted dir
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }
@@ -236,25 +245,57 @@ async function extractZipDlls(zipPath: string): Promise<void> {
 /**
  * Recursively searches a directory for Steam API DLLs and copies them
  * to the appropriate cache directory.
+ *
+ * GBE archives may contain multiple copies of the same DLL in different
+ * subdirectories (e.g. `regular/` and `experimental/`). We prefer
+ * `experimental` builds when available since they have more features.
  */
 function findAndCacheDlls(dir: string): void {
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  // Collect all DLL paths first so we can pick the best variant
+  const found = new Map<GbeArch, { path: string; score: number }>();
 
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-
-    if (entry.isDirectory()) {
-      findAndCacheDlls(fullPath);
-      continue;
+  function scan(d: string): void {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(d, { withFileTypes: true });
+    } catch {
+      return;
     }
 
-    const lower = entry.name.toLowerCase();
-    const arch = DLL_TO_ARCH[lower];
-    if (arch) {
-      const dest = path.join(archDir(arch), entry.name);
-      fs.copyFileSync(fullPath, dest);
-      console.log(`[GBE] Cached ${entry.name} → ${dest}`);
+    for (const entry of entries) {
+      const fullPath = path.join(d, entry.name);
+
+      if (entry.isDirectory()) {
+        scan(fullPath);
+        continue;
+      }
+
+      const lower = entry.name.toLowerCase();
+      const arch = DLL_TO_ARCH[lower];
+      if (!arch) continue;
+
+      // Score: prefer experimental > regular > other
+      const dirLower = fullPath.toLowerCase();
+      const score = dirLower.includes("experimental")
+        ? 2
+        : dirLower.includes("regular")
+          ? 1
+          : 0;
+
+      const existing = found.get(arch);
+      if (!existing || score > existing.score) {
+        found.set(arch, { path: fullPath, score });
+      }
     }
+  }
+
+  scan(dir);
+
+  for (const [arch, info] of found) {
+    const dllName = path.basename(info.path);
+    const dest = path.join(archDir(arch), dllName);
+    fs.copyFileSync(info.path, dest);
+    console.log(`[GBE] Cached ${dllName} → ${dest}`);
   }
 }
 
