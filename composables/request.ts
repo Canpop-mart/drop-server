@@ -82,6 +82,8 @@ export const $dropFetch: DropFetch = async (rawRequest, opts) => {
   }
 
   const headers = useRequestHeaders(["cookie", "authorization"]);
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore Excessive stack depth comparing types
   const data = await $fetch(request, {
     ...opts,
     headers: { ...headers, ...opts?.headers },
