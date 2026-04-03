@@ -11,9 +11,9 @@ export const FlatFilesystemProviderConfig = type({
   baseDir: "string",
 });
 
-export class FlatFilesystemProvider
-  implements LibraryProvider<typeof FlatFilesystemProviderConfig.infer>
-{
+export class FlatFilesystemProvider implements LibraryProvider<
+  typeof FlatFilesystemProviderConfig.infer
+> {
   private config: typeof FlatFilesystemProviderConfig.infer;
   private myId: string;
 
@@ -70,6 +70,11 @@ export class FlatFilesystemProvider
     const versionDir = path.join(this.config.baseDir, game);
     if (!fs.existsSync(versionDir)) throw new VersionNotFoundError();
     return await dropletInterface.listFiles(versionDir);
+  }
+
+  resolveVersionDir(game: string, _version: string): string | undefined {
+    const dir = path.join(this.config.baseDir, game);
+    return fs.existsSync(dir) ? dir : undefined;
   }
 
   async generateDropletManifest(

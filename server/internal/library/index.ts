@@ -491,6 +491,23 @@ class LibraryManager {
 
           if (version.type === "local") {
             versionPath = version.identifier;
+
+            // Auto-upgrade SSE → GBE before manifest generation so the
+            // checksums cover the GBE DLL (not the original SSE one).
+            try {
+              const versionDir = library.resolveVersionDir(
+                game.libraryPath,
+                versionPath,
+              );
+              if (versionDir) {
+                const { autoUpgradeSseIfNeeded } =
+                  await import("~/server/internal/gbe");
+                await autoUpgradeSseIfNeeded(versionDir, gameId, logger);
+              }
+            } catch (e) {
+              logger.warn(`SSE auto-upgrade check failed (non-critical): ${e}`);
+            }
+
             // First, create the manifest via droplet.
             // This takes up 90% of our progress, so we wrap it in a *0.9
 

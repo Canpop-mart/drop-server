@@ -48,6 +48,12 @@ export abstract class LibraryProvider<CFG> {
     log: (v: string) => void,
   ): Promise<string>;
 
+  /**
+   * Resolves the absolute filesystem path for a game version directory.
+   * Returns undefined for providers that don't have local filesystem access.
+   */
+  abstract resolveVersionDir(game: string, version: string): string | undefined;
+
   abstract peekFile(
     game: string,
     version: string,

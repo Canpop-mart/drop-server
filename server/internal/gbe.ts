@@ -475,7 +475,121 @@ export function parseSseIni(iniPath: string): SseConfig | null {
   return { appId, userName, language, dlcs, interfaces };
 }
 
-// ── SSE → GBE conversion ─────────────────────────────────────────────────
+// ── Auto SSE → GBE at import time ────────────────────────────────────────
+
+/**
+ * Called during version import, BEFORE the manifest is generated.
+ *
+ * If the game uses SmartSteamEmu (SSE), this function:
+ *   1. Detects SSE (steam_emu.ini next to the DLL)
+ *   2. Ensures GBE DLLs are cached (downloads if needed)
+ *   3. Backs up the SSE DLL
+ *   4. Replaces it with the GBE DLL
+ *   5. Creates steam_settings/ with config from SSE ini
+ *
+ * Because this runs before manifest generation, the checksums will be
+ * computed over the GBE DLL — no mismatch on client downloads.
+ */
+export async function autoUpgradeSseIfNeeded(
+  versionDir: string,
+  gameId: string,
+  logger: { info: (msg: string) => void; warn: (msg: string) => void },
+): Promise<void> {
+  const detection = detectEmulator(versionDir);
+  if (!detection) return;
+
+  if (detection.type !== "sse" || !detection.sseConfig) {
+    logger.info(
+      `[GBE] Game ${gameId}: emulator is ${detection.type}, no SSE upgrade needed`,
+    );
+    return;
+  }
+
+  logger.info(
+    `[GBE] Game ${gameId}: SSE detected (AppID ${detection.sseConfig.appId}), auto-upgrading to GBE`,
+  );
+
+  const arch = DLL_TO_ARCH[detection.dllName.toLowerCase()];
+  if (!arch) {
+    logger.warn(`[GBE] Unknown DLL: ${detection.dllName}, skipping upgrade`);
+    return;
+  }
+
+  // Ensure GBE DLLs are cached
+  if (!hasCachedDlls(arch)) {
+    logger.info(`[GBE] No cached GBE DLL for ${arch}, downloading...`);
+    const tag = await downloadGbeDlls();
+    if (!tag || !hasCachedDlls(arch)) {
+      logger.warn(
+        `[GBE] Failed to download GBE DLLs. Run "Download GBE" task manually.`,
+      );
+      return;
+    }
+    logger.info(`[GBE] Downloaded GBE release ${tag}`);
+  }
+
+  const gbeDllPath = getCachedDllPath(arch)!;
+  const { dllDir, dllName, sseConfig } = detection;
+
+  // Back up SSE DLL
+  const dllPath = path.join(dllDir, dllName);
+  const backupPath = dllPath + BACKUP_SUFFIX;
+  if (fs.existsSync(dllPath) && !fs.existsSync(backupPath)) {
+    fs.copyFileSync(dllPath, backupPath);
+    logger.info(`[GBE] Backed up ${dllName} → ${dllName}${BACKUP_SUFFIX}`);
+  }
+
+  // Replace with GBE DLL
+  fs.copyFileSync(gbeDllPath, dllPath);
+  logger.info(`[GBE] Replaced ${dllName} with GBE version`);
+
+  // Create steam_settings/
+  const steamSettings = path.join(dllDir, "steam_settings");
+  fs.mkdirSync(steamSettings, { recursive: true });
+
+  fs.writeFileSync(
+    path.join(steamSettings, "steam_appid.txt"),
+    sseConfig!.appId,
+    "utf-8",
+  );
+
+  if (sseConfig!.interfaces.size > 0) {
+    const lines = Array.from(sseConfig!.interfaces.values());
+    fs.writeFileSync(
+      path.join(steamSettings, "steam_interfaces.txt"),
+      lines.join("\n") + "\n",
+      "utf-8",
+    );
+    logger.info(
+      `[GBE] Wrote steam_interfaces.txt (${lines.length} interfaces)`,
+    );
+  }
+
+  if (sseConfig!.dlcs.size > 0) {
+    const dlcLines = Array.from(sseConfig!.dlcs.entries())
+      .map(([id, name]) => `${id}=${name}`)
+      .join("\n");
+    fs.writeFileSync(
+      path.join(steamSettings, "dlc.txt"),
+      dlcLines + "\n",
+      "utf-8",
+    );
+    logger.info(`[GBE] Wrote dlc.txt (${sseConfig!.dlcs.size} DLCs)`);
+  }
+
+  const configsUserIni = `[user::saves]\nlocal_save_path=./drop-goldberg\n`;
+  fs.writeFileSync(
+    path.join(steamSettings, "configs.user.ini"),
+    configsUserIni,
+    "utf-8",
+  );
+
+  logger.info(
+    `[GBE] Auto-upgraded ${gameId} from SSE to GBE (AppID ${sseConfig!.appId})`,
+  );
+}
+
+// ── SSE → GBE conversion (admin-triggered, post-import) ─────────────────
 
 export interface UpgradeResult {
   success: boolean;
