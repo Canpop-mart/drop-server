@@ -145,15 +145,23 @@ export function readGoldbergAppId(versionDir: string): string | undefined {
 // ── Steam API fetcher ──────────────────────────────────────────────────────
 
 /**
- * Fetches achievement definitions from Steam's public API.
- * No API key required — `GetSchemaForGame` is public.
+ * Fetches achievement definitions from Steam's Web API.
+ * Requires STEAM_API_KEY env var (free from https://steamcommunity.com/dev/apikey).
  *
  * Returns definitions in our standard format, or an empty array on failure.
  */
 export async function fetchSteamAchievements(
   appId: string,
 ): Promise<GoldbergAchievementDef[]> {
-  const url = `https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?appid=${appId}`;
+  const apiKey = process.env.STEAM_API_KEY;
+  if (!apiKey) {
+    console.log(
+      `[GOLDBERG] STEAM_API_KEY not set, cannot fetch achievements for AppID ${appId}`,
+    );
+    return [];
+  }
+
+  const url = `https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=${apiKey}&appid=${appId}`;
   console.log(
     `[GOLDBERG] Fetching achievements from Steam API for AppID ${appId}`,
   );
@@ -247,6 +255,21 @@ export async function setupGoldberg(
         appId = existingLink.externalGameId;
         console.log(
           `[GOLDBERG] No steam_appid.txt, using DB link AppID ${appId}`,
+        );
+      }
+    }
+
+    // Fall back to the game's metadata — if it was imported from Steam,
+    // metadataId IS the Steam AppID.
+    if (!appId) {
+      const game = await prisma.game.findUnique({
+        where: { id: gameId },
+        select: { metadataSource: true, metadataId: true },
+      });
+      if (game?.metadataSource === "Steam" && game.metadataId) {
+        appId = game.metadataId;
+        console.log(
+          `[GOLDBERG] No steam_appid.txt or DB link, using Steam metadata AppID ${appId}`,
         );
       }
     }

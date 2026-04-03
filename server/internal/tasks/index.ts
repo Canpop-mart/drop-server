@@ -14,6 +14,7 @@ import checkUpdate from "./registry/update";
 import cleanupObjects from "./registry/objects";
 import checkIntegrity from "./registry/check-integrity";
 import checkGameUpdates from "./registry/game-update";
+import checkGoldbergStatus from "./registry/goldberg-status";
 
 type TaskActionLink = `${string}:${string}`;
 
@@ -69,6 +70,7 @@ class TaskHandler {
     this.saveScheduledTask(cleanupObjects);
     this.saveScheduledTask(checkIntegrity);
     this.saveScheduledTask(checkGameUpdates);
+    this.saveScheduledTask(checkGoldbergStatus);
   }
 
   /**

@@ -39,7 +39,11 @@ export default defineEventHandler(async (h3) => {
   });
   const dailyTasks = await taskHandler.dailyTasks();
   const weeklyTasks = await taskHandler.weeklyTasks();
-  const other: TaskGroup[] = ["import:check-integrity", "check:game-updates"];
+  const other: TaskGroup[] = [
+    "import:check-integrity",
+    "check:game-updates",
+    "check:goldberg-status",
+  ];
 
   return { runningTasks, historicalTasks, dailyTasks, weeklyTasks, other };
 });

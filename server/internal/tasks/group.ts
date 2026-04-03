@@ -23,6 +23,9 @@ export const taskGroups = {
   "check:game-updates": {
     concurrency: false,
   },
+  "check:goldberg-status": {
+    concurrency: false,
+  },
 } as const;
 
 export type TaskGroup = keyof typeof taskGroups;

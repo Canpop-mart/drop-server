@@ -266,6 +266,11 @@ const scheduledTasks: {
     description:
       "Checks Steam for new build IDs and flags any games that have an update available.",
   },
+  "check:goldberg-status": {
+    name: "Check Goldberg Achievement Status",
+    description:
+      "Verifies every game has the files and DB records needed for achievements. Auto-fixes missing setup where possible.",
+  },
 };
 
 async function startTask(taskGroup: string) {
