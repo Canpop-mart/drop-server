@@ -237,9 +237,17 @@ export async function setupGoldberg(
   versionDir: string,
 ): Promise<void> {
   try {
+    // Resolve the actual directory containing the Steam API DLL.
+    // GBE expects steam_settings/ next to the DLL, which may be in a
+    // subdirectory (e.g. GameData/Plugins/x86_64/), not the version root.
+    const { findSteamApiDll } = await import("./gbe");
+    const dllInfo = findSteamApiDll(versionDir);
+    const settingsRoot = dllInfo ? dllInfo.dllDir : versionDir;
+
     // ── 1. Resolve the AppID ─────────────────────────────────────────────
     // Try the local file first, then fall back to an existing DB link.
-    let appId = readGoldbergAppId(versionDir);
+    let appId =
+      readGoldbergAppId(settingsRoot) || readGoldbergAppId(versionDir);
 
     if (!appId) {
       const existingLink = await prisma.gameExternalLink.findUnique({
@@ -279,11 +287,11 @@ export async function setupGoldberg(
     }
 
     console.log(
-      `[GOLDBERG] Setting up game=${gameId} appId=${appId} dir=${versionDir}`,
+      `[GOLDBERG] Setting up game=${gameId} appId=${appId} dir=${settingsRoot}`,
     );
 
     // ── 2. Ensure steam_settings/ and steam_appid.txt exist on disk ──────
-    const steamSettings = path.join(versionDir, "steam_settings");
+    const steamSettings = path.join(settingsRoot, "steam_settings");
     if (!fs.existsSync(steamSettings)) {
       fs.mkdirSync(steamSettings, { recursive: true });
       console.log(`[GOLDBERG] Created ${steamSettings}`);
@@ -296,7 +304,7 @@ export async function setupGoldberg(
     }
 
     // ── 3. Ensure achievements.json exists on disk ───────────────────────
-    let definitions = readGoldbergDefinitions(versionDir);
+    let definitions = readGoldbergDefinitions(settingsRoot);
 
     if (definitions.length === 0) {
       console.log(
