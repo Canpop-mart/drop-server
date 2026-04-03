@@ -484,15 +484,18 @@ export interface UpgradeResult {
 }
 
 /**
- * Replaces an SSE installation with GBE for a single game.
+ * Prepares GBE config for an SSE game **without** replacing the DLL on
+ * the server.  The depot serves files directly from the library directory,
+ * so swapping the DLL here would break download checksums.
  *
- * Steps:
- * 1. Detect SSE and parse its config
- * 2. Check that we have cached GBE DLLs for the right architecture
- * 3. Back up SSE files (DLL + steam_emu.ini)
- * 4. Copy GBE DLL in place
- * 5. Create steam_settings/ with converted config
- * 6. Write achievements.json from DB/Steam API
+ * Instead we:
+ * 1. Create `steam_settings/` with converted SSE config (new dir, safe)
+ * 2. Place the GBE DLL inside `steam_settings/gbe_dll` so the client can
+ *    pick it up after download and do the local swap at launch time
+ * 3. Write a `.gbe_upgrade` marker so the client knows to apply the swap
+ *
+ * The client's `configure_saves_for_game()` handles the actual DLL
+ * replacement on the user's machine.
  */
 export async function upgradeSseToGbe(
   versionDir: string,
@@ -530,42 +533,9 @@ export async function upgradeSseToGbe(
     };
   }
 
-  // ── Step 1: Back up SSE files ──────────────────────────────────────────
-  const dllPath = path.join(dllDir, dllName);
-  const sseIniPath = path.join(dllDir, "steam_emu.ini");
-  const dllBackup = dllPath + BACKUP_SUFFIX;
-  const iniBackup = sseIniPath + BACKUP_SUFFIX;
-
-  try {
-    if (fs.existsSync(dllPath) && !fs.existsSync(dllBackup)) {
-      fs.copyFileSync(dllPath, dllBackup);
-      logger.info(`Backed up ${dllName} → ${dllName}${BACKUP_SUFFIX}`);
-    }
-    if (fs.existsSync(sseIniPath) && !fs.existsSync(iniBackup)) {
-      fs.copyFileSync(sseIniPath, iniBackup);
-      logger.info(`Backed up steam_emu.ini → steam_emu.ini${BACKUP_SUFFIX}`);
-    }
-  } catch (e) {
-    return {
-      success: false,
-      message: `Backup failed: ${e}`,
-      backupCreated: false,
-    };
-  }
-
-  // ── Step 2: Replace DLL ────────────────────────────────────────────────
-  try {
-    fs.copyFileSync(gbeDllPath, dllPath);
-    logger.info(`Replaced ${dllName} with GBE version`);
-  } catch (e) {
-    return {
-      success: false,
-      message: `DLL replacement failed: ${e}`,
-      backupCreated: true,
-    };
-  }
-
-  // ── Step 3: Create steam_settings/ ─────────────────────────────────────
+  // ── Step 1: Create steam_settings/ ─────────────────────────────────────
+  // This is a NEW directory that doesn't exist in the original manifest,
+  // so adding it won't affect depot chunk checksums.
   const steamSettings = path.join(dllDir, "steam_settings");
   fs.mkdirSync(steamSettings, { recursive: true });
 
@@ -648,43 +618,67 @@ export async function upgradeSseToGbe(
     logger.info(`setupGoldberg follow-up failed (non-critical): ${e}`);
   }
 
-  // ── Step 5: Remove SSE config (optional, keep backup) ─────────────────
-  // We don't delete steam_emu.ini — it's harmless and GBE ignores it.
-  // The backup is already created above.
+  // ── Step 5: Stage GBE DLL for client-side swap ────────────────────────
+  // We place the GBE DLL inside steam_settings/gbe_dll/ so it gets
+  // included when the client downloads the game.  The client will move
+  // it into place at launch time.
+  const gbeDllStageDir = path.join(steamSettings, "gbe_dll");
+  fs.mkdirSync(gbeDllStageDir, { recursive: true });
+  fs.copyFileSync(gbeDllPath, path.join(gbeDllStageDir, dllName));
+  logger.info(`Staged GBE ${dllName} in steam_settings/gbe_dll/`);
+
+  // Write marker so the client knows to perform the swap
+  fs.writeFileSync(
+    path.join(steamSettings, ".gbe_upgrade"),
+    JSON.stringify({
+      originalDll: dllName,
+      arch,
+      appId: sseConfig.appId,
+      upgradedAt: new Date().toISOString(),
+    }),
+    "utf-8",
+  );
+  logger.info("Wrote .gbe_upgrade marker for client-side DLL swap");
 
   return {
     success: true,
-    message: `Upgraded to GBE (AppID ${sseConfig.appId}, ${sseConfig.dlcs.size} DLCs, ${sseConfig.interfaces.size} interfaces)`,
-    backupCreated: true,
+    message: `Prepared GBE upgrade for ${dllName} (AppID ${sseConfig.appId}, ${sseConfig.dlcs.size} DLCs, ${sseConfig.interfaces.size} interfaces). Client will swap DLL at launch.`,
+    backupCreated: false,
   };
 }
 
 /**
- * Reverts a GBE upgrade by restoring SSE backup files.
+ * Reverts a GBE upgrade by removing `steam_settings/`.
+ *
+ * Since the server-side upgrade no longer touches the original DLL,
+ * reverting just means removing the config directory we created.
+ * The client will see `steam_emu.ini` (still present) without
+ * `steam_settings/` and treat it as a normal SSE game again.
+ *
+ * Also restores any legacy backups from the old approach (which did
+ * replace the DLL server-side) so this handles both old and new upgrades.
  */
 export function revertToSse(
   dllDir: string,
   dllName: string,
 ): { success: boolean; message: string } {
-  const dllPath = path.join(dllDir, dllName);
-  const sseIniPath = path.join(dllDir, "steam_emu.ini");
-  const dllBackup = dllPath + BACKUP_SUFFIX;
-  const iniBackup = sseIniPath + BACKUP_SUFFIX;
-
-  if (!fs.existsSync(dllBackup)) {
-    return {
-      success: false,
-      message: `No backup found at ${dllBackup}`,
-    };
-  }
-
   try {
-    fs.copyFileSync(dllBackup, dllPath);
+    // Restore legacy backups if they exist (from the old DLL-swap approach)
+    const dllPath = path.join(dllDir, dllName);
+    const sseIniPath = path.join(dllDir, "steam_emu.ini");
+    const dllBackup = dllPath + BACKUP_SUFFIX;
+    const iniBackup = sseIniPath + BACKUP_SUFFIX;
+
+    if (fs.existsSync(dllBackup)) {
+      fs.copyFileSync(dllBackup, dllPath);
+      fs.unlinkSync(dllBackup);
+    }
     if (fs.existsSync(iniBackup)) {
       fs.copyFileSync(iniBackup, sseIniPath);
+      fs.unlinkSync(iniBackup);
     }
 
-    // Clean up steam_settings/ that we created
+    // Remove steam_settings/ that we created
     const steamSettings = path.join(dllDir, "steam_settings");
     if (fs.existsSync(steamSettings)) {
       fs.rmSync(steamSettings, { recursive: true, force: true });
