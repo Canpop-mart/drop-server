@@ -618,31 +618,16 @@ export async function upgradeSseToGbe(
     logger.info(`setupGoldberg follow-up failed (non-critical): ${e}`);
   }
 
-  // ── Step 5: Stage GBE DLL for client-side swap ────────────────────────
-  // We place the GBE DLL inside steam_settings/gbe_dll/ so it gets
-  // included when the client downloads the game.  The client will move
-  // it into place at launch time.
-  const gbeDllStageDir = path.join(steamSettings, "gbe_dll");
-  fs.mkdirSync(gbeDllStageDir, { recursive: true });
-  fs.copyFileSync(gbeDllPath, path.join(gbeDllStageDir, dllName));
-  logger.info(`Staged GBE ${dllName} in steam_settings/gbe_dll/`);
-
-  // Write marker so the client knows to perform the swap
-  fs.writeFileSync(
-    path.join(steamSettings, ".gbe_upgrade"),
-    JSON.stringify({
-      originalDll: dllName,
-      arch,
-      appId: sseConfig.appId,
-      upgradedAt: new Date().toISOString(),
-    }),
-    "utf-8",
+  // The client will detect this steam_settings/ directory alongside the
+  // SSE config, then call GET /api/v1/client/game/{id}/gbe-upgrade to
+  // download the GBE DLL and swap it locally at launch time.
+  logger.info(
+    `Server-side config ready. Client will download GBE DLL at launch via API.`,
   );
-  logger.info("Wrote .gbe_upgrade marker for client-side DLL swap");
 
   return {
     success: true,
-    message: `Prepared GBE upgrade for ${dllName} (AppID ${sseConfig.appId}, ${sseConfig.dlcs.size} DLCs, ${sseConfig.interfaces.size} interfaces). Client will swap DLL at launch.`,
+    message: `Prepared GBE config for ${dllName} (AppID ${sseConfig.appId}, ${sseConfig.dlcs.size} DLCs, ${sseConfig.interfaces.size} interfaces). Client will download GBE DLL at launch.`,
     backupCreated: false,
   };
 }
