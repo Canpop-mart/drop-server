@@ -500,8 +500,9 @@ class LibraryManager {
                 versionPath,
               );
               if (versionDir) {
-                const { autoUpgradeSseIfNeeded } =
-                  await import("~/server/internal/gbe");
+                const { autoUpgradeSseIfNeeded } = await import(
+                  "~/server/internal/gbe"
+                );
                 await autoUpgradeSseIfNeeded(versionDir, gameId, logger);
               }
             } catch (e) {
