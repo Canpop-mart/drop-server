@@ -82,7 +82,7 @@ export default defineClientEventHandler(async (h3) => {
   setResponseHeader(h3, "X-GBE-Dll-Name", detection.dllName);
 
   const stat = fs.statSync(gbeDllPath);
-  setResponseHeader(h3, "Content-Length", stat.size.toString());
+  setResponseHeader(h3, "Content-Length", stat.size);
 
   return sendStream(h3, fs.createReadStream(gbeDllPath));
 });
