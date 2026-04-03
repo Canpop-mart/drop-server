@@ -42,22 +42,24 @@ export function hasCachedDlls(arch: GbeArch): boolean {
   if (!fs.existsSync(dir)) return false;
 
   // Check for the actual DLL file
-  const expected = arch === "win64"
-    ? "steam_api64.dll"
-    : arch === "win32"
-      ? "steam_api.dll"
-      : "libsteam_api.so";
+  const expected =
+    arch === "win64"
+      ? "steam_api64.dll"
+      : arch === "win32"
+        ? "steam_api.dll"
+        : "libsteam_api.so";
   return fs.existsSync(path.join(dir, expected));
 }
 
 /** Returns the path to a cached GBE DLL, or undefined if not cached. */
 export function getCachedDllPath(arch: GbeArch): string | undefined {
   const dir = archDir(arch);
-  const expected = arch === "win64"
-    ? "steam_api64.dll"
-    : arch === "win32"
-      ? "steam_api.dll"
-      : "libsteam_api.so";
+  const expected =
+    arch === "win64"
+      ? "steam_api64.dll"
+      : arch === "win32"
+        ? "steam_api.dll"
+        : "libsteam_api.so";
   const p = path.join(dir, expected);
   return fs.existsSync(p) ? p : undefined;
 }
@@ -194,7 +196,9 @@ export async function downloadGbeDlls(): Promise<string | null> {
       if (name.endsWith(".7z") || name.endsWith(".tar.gz")) {
         const destPath = path.join(cacheRoot(), asset.name);
         if (!fs.existsSync(destPath)) {
-          console.log(`[GBE] Downloading ${asset.name} for manual extraction...`);
+          console.log(
+            `[GBE] Downloading ${asset.name} for manual extraction...`,
+          );
           await downloadFile(asset.browser_download_url, destPath);
         }
       }
@@ -260,11 +264,7 @@ function findAndCacheDlls(dir: string): void {
 const BACKUP_SUFFIX = ".sse_backup";
 
 /** The DLL filenames we look for (same as client-side). */
-const STEAM_API_DLLS = [
-  "steam_api64.dll",
-  "steam_api.dll",
-  "libsteam_api.so",
-];
+const STEAM_API_DLLS = ["steam_api64.dll", "steam_api.dll", "libsteam_api.so"];
 
 /**
  * Recursively finds the directory containing a Steam API DLL within a
@@ -573,11 +573,8 @@ export async function upgradeSseToGbe(
 
   // ── Step 4: Write achievements.json from DB ────────────────────────────
   // Import here to avoid circular deps
-  const {
-    readGoldbergDefinitions,
-    fetchSteamAchievements,
-    setupGoldberg,
-  } = await import("./goldberg");
+  const { readGoldbergDefinitions, fetchSteamAchievements, setupGoldberg } =
+    await import("./goldberg");
 
   // Check if achievements are already on disk (from a previous server-side setup)
   const existingDefs = readGoldbergDefinitions(dllDir);

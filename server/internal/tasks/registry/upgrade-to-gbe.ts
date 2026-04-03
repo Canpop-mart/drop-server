@@ -102,7 +102,9 @@ export const upgradeAllToGbe = defineDropTask({
       const backupPath = `${dllDir}/${dllName}.sse_backup`;
       const fs = await import("fs");
       if (fs.existsSync(backupPath)) {
-        logger.info(`${game.mName} — backup already exists, skipping (already upgraded?)`);
+        logger.info(
+          `${game.mName} — backup already exists, skipping (already upgraded?)`,
+        );
         skipped++;
         progress(10 + Math.round((scanned / games.length) * 85));
         continue;
@@ -164,7 +166,9 @@ export const downloadGbe = defineDropTask({
       // Report what we have cached
       const archs = ["win64", "win32", "linux"] as const;
       for (const arch of archs) {
-        logger.info(`  ${arch}: ${hasCachedDlls(arch) ? "✓ cached" : "✗ not found"}`);
+        logger.info(
+          `  ${arch}: ${hasCachedDlls(arch) ? "✓ cached" : "✗ not found"}`,
+        );
       }
     } else {
       logger.info(
