@@ -12,7 +12,7 @@ const recalculatePlaytime = defineDropTask({
   buildId: () => `recalculate-playtime-${Date.now()}`,
   taskGroup: "recalculate:playtime",
   name: "Recalculate Playtime",
-  acls: ["admin:read"],
+  acls: ["system:maintenance:read"],
   async run({ logger, progress }) {
     // Get all distinct game/user pairs that have a Playtime record
     const playtimeRecords = await prisma.playtime.findMany({
@@ -45,12 +45,10 @@ const recalculatePlaytime = defineDropTask({
             `${record.seconds}s → ${correctSeconds}s (delta: ${record.seconds - correctSeconds}s)`,
         );
 
-        await prisma.playtime.update({
+        await prisma.playtime.updateMany({
           where: {
-            gameId_userId: {
-              gameId: record.gameId,
-              userId: record.userId,
-            },
+            gameId: record.gameId,
+            userId: record.userId,
           },
           data: { seconds: correctSeconds },
         });
