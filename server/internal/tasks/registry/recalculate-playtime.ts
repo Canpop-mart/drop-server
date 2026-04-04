@@ -110,12 +110,42 @@ const recalculatePlaytime = defineDropTask({
 
     progress(50);
 
-    // ── Phase 2: Recompute cumulative totals ───────────────────────
-    logger.info("Phase 2: Recomputing cumulative playtime totals");
+    // ── Diagnostic: dump sessions for games with high playtime ─────
+    logger.info("Diagnostic: inspecting sessions for high-playtime games");
 
     const playtimeRecords = await prisma.playtime.findMany({
       select: { gameId: true, userId: true, seconds: true },
     });
+
+    for (const record of playtimeRecords) {
+      if (record.seconds > 3600) {
+        // More than 1 hour — log all sessions
+        const sessions = await prisma.playSession.findMany({
+          where: { gameId: record.gameId, userId: record.userId },
+          orderBy: { startedAt: "asc" },
+          select: {
+            id: true,
+            startedAt: true,
+            endedAt: true,
+            durationSeconds: true,
+          },
+        });
+
+        logger.info(
+          `Game ${record.gameId} user ${record.userId}: cumulative=${record.seconds}s (${(record.seconds / 3600).toFixed(1)}h), ${sessions.length} sessions`,
+        );
+        for (const s of sessions) {
+          const dur = s.durationSeconds ?? "null";
+          const ended = s.endedAt ? s.endedAt.toISOString() : "OPEN";
+          logger.info(
+            `  Session ${s.id}: started=${s.startedAt.toISOString()} ended=${ended} duration=${dur}s`,
+          );
+        }
+      }
+    }
+
+    // ── Phase 2: Recompute cumulative totals ───────────────────────
+    logger.info("Phase 2: Recomputing cumulative playtime totals");
 
     let corrected = 0;
 
