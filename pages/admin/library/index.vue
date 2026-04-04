@@ -598,30 +598,34 @@ function previousPage() {
 
 const toImport = ref(Object.values(unimportedGames).flat().length > 0);
 
-// Object.assign avoids TS2589 "excessively deep" caused by spreading Prisma Json fields
 const libraryGames = computed(() =>
   games.value.map((e) => {
+    // Assign to plain object to avoid TS2589 from Prisma Json field in spread
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const base: any = e.game;
     if (e.status == "offline") {
-      return Object.assign({}, e.game, {
-        status: "offline" as const,
+      return {
+        ...base,
+        status: "offline",
         hasNotifications: true,
         notifications: {
           offline: true,
         },
-      });
+      };
     }
 
     const noVersions = e.status.noVersions;
     const toImport = e.status.unimportedVersions.length > 0;
 
-    return Object.assign({}, e.game, {
+    return {
+      ...base,
       notifications: {
         noVersions,
         toImport,
       },
       hasNotifications: noVersions || toImport,
-      status: "online" as const,
-    });
+      status: "online",
+    };
   }),
 );
 
