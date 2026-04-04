@@ -598,34 +598,30 @@ function previousPage() {
 
 const toImport = ref(Object.values(unimportedGames).flat().length > 0);
 
-// Cast e.game to Record to avoid TS2589 from Prisma Json field deep recursion
+// Object.assign avoids TS2589 "excessively deep" caused by spreading Prisma Json fields
 const libraryGames = computed(() =>
   games.value.map((e) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const game = e.game as Record<string, any>;
     if (e.status == "offline") {
-      return {
-        ...game,
-        status: "offline",
+      return Object.assign({}, e.game, {
+        status: "offline" as const,
         hasNotifications: true,
         notifications: {
           offline: true,
         },
-      };
+      });
     }
 
     const noVersions = e.status.noVersions;
     const toImport = e.status.unimportedVersions.length > 0;
 
-    return {
-      ...game,
+    return Object.assign({}, e.game, {
       notifications: {
         noVersions,
         toImport,
       },
       hasNotifications: noVersions || toImport,
       status: "online" as const,
-    };
+    });
   }),
 );
 
