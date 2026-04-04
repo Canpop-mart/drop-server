@@ -151,9 +151,7 @@ const recalculatePlaytime = defineDropTask({
         corrected++;
       }
 
-      progress(
-        50 + Math.round(((i + 1) / playtimeRecords.length) * 50),
-      );
+      progress(50 + Math.round(((i + 1) / playtimeRecords.length) * 50));
     }
 
     logger.info(
