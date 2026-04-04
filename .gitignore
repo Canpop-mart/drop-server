@@ -25,22 +25,24 @@ logs
 .env.*
 !.env.example
 
-.data
-
-
-# deploy template
+# Deploy template (keep only the compose.yml)
 deploy-template/*
-
 !deploy-template/compose.yml
 
-# local dev/test docker setup
+# Local dev/test docker setup
 compose.local.yml
 local-data/
 
-# generated prisma client
+# Generated prisma client
 /prisma/client
 /prisma/validate
 
+# Generated protobuf
 /server/internal/proto
+
+# Docker build artifacts
 drop-image.tar
 drop-custom.tar
+
+# Audit/temporary artifacts
+AUDIT_REPORT.md

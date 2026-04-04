@@ -15,6 +15,20 @@ declare global {
   }
 }
 
+/**
+ * Like getRouterParam but throws 400 if missing instead of returning undefined.
+ */
+export function requireRouterParam(event: H3Event, name: string): string {
+  const value = getRouterParam(event, name);
+  if (!value) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `Missing required parameter: ${name}`,
+    });
+  }
+  return value;
+}
+
 export async function readDropValidatedBody<T>(
   event: H3Event,
   validate: (data: object) => T,

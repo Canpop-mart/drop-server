@@ -1,5 +1,5 @@
 import { type } from "arktype";
-import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
+import { readDropValidatedBody, throwingArktype, requireRouterParam } from "~/server/arktype";
 import aclManager from "~/server/internal/acls";
 import libraryManager from "~/server/internal/library";
 
@@ -16,7 +16,7 @@ export default defineEventHandler<{ body: typeof DeleteVersion }>(
 
     const body = await readDropValidatedBody(h3, DeleteVersion);
 
-    const gameId = getRouterParam(h3, "id")!;
+    const gameId = requireRouterParam(h3, "id");
     const version = body.version.toString();
 
     await libraryManager.deleteGameVersion(gameId, version);

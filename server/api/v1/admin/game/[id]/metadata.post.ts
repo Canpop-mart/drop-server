@@ -1,3 +1,4 @@
+import { requireRouterParam } from "~/server/arktype";
 import type { Prisma } from "~/prisma/client/client";
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
@@ -14,7 +15,7 @@ export default defineEventHandler(async (h3) => {
       statusMessage: "This endpoint requires multipart form data.",
     });
 
-  const gameId = getRouterParam(h3, "id")!;
+  const gameId = requireRouterParam(h3, "id");
 
   const uploadResult = await handleFileUpload(h3, {}, ["internal:read"], 1);
   if (!uploadResult)

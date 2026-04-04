@@ -1,5 +1,5 @@
 import { type } from "arktype";
-import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
+import { readDropValidatedBody, throwingArktype, requireRouterParam } from "~/server/arktype";
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
 
@@ -12,7 +12,7 @@ export default defineEventHandler(async (h3) => {
   if (!allowed) throw createError({ statusCode: 403 });
 
   const body = await readDropValidatedBody(h3, PatchTags);
-  const id = getRouterParam(h3, "id")!;
+  const id = requireRouterParam(h3, "id");
 
   const game = await prisma.game.findUnique({
     where: { id },

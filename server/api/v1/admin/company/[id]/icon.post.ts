@@ -1,3 +1,4 @@
+import { requireRouterParam } from "~/server/arktype";
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
 import objectHandler from "~/server/internal/objects";
@@ -7,7 +8,7 @@ export default defineEventHandler(async (h3) => {
   const allowed = await aclManager.allowSystemACL(h3, ["company:update"]);
   if (!allowed) throw createError({ statusCode: 403 });
 
-  const companyId = getRouterParam(h3, "id")!;
+  const companyId = requireRouterParam(h3, "id");
   const company = await prisma.company.findUnique({
     where: {
       id: companyId,

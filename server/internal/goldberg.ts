@@ -318,16 +318,13 @@ export async function setupGoldberg(
     }
 
     // ── 2b. Create the runtime save directory (drop-goldberg/<AppID>/) ───
-    // Goldberg writes achievement unlocks and saves here at runtime.
-    // Creating it during import means it's included in the download,
-    // so the client doesn't have to create it at launch time.
     const saveDir = path.join(settingsRoot, "drop-goldberg", appId);
     if (!fs.existsSync(saveDir)) {
       fs.mkdirSync(saveDir, { recursive: true });
       console.log(`[GOLDBERG] Created save dir ${saveDir}`);
     }
 
-    // ── 3. Ensure achievements.json exists on disk ───────────────────────
+    // ── 3. Fetch/read achievement definitions ────────────────────────────
     const forceRefresh = options?.forceRefreshAchievements ?? false;
     let definitions = forceRefresh ? [] : readGoldbergDefinitions(settingsRoot);
 
@@ -338,18 +335,23 @@ export async function setupGoldberg(
           : `[GOLDBERG] No local achievements.json, fetching from Steam API`,
       );
       definitions = await fetchSteamAchievements(appId);
+    }
 
-      if (definitions.length > 0) {
-        const achPath = path.join(steamSettings, "achievements.json");
-        fs.writeFileSync(
-          achPath,
-          JSON.stringify(definitions, null, 2),
-          "utf-8",
-        );
-        console.log(
-          `[GOLDBERG] Wrote ${definitions.length} achievements to disk`,
-        );
-      }
+    // Write definitions to both locations:
+    //   steam_settings/achievements.json  — emulator reads definitions here
+    //   drop-goldberg/<AppID>/achievements.json — emulator reads/writes runtime state here
+    if (definitions.length > 0) {
+      const json = JSON.stringify(definitions, null, 2);
+
+      const settingsAchPath = path.join(steamSettings, "achievements.json");
+      fs.writeFileSync(settingsAchPath, json, "utf-8");
+
+      const runtimeAchPath = path.join(saveDir, "achievements.json");
+      fs.writeFileSync(runtimeAchPath, json, "utf-8");
+
+      console.log(
+        `[GOLDBERG] Wrote ${definitions.length} achievements to steam_settings/ and drop-goldberg/${appId}/`,
+      );
     }
 
     // ── 4. Create/update the DB external link ────────────────────────────

@@ -30,62 +30,61 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   }
 
   console.log(
-    `[ACH] Report received: game=${gameId} user=${user.id} count=${body.achievements.length} ids=[${body.achievements.map((a) => a.externalId).join(", ")}]`,
+    `[ACH] Report received: game=${gameId} user=${user.id} count=${body.achievements.length}`,
   );
 
-  // Fetch game name once for notifications
-  const game = await prisma.game.findUnique({
-    where: { id: gameId },
-    select: { mName: true },
-  });
+  // Fetch game name + all matching achievements in bulk (avoids N+1)
+  const [game, achievements, existingUnlocks] = await Promise.all([
+    prisma.game.findUnique({
+      where: { id: gameId },
+      select: { mName: true },
+    }),
+    prisma.achievement.findMany({
+      where: {
+        gameId,
+        provider: "Goldberg" as ExternalAccountProvider,
+        externalId: {
+          in: body.achievements.map((a) => a.externalId),
+        },
+      },
+    }),
+    prisma.userAchievement.findMany({
+      where: {
+        userId: user.id,
+        achievement: {
+          gameId,
+          externalId: {
+            in: body.achievements.map((a) => a.externalId),
+          },
+        },
+      },
+      select: { achievementId: true },
+    }),
+  ]);
+
+  // Build lookup maps
+  const achievementMap = new Map(
+    achievements.map((a) => [`${a.provider}:${a.externalId}`, a]),
+  );
+  const alreadyUnlockedIds = new Set(
+    existingUnlocks.map((u) => u.achievementId),
+  );
 
   let recorded = 0;
   const newlyUnlocked: { title: string; iconUrl: string }[] = [];
 
   for (const report of body.achievements) {
-    // Find the achievement in our DB
-    const achievement = await prisma.achievement.findUnique({
-      where: {
-        gameId_provider_externalId: {
-          gameId,
-          provider: report.provider as ExternalAccountProvider,
-          externalId: report.externalId,
-        },
-      },
-    });
-
+    const achievement = achievementMap.get(
+      `${report.provider}:${report.externalId}`,
+    );
     if (!achievement) {
       console.warn(
-        `[ACH] Achievement NOT FOUND in DB: gameId=${gameId} provider=${report.provider} externalId=${report.externalId}`,
+        `[ACH] Achievement NOT FOUND in DB: gameId=${gameId} externalId=${report.externalId}`,
       );
       continue;
     }
 
-    // Check if already unlocked for this specific achievement record
-    const existing = await prisma.userAchievement.findUnique({
-      where: {
-        userId_achievementId: {
-          userId: user.id,
-          achievementId: achievement.id,
-        },
-      },
-    });
-
-    // Check if ANY provider variant of this externalId is already unlocked
-    // (prevents duplicate notifications when multiple providers report the same achievement)
-    const anyProviderUnlocked = existing
-      ? true
-      : await prisma.userAchievement
-          .findFirst({
-            where: {
-              userId: user.id,
-              achievement: {
-                gameId,
-                externalId: report.externalId,
-              },
-            },
-          })
-          .then((r) => !!r);
+    const wasAlreadyUnlocked = alreadyUnlockedIds.has(achievement.id);
 
     await prisma.userAchievement.upsert({
       where: {
@@ -104,8 +103,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
 
     recorded++;
 
-    // Track newly unlocked achievements for notifications — only if no provider variant was previously unlocked
-    if (!anyProviderUnlocked) {
+    if (!wasAlreadyUnlocked) {
       newlyUnlocked.push({
         title: achievement.title,
         iconUrl: achievement.iconUrl ?? "",
@@ -119,13 +117,12 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
       .push(user.id, {
         title: unlock.title,
         description: game?.mName ?? "",
-        // Store icon URL in actions field for the toast to use
         actions: unlock.iconUrl ? [unlock.iconUrl] : [],
         nonce: `achievement-unlock:${gameId}:${unlock.title}:${Date.now()}`,
         acls: ["user:store:read"],
       })
-      .catch(() => {
-        // Non-critical — don't fail the report if notification fails
+      .catch((err) => {
+        console.warn(`[ACH] Failed to push notification: ${err}`);
       });
   }
 

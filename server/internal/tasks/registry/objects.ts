@@ -36,12 +36,26 @@ export default defineDropTask({
     progress(60);
 
     // remove objects
-    const deletePromises: Promise<boolean>[] = [];
+    const deletePromises: Promise<{ id: string; ok: boolean }>[] = [];
     for (const obj of unrefedObjects) {
       logger.info(`Deleting object ${obj}`);
-      deletePromises.push(objectHandler.deleteAsSystem(obj));
+      deletePromises.push(
+        objectHandler
+          .deleteAsSystem(obj)
+          .then((ok) => ({ id: obj, ok }))
+          .catch((err) => {
+            logger.warn(`Failed to delete object ${obj}: ${err}`);
+            return { id: obj, ok: false };
+          }),
+      );
     }
-    await Promise.all(deletePromises);
+    const results = await Promise.all(deletePromises);
+    const failed = results.filter((r) => !r.ok);
+    if (failed.length > 0) {
+      logger.warn(
+        `Failed to delete ${failed.length}/${unrefedObjects.length} objects`,
+      );
+    }
 
     // Remove any possible leftover metadata
     await objectHandler.cleanupMetadata(logger);
@@ -109,25 +123,6 @@ async function isReferencedInModelFields(
           },
         }))
       : [];
-
-    // prisma.game.findFirst({
-    //   where: {
-    //     OR: [
-    //       // single item
-    //       {
-    //         mIconId: {
-    //           equals: "",
-    //         },
-    //       },
-    //       // array
-    //       {
-    //         mImageCarousel: {
-    //           has: "",
-    //         },
-    //       },
-    //     ],
-    //   },
-    // });
 
     // @ts-expect-error using unknown because im not typing this mess omg
     const found = await model.findFirst({

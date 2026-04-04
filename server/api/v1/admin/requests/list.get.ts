@@ -2,6 +2,8 @@ import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
 import type { Prisma } from "~/prisma/client/client";
 
+const VALID_STATUSES = ["Pending", "Approved", "Denied", "Withdrawn"] as const;
+
 export default defineEventHandler(async (h3) => {
   const allowed = await aclManager.allowSystemACL(h3, ["game:update"]);
   if (!allowed) throw createError({ statusCode: 403 });
@@ -10,7 +12,15 @@ export default defineEventHandler(async (h3) => {
   const status = query.status as string | undefined;
 
   const where: Prisma.GameRequestWhereInput = {};
-  if (status) where.status = status as Prisma.GameRequestWhereInput["status"];
+  if (status) {
+    if (!VALID_STATUSES.includes(status as (typeof VALID_STATUSES)[number])) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}`,
+      });
+    }
+    where.status = status as Prisma.GameRequestWhereInput["status"];
+  }
 
   const requests = await prisma.gameRequest.findMany({
     where,

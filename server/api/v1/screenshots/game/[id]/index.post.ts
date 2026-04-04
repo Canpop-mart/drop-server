@@ -23,5 +23,15 @@ export default defineEventHandler(async (h3) => {
   if (!game)
     throw createError({ statusCode: 400, statusMessage: "Invalid game ID" });
 
-  await screenshotManager.upload(userId, gameId, h3.node.req);
+  try {
+    await screenshotManager.upload(userId, gameId, h3.node.req);
+  } catch (err) {
+    console.error(`[SCREENSHOT] Upload failed for game ${gameId}:`, err);
+    throw createError({
+      statusCode: 500,
+      statusMessage: "Screenshot upload failed",
+    });
+  }
+
+  return { success: true };
 });

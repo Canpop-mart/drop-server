@@ -492,8 +492,10 @@ class LibraryManager {
           if (version.type === "local") {
             versionPath = version.identifier;
 
-            // Auto-upgrade SSE → GBE before manifest generation so the
-            // checksums cover the GBE DLL (not the original SSE one).
+            // Auto-upgrade SSE → GBE and set up Goldberg BEFORE manifest
+            // generation so all emulator config files (achievements.json,
+            // steam_appid.txt, drop-goldberg/<AppID>/) are included in the
+            // manifest and downloaded by clients.
             try {
               const versionDir = library.resolveVersionDir(
                 game.libraryPath,
@@ -504,9 +506,10 @@ class LibraryManager {
                   "~/server/internal/gbe"
                 );
                 await autoUpgradeSseIfNeeded(versionDir, gameId, logger);
+                await setupGoldberg(gameId, versionDir);
               }
             } catch (e) {
-              logger.warn(`SSE auto-upgrade check failed (non-critical): ${e}`);
+              logger.warn(`Pre-manifest emulator setup failed (non-critical): ${e}`);
             }
 
             // First, create the manifest via droplet.
@@ -601,16 +604,8 @@ class LibraryManager {
             data: { updateAvailable: false },
           });
 
-          // Set up Goldberg emulator (fetch achievements from Steam API if
-          // no local file, write to disk, create DB records). Never throws.
-          try {
-            const goldbergDir = await resolveGameVersionDir(gameId);
-            if (goldbergDir) {
-              await setupGoldberg(gameId, goldbergDir);
-            }
-          } catch (e) {
-            logger.warn(`Goldberg setup failed for ${gameId}: ${e}`);
-          }
+          // NOTE: setupGoldberg() now runs BEFORE manifest generation (above)
+          // so that all emulator files are included in the download.
 
           notificationSystem.systemPush({
             nonce: `version-create-${gameId}-${version}`,

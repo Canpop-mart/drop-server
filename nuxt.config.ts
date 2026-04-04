@@ -263,9 +263,16 @@ export default defineNuxtConfig({
       },
       strictTransportSecurity: false,
     },
-    rateLimiter: false,
+    rateLimiter: {
+      tokensPerInterval: 150,
+      interval: 60000, // 1 minute
+      headers: true,
+    },
     xssValidator: false,
-    requestSizeLimiter: false,
+    requestSizeLimiter: {
+      maxRequestSizeInBytes: 10 * 1024 * 1024, // 10MB
+      maxUploadFileRequestInBytes: 50 * 1024 * 1024, // 50MB
+    },
   },
 });
 

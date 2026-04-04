@@ -1,6 +1,7 @@
 import { ArkErrors, type } from "arktype";
 import type { Platform } from "~/prisma/client/enums";
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
+import { requireRouterParam } from "~/server/arktype";
 import prisma from "~/server/internal/db/database";
 import type { GameVersionSize } from "~/server/internal/gamesize";
 import gameSizeManager from "~/server/internal/gamesize";
@@ -27,7 +28,7 @@ const Query = type({
 });
 
 export default defineClientEventHandler(async (h3) => {
-  const id = getRouterParam(h3, "id")!;
+  const id = requireRouterParam(h3, "id");
   if (!id)
     throw createError({
       statusCode: 400,

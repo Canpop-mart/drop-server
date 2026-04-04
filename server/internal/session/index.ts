@@ -11,9 +11,7 @@ import type { MinimumRequestObject } from "~/server/h3";
 import type { DurationLike } from "luxon";
 import { DateTime } from "luxon";
 import prisma from "../db/database";
-// import createMemorySessionHandler from "./memory";
 import createDBSessionHandler from "./db";
-// import createCacheSessionProvider from "./cache";
 
 /*
 This implementation may need work.
@@ -48,10 +46,7 @@ export class SessionHandler {
   private sessionProvider: SessionProvider;
 
   constructor() {
-    // Create a new provider
-    // this.sessionProvider = createCacheSessionProvider();
     this.sessionProvider = createDBSessionHandler();
-    // this.sessionProvider = createMemorySessionHandler();
   }
 
   async signin(
@@ -129,8 +124,9 @@ export class SessionHandler {
     // if expired session
     if (new Date(session.expiresAt).getTime() < Date.now()) {
       await this.sessionProvider.removeSession(token);
-      // TODO: should probably call signout to clear the cookie
-      // session expired
+      // Note: The cookie is not cleared here because getSession() only receives
+      // MinimumRequestObject (no H3Event for setCookie). The cookie will simply
+      // fail to match any session on subsequent requests and be ignored.
       return undefined;
     }
     return session;

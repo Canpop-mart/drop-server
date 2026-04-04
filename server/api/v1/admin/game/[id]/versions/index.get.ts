@@ -1,3 +1,4 @@
+import { requireRouterParam } from "~/server/arktype";
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
 
@@ -5,7 +6,7 @@ export default defineEventHandler(async (h3) => {
   const allowed = await aclManager.allowSystemACL(h3, ["game:read"]);
   if (!allowed) throw createError({ statusCode: 403 });
 
-  const id = getRouterParam(h3, "id")!;
+  const id = requireRouterParam(h3, "id");
 
   const game = await prisma.game.findUnique({
     where: {

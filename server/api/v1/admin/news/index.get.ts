@@ -23,9 +23,14 @@ export default defineEventHandler(async (h3) => {
       throw createError({ statusCode: 400, statusMessage: "Invalid tags" });
   }
 
+  const rawLimit = Number(query.limit);
+  const rawSkip = Number(query.skip);
+  const take = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 20;
+  const skip = Number.isFinite(rawSkip) && rawSkip >= 0 ? rawSkip : 0;
+
   const options = {
-    take: parseInt(query.limit as string),
-    skip: parseInt(query.skip as string),
+    take,
+    skip,
     orderBy: orderBy,
     ...(tags && { tags: tags.map((e) => e.toString()) }),
     search: query.search as string,

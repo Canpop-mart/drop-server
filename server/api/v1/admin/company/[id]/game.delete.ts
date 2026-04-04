@@ -1,5 +1,5 @@
 import { type } from "arktype";
-import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
+import { readDropValidatedBody, throwingArktype, requireRouterParam } from "~/server/arktype";
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
 
@@ -11,7 +11,7 @@ export default defineEventHandler(async (h3) => {
   const allowed = await aclManager.allowSystemACL(h3, ["company:update"]);
   if (!allowed) throw createError({ statusCode: 403 });
 
-  const companyId = getRouterParam(h3, "id")!;
+  const companyId = requireRouterParam(h3, "id");
 
   const body = await readDropValidatedBody(h3, GameDelete);
 

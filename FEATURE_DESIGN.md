@@ -21,16 +21,18 @@ Drop provides cross-platform achievement tracking for DRM-free games using Steam
 │  ┌──────────────────┐   ┌─────────────────────────────────┐  │
 │  │ Achievement DB    │   │ API Endpoints                   │  │
 │  │ - Achievement     │◄──│ GET  .../achievement-config     │  │
-│  │ - UserAchievement │◄──│ GET  .../emulator-config  [NEW] │  │
-│  │ - GameExternalLink│◄──│ POST .../achievements-report    │  │
-│  └──────────────────┘   │ POST .../session-end (no-op)    │  │
-│                          └─────────────────────────────────┘  │
+│  │ - UserAchievement │◄──│ POST .../achievements-report    │  │
+│  │ - GameExternalLink│   │ POST .../session-end (no-op)    │  │
+│  └──────────────────┘   └─────────────────────────────────┘  │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────────┐│
-│  │ Admin: setupGoldberg() on game import                    ││
-│  │  - Reads steam_settings/achievements.json from library   ││
-│  │  - Falls back to Steam Web API if missing                ││
+│  │ Admin: setupGoldberg() runs BEFORE manifest generation   ││
+│  │  - Fetches achievement defs from Steam Web API           ││
+│  │  - Writes steam_settings/achievements.json               ││
+│  │  - Writes steam_settings/steam_appid.txt                 ││
+│  │  - Writes drop-goldberg/<AppID>/achievements.json        ││
 │  │  - Creates GameExternalLink + Achievement records in DB  ││
+│  │  All files are included in the manifest → downloaded     ││
 │  └──────────────────────────────────────────────────────────┘│
 └──────────────────────────────────────────────────────────────┘
                            ▲
@@ -40,17 +42,16 @@ Drop provides cross-platform achievement tracking for DRM-free games using Steam
 │  Client (Tauri)                                              │
 │                                                              │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │ Pre-launch (Drop-controlled config)                    │  │
+│  │ Pre-launch                                             │  │
 │  │  1. configure_saves_for_game(install_dir)              │  │
 │  │     → Detects emulator type, writes configs.user.ini   │  │
 │  │     → Returns EmulatorInfo { dll_dir }                 │  │
-│  │  2. fetch_emulator_config(game_id)              [NEW]  │  │
-│  │     → GET /api/v1/client/game/:id/emulator-config      │  │
-│  │     → Returns { appId, achievements[] }                │  │
-│  │  3. write_goldberg_files(dll_dir, appId, achievements) │  │
-│  │     → Writes steam_settings/steam_appid.txt            │  │
-│  │     → Writes steam_settings/achievements.json          │  │
-│  │     → Creates drop-goldberg/<AppID>/ directory          │  │
+│  │  2. Cloud save sync check (only pre-launch API call)   │  │
+│  │     → GET /api/v1/client/saves/:id/sync-status         │  │
+│  │                                                        │  │
+│  │  All other config files (achievements.json,            │  │
+│  │  steam_appid.txt, drop-goldberg/) come from the        │  │
+│  │  download — written by server during import.           │  │
 │  └────────────────────────────────────────────────────────┘  │
 │                                                              │
 │  ┌────────────────────────────────────────────────────────┐  │
@@ -120,28 +121,29 @@ The server writes `steam_appid.txt` and `achievements.json` during game import v
 
 #### Client (player's machine) — Drop-controlled
 
-Before every game launch, the client fetches achievement definitions from the server (`GET /api/v1/client/game/:id/emulator-config`) and writes all config files. These are **overwritten on every launch** to stay in sync with the server DB.
+All emulator config files are written by the server during game import (before manifest generation) and included in the download. The client only writes `configs.user.ini` at launch time.
 
-**Written by client pre-launch (from server data):**
+**Included in download (written by server at import):**
 
 ```
 <dll_dir>/
   steam_settings/
-    steam_appid.txt          ← AppID from GameExternalLink
-    achievements.json        ← definitions from Achievement table (Goldberg format)
-    configs.user.ini         ← local_save_path + account_name
+    steam_appid.txt          ← AppID
+    achievements.json        ← definitions from Steam Web API
+  drop-goldberg/<AppID>/
+    achievements.json        ← definitions (runtime copy for Goldberg)
 ```
 
-**Created by client pre-launch (empty, for Goldberg runtime use):**
+**Written by client at launch (user-specific):**
 
 ```
-<dll_dir>/drop-goldberg/<AppID>/   ← directory created so emulator can write immediately
+<dll_dir>/steam_settings/configs.user.ini   ← local_save_path + account_name
 ```
 
-**Runtime saves (written by Goldberg during gameplay):**
+**Updated by Goldberg during gameplay:**
 
 ```
-<dll_dir>/drop-goldberg/<AppID>/achievements.json   ← earned/earned_time state
+<dll_dir>/drop-goldberg/<AppID>/achievements.json   ← earned/earned_time fields added
 ```
 
 **AppData fallback locations (checked in order if primary doesn't exist):**
@@ -218,7 +220,6 @@ A game can have the same achievement from multiple sources (Goldberg, Steam, Ret
 | Method | Path                                           | Auth       | Purpose                                                                  |
 | ------ | ---------------------------------------------- | ---------- | ------------------------------------------------------------------------ |
 | GET    | `/api/v1/client/game/{id}/achievement-config`  | Client JWT | Fetch definitions + unlock status + AppIDs                               |
-| GET    | `/api/v1/client/game/{id}/emulator-config`     | Client JWT | **[NEW]** Fetch Goldberg-format defs + AppID for client to write to disk |
 | POST   | `/api/v1/client/game/{id}/achievements-report` | Client JWT | Report new unlocks from local files                                      |
 | POST   | `/api/v1/client/game/{id}/session-end`         | Client JWT | Session end notification (currently no-op)                               |
 | GET    | `/api/v1/games/{id}/achievements`              | User       | Public game page with rarity percentages                                 |
@@ -246,7 +247,6 @@ A game can have the same achievement from multiple sources (Goldberg, Steam, Ret
 
 - Goldberg utilities: `server/internal/goldberg.ts` (setupGoldberg, fetchSteamAchievements, readGoldbergDefinitions)
 - GBE DLL finder: `server/internal/gbe.ts`
-- Emulator config endpoint: `server/api/v1/client/game/[id]/emulator-config.get.ts` **(NEW)**
 - Achievement config endpoint: `server/api/v1/client/game/[id]/achievement-config.get.ts`
 - Achievement report: `server/api/v1/client/game/[id]/achievements-report.post.ts`
 - Admin scan: `server/api/v1/admin/achievements/scan.post.ts`, `scan-goldberg.post.ts`
@@ -255,9 +255,9 @@ A game can have the same achievement from multiple sources (Goldberg, Steam, Ret
 
 **Client (Rust):**
 
-- Emulator detection + file writing: `src-tauri/remote/src/goldberg.rs` (configure_saves_for_game, write_goldberg_files, fetch_emulator_config)
+- Emulator detection + config: `src-tauri/remote/src/goldberg.rs` (configure_saves_for_game)
 - Achievement polling: `src-tauri/remote/src/achievements.rs`
-- Pre-launch integration: `src-tauri/process/src/process_manager.rs` (emulator config fetch + file write before launch)
+- Pre-launch integration: `src-tauri/process/src/process_manager.rs` (configs.user.ini + cloud save check)
 
 ---
 
@@ -477,65 +477,4 @@ The system uses `lastUsedClientId` and checksums to detect conflicts:
 | Auto-upload on exit  | Yes (if paths known)             | N/A                        |
 | Auto-check on launch | Yes (5s timeout)                 | N/A                        |
 | Manual upload        | Yes (Tauri command)              | No                         |
-| Manual download      | Yes (Tauri command + extraction) | Download tar.zst file only |
-| Browse saves         | Yes (settings page via iframe)   | Yes (settings page)        |
-| Rename/delete slots  | Yes (via web iframe)             | Yes                        |
-| Goldberg fallback    | Yes                              | N/A                        |
-
-### Application Settings
-
-| Setting                | Default | Description                      |
-| ---------------------- | ------- | -------------------------------- |
-| `saveSlotCountLimit`   | 5       | Max save slots per game per user |
-| `saveSlotSizeLimit`    | 10 MB   | Max archive size per upload      |
-| `saveSlotHistoryLimit` | 3       | Max versions retained per slot   |
-
-### API Endpoints
-
-| Method | Path                                             | Auth       | Purpose                                        |
-| ------ | ------------------------------------------------ | ---------- | ---------------------------------------------- |
-| GET    | `/api/v1/client/saves/{gameId}/sync-status`      | Client JWT | Save paths + slot checksums for sync decisions |
-| GET    | `/api/v1/client/saves/{gameId}/save-paths`       | Client JWT | Just the save path config                      |
-| POST   | `/api/v1/client/saves/{gameId}`                  | Client JWT | Create new save slot                           |
-| POST   | `/api/v1/client/saves/{gameId}/{slotIndex}/push` | Client JWT | Upload save archive (octet-stream)             |
-| GET    | `/api/v1/object/{objectId}`                      | Client JWT | Download save archive                          |
-| GET    | `/api/v1/user/saves/`                            | User       | List all saves with game metadata              |
-| GET    | `/api/v1/user/saves/settings`                    | User       | Slot limits and retention settings             |
-| GET    | `/api/v1/user/saves/{gameId}`                    | User       | Saves for a specific game                      |
-| POST   | `/api/v1/user/saves/{gameId}`                    | User       | Create save slot (web UI)                      |
-| PATCH  | `/api/v1/user/saves/{gameId}/{slotIndex}`        | User       | Rename save slot                               |
-| DELETE | `/api/v1/user/saves/{gameId}/{slotIndex}`        | User       | Delete save slot                               |
-| GET    | `/api/v1/admin/game/{id}/save-paths`             | Admin      | Read save path config                          |
-| PATCH  | `/api/v1/admin/game/{id}/save-paths`             | Admin      | Update save path config                        |
-
-### Tauri Events
-
-| Event                      | Payload                                                   | When                             |
-| -------------------------- | --------------------------------------------------------- | -------------------------------- |
-| `cloud_save_available`     | `{ gameId, slotIndex, latestChecksum, lastUsedClientId }` | Pre-launch: cloud save exists    |
-| `cloud_save_uploaded`      | `{ gameId, slotIndex }`                                   | Post-exit: auto-upload succeeded |
-| `cloud_save_upload_failed` | `{ gameId, error }`                                       | Post-exit: auto-upload failed    |
-
-### Source Files
-
-**Server:**
-
-- Schema: `prisma/models/content.prisma` (SaveSlot model, Game.savePaths)
-- Save manager: `server/internal/saves/index.ts`
-- Client endpoints: `server/api/v1/client/saves/`
-- User endpoints: `server/api/v1/user/saves/`
-- Admin endpoints: `server/api/v1/admin/game/[id]/save-paths.*`
-- Admin UI: `components/GameEditor/SavePaths.vue`
-
-**Client (Rust):**
-
-- Cloud saves crate: `src-tauri/cloud_saves/src/` (resolver, metadata, conditions, placeholders, backup manager, paths)
-- Remote API: `src-tauri/remote/src/saves.rs`
-- Sync engine: `src-tauri/process/src/cloud_save_sync.rs`
-- Tauri commands: `src-tauri/src/cloud_saves.rs`
-- Process manager integration: `src-tauri/process/src/process_manager.rs`
-
-**Client (Vue):**
-
-- Game page cloud sync dialog: `main/pages/library/[id]/index.vue`
-- Settings page: `main/pages/settings/saves.vue`
+| Manual download      | Yes (Tauri command + extraction)
