@@ -317,6 +317,16 @@ export async function setupGoldberg(
       console.log(`[GOLDBERG] Wrote steam_appid.txt (${appId})`);
     }
 
+    // ── 2b. Create the runtime save directory (drop-goldberg/<AppID>/) ───
+    // Goldberg writes achievement unlocks and saves here at runtime.
+    // Creating it during import means it's included in the download,
+    // so the client doesn't have to create it at launch time.
+    const saveDir = path.join(settingsRoot, "drop-goldberg", appId);
+    if (!fs.existsSync(saveDir)) {
+      fs.mkdirSync(saveDir, { recursive: true });
+      console.log(`[GOLDBERG] Created save dir ${saveDir}`);
+    }
+
     // ── 3. Ensure achievements.json exists on disk ───────────────────────
     const forceRefresh = options?.forceRefreshAchievements ?? false;
     let definitions = forceRefresh ? [] : readGoldbergDefinitions(settingsRoot);
