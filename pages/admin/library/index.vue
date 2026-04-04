@@ -598,12 +598,14 @@ function previousPage() {
 
 const toImport = ref(Object.values(unimportedGames).flat().length > 0);
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const libraryGames = computed((): any[] =>
+// Cast e.game to Record to avoid TS2589 from Prisma Json field deep recursion
+const libraryGames = computed(() =>
   games.value.map((e) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const game = e.game as Record<string, any>;
     if (e.status == "offline") {
       return {
-        ...e.game,
+        ...game,
         status: "offline",
         hasNotifications: true,
         notifications: {
@@ -616,7 +618,7 @@ const libraryGames = computed((): any[] =>
     const toImport = e.status.unimportedVersions.length > 0;
 
     return {
-      ...e.game,
+      ...game,
       notifications: {
         noVersions,
         toImport,
