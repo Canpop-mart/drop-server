@@ -598,7 +598,8 @@ function previousPage() {
 
 const toImport = ref(Object.values(unimportedGames).flat().length > 0);
 
-const libraryGames = computed(() =>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const libraryGames = computed((): any[] =>
   games.value.map((e) => {
     if (e.status == "offline") {
       return {
