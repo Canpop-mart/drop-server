@@ -61,6 +61,76 @@
         </div>
       </div>
 
+      <!-- Stat bar -->
+      <div
+        v-if="!statsLoading"
+        class="mt-6 mx-4 sm:mx-8 flex items-center gap-6 rounded-lg bg-zinc-800/60 backdrop-blur-sm px-6 py-3 border border-zinc-700/50"
+      >
+        <div
+          v-if="stats.cloudSaveCount > 0"
+          class="flex items-center gap-2 text-sm"
+        >
+          <CloudIcon class="size-4 text-blue-400 shrink-0" />
+          <span class="text-zinc-400">{{
+            $t("library.stats.cloudStatus")
+          }}</span>
+          <span class="text-zinc-100 font-medium">{{
+            stats.cloudSaveCount > 0
+              ? $t(
+                  "library.stats.cloudSaves",
+                  [stats.cloudSaveCount],
+                  stats.cloudSaveCount,
+                )
+              : $t("library.stats.noSaves")
+          }}</span>
+        </div>
+        <div v-if="stats.cloudSaveCount > 0" class="w-px h-4 bg-zinc-600" />
+        <div v-if="stats.lastPlayedAt" class="flex items-center gap-2 text-sm">
+          <CalendarIcon class="size-4 text-zinc-400 shrink-0" />
+          <span class="text-zinc-400">{{
+            $t("library.stats.lastPlayed")
+          }}</span>
+          <span class="text-zinc-100 font-medium">{{
+            formatLastPlayed(stats.lastPlayedAt)
+          }}</span>
+        </div>
+        <div v-if="stats.lastPlayedAt" class="w-px h-4 bg-zinc-600" />
+        <div class="flex items-center gap-2 text-sm">
+          <ClockIcon class="size-4 text-zinc-400 shrink-0" />
+          <span class="text-zinc-400">{{ $t("library.stats.playTime") }}</span>
+          <span class="text-zinc-100 font-medium">{{
+            formatPlaytime(stats.playtimeSeconds)
+          }}</span>
+        </div>
+        <div v-if="stats.achievementsTotal > 0" class="w-px h-4 bg-zinc-600" />
+        <div
+          v-if="stats.achievementsTotal > 0"
+          class="flex items-center gap-2 text-sm"
+        >
+          <TrophyIcon class="size-4 text-yellow-500 shrink-0" />
+          <span class="text-zinc-400">{{
+            $t("library.stats.achievements")
+          }}</span>
+          <span class="text-zinc-100 font-medium"
+            >{{ stats.achievementsUnlocked }}/{{
+              stats.achievementsTotal
+            }}</span
+          >
+          <div class="w-24 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+            <div
+              class="h-full bg-blue-500 rounded-full transition-all duration-500"
+              :style="{
+                width:
+                  Math.round(
+                    (stats.achievementsUnlocked / stats.achievementsTotal) *
+                      100,
+                  ) + '%',
+              }"
+            />
+          </div>
+        </div>
+      </div>
+
       <!-- Main content — mirrors client layout: description left, images+achievements right -->
       <div class="mt-8 w-full bg-zinc-900 px-4 sm:px-8 py-6">
         <div class="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-8">
@@ -560,6 +630,8 @@ import {
 import {
   StarIcon,
   ServerIcon,
+  CalendarIcon,
+  ClockIcon,
   CloudIcon,
   TrophyIcon,
   CheckCircleIcon,
@@ -599,6 +671,52 @@ const averageRating = Math.round((rating._avg.mReviewRating ?? 0) * 5);
 const ratingArray = Array(5)
   .fill(null)
   .map((_, i) => i + 1 <= averageRating);
+
+// Game stats bar
+const statsLoading = ref(true);
+const stats = reactive({
+  playtimeSeconds: 0,
+  lastPlayedAt: null as string | null,
+  cloudSaveCount: 0,
+  achievementsUnlocked: 0,
+  achievementsTotal: 0,
+});
+
+$dropFetch(`/api/v1/games/${id}/stats`)
+  .then((data: any) => {
+    Object.assign(stats, data);
+  })
+  .catch(() => {})
+  .finally(() => {
+    statsLoading.value = false;
+  });
+
+function formatPlaytime(seconds: number): string {
+  if (seconds < 60) return t("library.stats.lessThanMinute");
+  const hours = seconds / 3600;
+  if (hours >= 1) {
+    return t("library.stats.hours", [Math.round(hours * 10) / 10]);
+  }
+  const minutes = Math.round(seconds / 60);
+  return t("library.stats.minutes", [minutes]);
+}
+
+function formatLastPlayed(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return t("library.stats.today");
+  if (diffDays === 1) return t("library.stats.yesterday");
+  if (diffDays < 30) return t("library.stats.daysAgo", [diffDays]);
+
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
+  });
+}
 
 // Collapsible sections
 const descriptionOpen = ref(true);

@@ -715,6 +715,20 @@
     "noGames": "No games in library",
     "notFound": "Game not found",
     "search": "Search library…",
+    "stats": {
+      "achievements": "Achievements",
+      "cloudSaves": "{0} saves | {0} save | {0} saves",
+      "cloudStatus": "Cloud",
+      "daysAgo": "{0} days ago",
+      "hours": "{0} hours",
+      "lastPlayed": "Last Played",
+      "lessThanMinute": "< 1 min",
+      "minutes": "{0} min",
+      "noSaves": "No saves",
+      "playTime": "Play Time",
+      "today": "Today",
+      "yesterday": "Yesterday"
+    },
     "subheader": "Organize your games into collections for easy access, and access all your games."
   },
   "news": {
