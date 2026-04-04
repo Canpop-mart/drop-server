@@ -683,7 +683,7 @@ const stats = reactive({
 });
 
 $dropFetch(`/api/v1/games/${id}/stats`)
-  .then((data: any) => {
+  .then((data: typeof stats) => {
     Object.assign(stats, data);
   })
   .catch(() => {})
@@ -793,12 +793,4 @@ useHead({ title: game.mName });
   transition: all 0.3s ease;
   position: absolute;
 }
-.slide-enter-from {
-  opacity: 0;
-  transform: translateX(100%);
-}
-.slide-leave-to {
-  opacity: 0;
-  transform: translateX(-100%);
-}
-</style>
+.slide-ente
