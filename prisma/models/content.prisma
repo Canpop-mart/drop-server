@@ -51,6 +51,7 @@ model Game {
   libraryPath String
 
   collections CollectionEntry[]
+  savePaths   Json?          // CloudSaveMetadata JSON — save file locations for auto-sync
   saves       SaveSlot[]
   screenshots Screenshot[]
   tags        GameTag[]
@@ -187,6 +188,8 @@ model SaveSlot {
 
   historyObjectIds String[] // list of objects
   historyChecksums String[] // list of hashes
+
+  lastSyncedAt DateTime? @db.Timestamptz(6)
 
   @@id([gameId, userId, index], name: "id")
 }
