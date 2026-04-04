@@ -22,7 +22,7 @@ export default defineEventHandler(async (h3) => {
 
   await prisma.game.updateMany({
     where: { id: gameId },
-    data: { savePaths: body },
+    data: { savePaths: JSON.stringify(body) },
   });
 
   return { success: true };

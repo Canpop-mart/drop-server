@@ -48,7 +48,7 @@ export default defineClientEventHandler(
       throw createError({ statusCode: 404, statusMessage: "Game not found" });
 
     return {
-      savePaths: game.savePaths ?? null,
+      savePaths: game.savePaths ? JSON.parse(game.savePaths) : null,
       slots: saves.map((s) => ({
         index: s.index,
         latestChecksum:

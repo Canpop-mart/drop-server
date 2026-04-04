@@ -16,5 +16,5 @@ export default defineEventHandler(async (h3) => {
   if (!game)
     throw createError({ statusCode: 404, statusMessage: "Game not found" });
 
-  return game.savePaths ?? null;
+  return game.savePaths ? JSON.parse(game.savePaths) : null;
 });

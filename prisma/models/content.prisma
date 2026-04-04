@@ -51,7 +51,7 @@ model Game {
   libraryPath String
 
   collections CollectionEntry[]
-  savePaths   Json?          // CloudSaveMetadata JSON — save file locations for auto-sync
+  savePaths   String?        // CloudSaveMetadata as JSON string — save file locations for auto-sync
   saves       SaveSlot[]
   screenshots Screenshot[]
   tags        GameTag[]
