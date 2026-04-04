@@ -43,7 +43,10 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
 
   // Cap individual sessions at 24 hours to prevent runaway durations
   const MAX_SESSION_SECONDS = 24 * 60 * 60;
-  const durationSeconds = Math.min(Math.max(rawSeconds, 0), MAX_SESSION_SECONDS);
+  const durationSeconds = Math.min(
+    Math.max(rawSeconds, 0),
+    MAX_SESSION_SECONDS,
+  );
 
   // Finalize the session
   const updated = await prisma.playSession.updateMany({
