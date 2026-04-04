@@ -598,14 +598,12 @@ function previousPage() {
 
 const toImport = ref(Object.values(unimportedGames).flat().length > 0);
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const libraryGames = computed(() =>
-  games.value.map((e) => {
-    // Assign to plain object to avoid TS2589 from Prisma Json field in spread
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const base: any = e.game;
+  (games.value as any[]).map((e: any) => {
     if (e.status == "offline") {
       return {
-        ...base,
+        ...e.game,
         status: "offline",
         hasNotifications: true,
         notifications: {
@@ -618,7 +616,7 @@ const libraryGames = computed(() =>
     const toImport = e.status.unimportedVersions.length > 0;
 
     return {
-      ...base,
+      ...e.game,
       notifications: {
         noVersions,
         toImport,
