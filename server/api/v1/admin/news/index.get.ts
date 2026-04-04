@@ -25,7 +25,8 @@ export default defineEventHandler(async (h3) => {
 
   const rawLimit = Number(query.limit);
   const rawSkip = Number(query.skip);
-  const take = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 20;
+  const take =
+    Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 20;
   const skip = Number.isFinite(rawSkip) && rawSkip >= 0 ? rawSkip : 0;
 
   const options = {

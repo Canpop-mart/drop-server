@@ -65,9 +65,7 @@ class NotificationSystem {
     notification: NotificationModel,
   ) {
     for (const [_, listener] of this.listeners.get(userId) ?? []) {
-      const hasSome = notification.acls.some((e) =>
-        listener.acls.includes(e),
-      );
+      const hasSome = notification.acls.some((e) => listener.acls.includes(e));
       if (hasSome) listener.callback(notification);
     }
   }

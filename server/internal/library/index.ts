@@ -509,7 +509,9 @@ class LibraryManager {
                 await setupGoldberg(gameId, versionDir);
               }
             } catch (e) {
-              logger.warn(`Pre-manifest emulator setup failed (non-critical): ${e}`);
+              logger.warn(
+                `Pre-manifest emulator setup failed (non-critical): ${e}`,
+              );
             }
 
             // First, create the manifest via droplet.

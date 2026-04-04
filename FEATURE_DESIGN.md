@@ -217,18 +217,18 @@ A game can have the same achievement from multiple sources (Goldberg, Steam, Ret
 
 ### API Endpoints
 
-| Method | Path                                           | Auth       | Purpose                                                                  |
-| ------ | ---------------------------------------------- | ---------- | ------------------------------------------------------------------------ |
-| GET    | `/api/v1/client/game/{id}/achievement-config`  | Client JWT | Fetch definitions + unlock status + AppIDs                               |
-| POST   | `/api/v1/client/game/{id}/achievements-report` | Client JWT | Report new unlocks from local files                                      |
-| POST   | `/api/v1/client/game/{id}/session-end`         | Client JWT | Session end notification (currently no-op)                               |
-| GET    | `/api/v1/games/{id}/achievements`              | User       | Public game page with rarity percentages                                 |
-| GET    | `/api/v1/user/achievements/list`               | User       | User's unlocked achievements                                             |
-| DELETE | `/api/v1/user/achievements/reset`              | User       | Reset achievements (optional `?gameId=`)                                 |
-| GET    | `/api/v1/user/achievements/debug/{gameId}`     | User       | Diagnostic info for troubleshooting                                      |
-| POST   | `/api/v1/admin/achievements/scan`              | Admin      | Scan single game for Goldberg definitions                                |
-| POST   | `/api/v1/admin/achievements/scan-goldberg`     | Admin      | Bulk-scan all library games                                              |
-| POST   | `/api/v1/admin/game/{id}/achievements-reset`   | Admin      | Admin reset all achievements for a game                                  |
+| Method | Path                                           | Auth       | Purpose                                    |
+| ------ | ---------------------------------------------- | ---------- | ------------------------------------------ |
+| GET    | `/api/v1/client/game/{id}/achievement-config`  | Client JWT | Fetch definitions + unlock status + AppIDs |
+| POST   | `/api/v1/client/game/{id}/achievements-report` | Client JWT | Report new unlocks from local files        |
+| POST   | `/api/v1/client/game/{id}/session-end`         | Client JWT | Session end notification (currently no-op) |
+| GET    | `/api/v1/games/{id}/achievements`              | User       | Public game page with rarity percentages   |
+| GET    | `/api/v1/user/achievements/list`               | User       | User's unlocked achievements               |
+| DELETE | `/api/v1/user/achievements/reset`              | User       | Reset achievements (optional `?gameId=`)   |
+| GET    | `/api/v1/user/achievements/debug/{gameId}`     | User       | Diagnostic info for troubleshooting        |
+| POST   | `/api/v1/admin/achievements/scan`              | Admin      | Scan single game for Goldberg definitions  |
+| POST   | `/api/v1/admin/achievements/scan-goldberg`     | Admin      | Bulk-scan all library games                |
+| POST   | `/api/v1/admin/game/{id}/achievements-reset`   | Admin      | Admin reset all achievements for a game    |
 
 ### Constants
 
@@ -472,9 +472,9 @@ The system uses `lastUsedClientId` and checksums to detect conflicts:
 
 ### Dual-Surface Behavior
 
-| Feature              | Desktop Client (Tauri)           | Web UI                     |
-| -------------------- | -------------------------------- | -------------------------- |
-| Auto-upload on exit  | Yes (if paths known)             | N/A                        |
-| Auto-check on launch | Yes (5s timeout)                 | N/A                        |
-| Manual upload        | Yes (Tauri command)              | No                         |
-| Manual download      | Yes (Tauri command + extraction)
+| Feature              | Desktop Client (Tauri)           | Web UI |
+| -------------------- | -------------------------------- | ------ |
+| Auto-upload on exit  | Yes (if paths known)             | N/A    |
+| Auto-check on launch | Yes (5s timeout)                 | N/A    |
+| Manual upload        | Yes (Tauri command)              | No     |
+| Manual download      | Yes (Tauri command + extraction) |
