@@ -286,6 +286,11 @@ const scheduledTasks: {
     description:
       "Re-fetches achievement definitions from Steam for all Goldberg-enabled games and updates the local configs.",
   },
+  "recalculate:playtime": {
+    name: "Recalculate Playtime",
+    description:
+      "Recomputes all cumulative playtime from actual session records. Fixes any inflated totals caused by orphan double-counting.",
+  },
 };
 
 async function startTask(taskGroup: string) {

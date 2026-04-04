@@ -35,6 +35,9 @@ export const taskGroups = {
   "refresh:achievement-defs": {
     concurrency: false,
   },
+  "recalculate:playtime": {
+    concurrency: false,
+  },
 } as const;
 
 export type TaskGroup = keyof typeof taskGroups;

@@ -37,9 +37,13 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     });
 
   const now = new Date();
-  const durationSeconds = Math.floor(
+  const rawSeconds = Math.floor(
     (now.getTime() - session.startedAt.getTime()) / 1000,
   );
+
+  // Cap individual sessions at 24 hours to prevent runaway durations
+  const MAX_SESSION_SECONDS = 24 * 60 * 60;
+  const durationSeconds = Math.min(Math.max(rawSeconds, 0), MAX_SESSION_SECONDS);
 
   // Finalize the session
   const updated = await prisma.playSession.updateMany({
@@ -56,7 +60,20 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
       statusMessage: "Session not found.",
     });
 
-  // Upsert cumulative playtime for this game/user pair
+  // Recompute cumulative playtime from all finished sessions
+  // (avoids drift from incremental accounting)
+  const aggregate = await prisma.playSession.aggregate({
+    where: {
+      gameId: session.gameId,
+      userId: user.id,
+      endedAt: { not: null },
+      durationSeconds: { not: null },
+    },
+    _sum: { durationSeconds: true },
+  });
+
+  const totalSeconds = aggregate._sum.durationSeconds ?? durationSeconds;
+
   await prisma.playtime.upsert({
     where: {
       gameId_userId: {
@@ -67,10 +84,10 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     create: {
       gameId: session.gameId,
       userId: user.id,
-      seconds: durationSeconds,
+      seconds: totalSeconds,
     },
     update: {
-      seconds: { increment: durationSeconds },
+      seconds: totalSeconds,
     },
   });
 

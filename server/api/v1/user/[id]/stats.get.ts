@@ -72,6 +72,8 @@ export default defineEventHandler(async (h3) => {
       Date.now() - new Date(s.startedAt).getTime() > 4 * 60 * 60 * 1000,
   );
 
+  const affectedGameIds = new Set<string>();
+
   for (const orphan of orphanedSessions) {
     const endedAt = new Date(
       Math.min(
@@ -88,25 +90,33 @@ export default defineEventHandler(async (h3) => {
       data: { endedAt, durationSeconds },
     });
 
-    // Upsert cumulative playtime for the game/user pair
-    await prisma.playtime.upsert({
-      where: {
-        gameId_userId: { gameId: orphan.gameId, userId: user.id },
-      },
-      create: {
-        gameId: orphan.gameId,
-        userId: user.id,
-        seconds: durationSeconds,
-      },
-      update: {
-        seconds: { increment: durationSeconds },
-      },
-    });
+    affectedGameIds.add(orphan.gameId);
 
     // Update in-memory copy so the response reflects the fix
     (orphan as { endedAt: Date | null }).endedAt = endedAt;
     (orphan as { durationSeconds: number | null }).durationSeconds =
       durationSeconds;
+  }
+
+  // Recompute cumulative playtime for each affected game from session records
+  for (const gameId of affectedGameIds) {
+    const aggregate = await prisma.playSession.aggregate({
+      where: {
+        gameId,
+        userId: user.id,
+        endedAt: { not: null },
+        durationSeconds: { not: null },
+      },
+      _sum: { durationSeconds: true },
+    });
+
+    const totalSeconds = aggregate._sum.durationSeconds ?? 0;
+
+    await prisma.playtime.upsert({
+      where: { gameId_userId: { gameId, userId: user.id } },
+      create: { gameId, userId: user.id, seconds: totalSeconds },
+      update: { seconds: totalSeconds },
+    });
   }
 
   return {

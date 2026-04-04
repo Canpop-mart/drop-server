@@ -18,6 +18,7 @@ import checkGoldbergStatus, {
   refreshAchievementDefinitions,
 } from "./registry/goldberg-status";
 import { upgradeAllToGbe, downloadGbe } from "./registry/upgrade-to-gbe";
+import recalculatePlaytime from "./registry/recalculate-playtime";
 
 type TaskActionLink = `${string}:${string}`;
 
@@ -77,6 +78,7 @@ class TaskHandler {
     this.saveScheduledTask(refreshAchievementDefinitions);
     this.saveScheduledTask(downloadGbe);
     this.saveScheduledTask(upgradeAllToGbe);
+    this.saveScheduledTask(recalculatePlaytime);
   }
 
   /**

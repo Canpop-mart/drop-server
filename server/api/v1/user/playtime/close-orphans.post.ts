@@ -33,8 +33,10 @@ export default defineEventHandler(async (h3) => {
     return { closed: 0 };
   }
 
-  // Close each orphan and upsert cumulative playtime
+  // Close each orphan, then recompute cumulative playtime per affected game
+  const affectedGameIds = new Set<string>();
   let closed = 0;
+
   for (const orphan of orphans) {
     const endedAt = new Date(
       Math.min(
@@ -51,25 +53,29 @@ export default defineEventHandler(async (h3) => {
       data: { endedAt, durationSeconds },
     });
 
-    // Upsert cumulative playtime
-    await prisma.playtime.upsert({
+    affectedGameIds.add(orphan.gameId);
+    closed++;
+  }
+
+  // Recompute cumulative playtime for each affected game from session records
+  for (const gameId of affectedGameIds) {
+    const aggregate = await prisma.playSession.aggregate({
       where: {
-        gameId_userId: {
-          gameId: orphan.gameId,
-          userId: user.id,
-        },
-      },
-      create: {
-        gameId: orphan.gameId,
+        gameId,
         userId: user.id,
-        seconds: durationSeconds,
+        endedAt: { not: null },
+        durationSeconds: { not: null },
       },
-      update: {
-        seconds: { increment: durationSeconds },
-      },
+      _sum: { durationSeconds: true },
     });
 
-    closed++;
+    const totalSeconds = aggregate._sum.durationSeconds ?? 0;
+
+    await prisma.playtime.upsert({
+      where: { gameId_userId: { gameId, userId: user.id } },
+      create: { gameId, userId: user.id, seconds: totalSeconds },
+      update: { seconds: totalSeconds },
+    });
   }
 
   return { closed };
