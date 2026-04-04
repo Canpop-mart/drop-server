@@ -235,6 +235,7 @@ export async function fetchSteamAchievements(
 export async function setupGoldberg(
   gameId: string,
   versionDir: string,
+  options?: { forceRefreshAchievements?: boolean },
 ): Promise<void> {
   try {
     // Resolve the actual directory containing the Steam API DLL.
@@ -243,6 +244,19 @@ export async function setupGoldberg(
     const { findSteamApiDll } = await import("./gbe");
     const dllInfo = findSteamApiDll(versionDir);
     const settingsRoot = dllInfo ? dllInfo.dllDir : versionDir;
+
+    // ── Cleanup: remove stale steam_settings/ at version root ───────────
+    // If the DLL lives in a subdirectory, any steam_settings/ at the
+    // version root is leftover from an older approach and unused by GBE.
+    if (settingsRoot !== versionDir) {
+      const staleSettings = path.join(versionDir, "steam_settings");
+      if (fs.existsSync(staleSettings)) {
+        fs.rmSync(staleSettings, { recursive: true, force: true });
+        console.log(
+          `[GOLDBERG] Removed stale steam_settings/ at version root (DLL is in ${settingsRoot})`,
+        );
+      }
+    }
 
     // ── 1. Resolve the AppID ─────────────────────────────────────────────
     // Try the local file first, then fall back to an existing DB link.
@@ -304,11 +318,14 @@ export async function setupGoldberg(
     }
 
     // ── 3. Ensure achievements.json exists on disk ───────────────────────
-    let definitions = readGoldbergDefinitions(settingsRoot);
+    const forceRefresh = options?.forceRefreshAchievements ?? false;
+    let definitions = forceRefresh ? [] : readGoldbergDefinitions(settingsRoot);
 
     if (definitions.length === 0) {
       console.log(
-        `[GOLDBERG] No local achievements.json, fetching from Steam API`,
+        forceRefresh
+          ? `[GOLDBERG] Force-refreshing achievements from Steam API`
+          : `[GOLDBERG] No local achievements.json, fetching from Steam API`,
       );
       definitions = await fetchSteamAchievements(appId);
 

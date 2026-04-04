@@ -24,6 +24,79 @@ import path from "path";
  * If anything is missing and can be auto-fixed, it runs setupGoldberg()
  * to fill in the gaps. Games that can't be fixed are reported.
  */
+/**
+ * Force-refreshes achievement definitions from the Steam API for all
+ * games with a Goldberg external link. Useful when Steam adds new
+ * achievements to a game after it was imported into Drop.
+ */
+export const refreshAchievementDefinitions = defineDropTask({
+  buildId: () => `refresh:achievement-defs:${new Date().toISOString()}`,
+  name: "Refresh Achievement Definitions",
+  acls: ["system:maintenance:read"],
+  taskGroup: "refresh:achievement-defs",
+
+  async run({ progress, logger }) {
+    logger.info(
+      "Refreshing achievement definitions from Steam API for all games",
+    );
+
+    const games = await prisma.game.findMany({
+      where: {
+        OR: [
+          {
+            externalLinks: {
+              some: { provider: ExternalAccountProvider.Goldberg },
+            },
+          },
+          { metadataSource: "Steam" },
+        ],
+      },
+      select: { id: true, mName: true },
+    });
+
+    if (games.length === 0) {
+      logger.info("No games with Goldberg/Steam links found");
+      progress(100);
+      return;
+    }
+
+    logger.info(`Refreshing definitions for ${games.length} game(s)`);
+    let refreshed = 0;
+    let failed = 0;
+
+    for (let i = 0; i < games.length; i++) {
+      const game = games[i];
+      const versionDir = await resolveGameVersionDir(game.id);
+      if (!versionDir) {
+        logger.info(`${game.mName} — no version directory, skipping`);
+        continue;
+      }
+
+      try {
+        await setupGoldberg(game.id, versionDir, {
+          forceRefreshAchievements: true,
+        });
+        const count = await prisma.achievement.count({
+          where: { gameId: game.id },
+        });
+        logger.info(`${game.mName} — refreshed (${count} achievements)`);
+        refreshed++;
+      } catch (e) {
+        logger.info(`${game.mName} — failed: ${e}`);
+        failed++;
+      }
+
+      progress(Math.round(((i + 1) / games.length) * 100));
+      // Rate limit: Steam API has per-app limits
+      await new Promise((r) => setTimeout(r, 500));
+    }
+
+    logger.info(
+      `Done — ${refreshed} refreshed, ${failed} failed out of ${games.length} game(s)`,
+    );
+  },
+});
+
 export default defineDropTask({
   buildId: () => `check:goldberg-status:${new Date().toISOString()}`,
   name: "Check Goldberg Achievement Status",

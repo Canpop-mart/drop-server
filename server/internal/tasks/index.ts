@@ -14,7 +14,9 @@ import checkUpdate from "./registry/update";
 import cleanupObjects from "./registry/objects";
 import checkIntegrity from "./registry/check-integrity";
 import checkGameUpdates from "./registry/game-update";
-import checkGoldbergStatus from "./registry/goldberg-status";
+import checkGoldbergStatus, {
+  refreshAchievementDefinitions,
+} from "./registry/goldberg-status";
 import { upgradeAllToGbe, downloadGbe } from "./registry/upgrade-to-gbe";
 
 type TaskActionLink = `${string}:${string}`;
@@ -72,6 +74,7 @@ class TaskHandler {
     this.saveScheduledTask(checkIntegrity);
     this.saveScheduledTask(checkGameUpdates);
     this.saveScheduledTask(checkGoldbergStatus);
+    this.saveScheduledTask(refreshAchievementDefinitions);
     this.saveScheduledTask(downloadGbe);
     this.saveScheduledTask(upgradeAllToGbe);
   }

@@ -32,6 +32,9 @@ export const taskGroups = {
   "upgrade:all-to-gbe": {
     concurrency: false,
   },
+  "refresh:achievement-defs": {
+    concurrency: false,
+  },
 } as const;
 
 export type TaskGroup = keyof typeof taskGroups;
