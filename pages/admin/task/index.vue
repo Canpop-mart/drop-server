@@ -277,9 +277,8 @@ const scheduledTasks: {
       "Downloads the latest GBE (Goldberg fork) release from GitHub for use in SSE → GBE upgrades.",
   },
   "upgrade:all-to-gbe": {
-    name: "Upgrade All SSE Games to GBE",
-    description:
-      "Scans all games for SmartSteamEmu and replaces it with GBE for proper achievement support. Creates backups of original files.",
+    name: "",
+    description: "",
   },
   "refresh:achievement-defs": {
     name: "Refresh Achievement Definitions",

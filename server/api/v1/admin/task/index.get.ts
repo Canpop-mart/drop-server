@@ -44,7 +44,8 @@ export default defineEventHandler(async (h3) => {
     "check:game-updates",
     "check:goldberg-status",
     "download:gbe",
-    "upgrade:all-to-gbe",
+    "refresh:achievement-defs",
+    "recalculate:playtime",
   ];
 
   return { runningTasks, historicalTasks, dailyTasks, weeklyTasks, other };
