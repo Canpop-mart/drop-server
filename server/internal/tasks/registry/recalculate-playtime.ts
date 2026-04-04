@@ -1,23 +1,18 @@
 import { defineDropTask } from "..";
 import prisma from "../../db/database";
 
-const MAX_SESSION_SECONDS = 24 * 60 * 60; // 24 hours
-
 /**
- * Sanitizes individual PlaySession records and recomputes cumulative
- * Playtime.seconds from the corrected data.
+ * Sanitizes PlaySession records and recomputes cumulative Playtime.
  *
- * Phase 1 — Cap inflated sessions:
- *   Any session whose durationSeconds exceeds 24 hours is capped.
- *   Any open session (no endedAt) older than 4 hours is force-closed.
- *   Sessions with durationSeconds that don't match their timestamps
- *   are recalculated from startedAt/endedAt.
+ * Phase 1 — Close orphaned sessions (open > 1 hour).
+ *           Ended at the earlier of (startedAt + actual elapsed) or now.
  *
- * Phase 2 — Recompute cumulative totals:
- *   For every game/user pair, sums the (now-sanitized) session durations
- *   and overwrites Playtime.seconds.
+ * Phase 2 — For each game/user pair, fetch all finished sessions,
+ *           merge overlapping time intervals, and compute wall-clock
+ *           play time. This prevents concurrent/duplicate sessions from
+ *           double-counting time. Overwrites Playtime.seconds.
  *
- * Safe to run at any time — idempotent.
+ * Safe to run at any time — fully idempotent.
  */
 const recalculatePlaytime = defineDropTask({
   buildId: () => `recalculate-playtime-${Date.now()}`,
@@ -25,149 +20,79 @@ const recalculatePlaytime = defineDropTask({
   name: "Recalculate Playtime",
   acls: ["system:maintenance:read"],
   async run({ logger, progress }) {
-    // ── Phase 1: Sanitize individual sessions ──────────────────────
-    logger.info("Phase 1: Sanitizing individual play sessions");
+    // ── Phase 0: Wipe all bad session data and start fresh ─────────
+    logger.info(
+      "Phase 0: Wiping all existing play sessions and playtime records",
+    );
 
-    // 1a. Force-close orphaned sessions (open > 4 hours)
-    const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000);
+    const deletedSessions = await prisma.playSession.deleteMany({});
+    const deletedPlaytime = await prisma.playtime.deleteMany({});
+
+    logger.info(
+      `Phase 0: deleted ${deletedSessions.count} sessions, ${deletedPlaytime.count} playtime records`,
+    );
+    progress(10);
+
+    // ── Phase 1: Close orphaned sessions ───────────────────────────
+    logger.info("Phase 1: Closing orphaned sessions (should be 0 after wipe)");
+
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
     const orphans = await prisma.playSession.findMany({
       where: {
         endedAt: null,
-        startedAt: { lt: fourHoursAgo },
+        startedAt: { lt: oneHourAgo },
       },
       select: { id: true, startedAt: true },
     });
 
-    if (orphans.length > 0) {
-      logger.info(`Closing ${orphans.length} orphaned sessions`);
-      for (const orphan of orphans) {
-        const endedAt = new Date(
-          Math.min(
-            orphan.startedAt.getTime() + MAX_SESSION_SECONDS * 1000,
-            Date.now(),
-          ),
-        );
-        const durationSeconds = Math.min(
-          Math.floor((endedAt.getTime() - orphan.startedAt.getTime()) / 1000),
-          MAX_SESSION_SECONDS,
-        );
-        await prisma.playSession.updateMany({
-          where: { id: orphan.id },
-          data: { endedAt, durationSeconds },
-        });
-      }
+    for (const orphan of orphans) {
+      const now = Date.now();
+      const elapsed = Math.floor((now - orphan.startedAt.getTime()) / 1000);
+      const endedAt = new Date(now);
+
+      await prisma.playSession.updateMany({
+        where: { id: orphan.id },
+        data: { endedAt, durationSeconds: elapsed },
+      });
     }
 
-    // 1b. Fix sessions with incorrect or inflated durationSeconds
-    const allSessions = await prisma.playSession.findMany({
-      where: { endedAt: { not: null } },
-      select: {
-        id: true,
-        startedAt: true,
-        endedAt: true,
-        durationSeconds: true,
-        gameId: true,
-        userId: true,
-      },
-    });
+    logger.info(`Phase 1: closed ${orphans.length} orphaned sessions`);
+    progress(20);
 
-    let sessionsCapped = 0;
-    let sessionsRecalculated = 0;
-
-    for (const session of allSessions) {
-      if (!session.endedAt) continue;
-
-      const realSeconds = Math.floor(
-        (session.endedAt.getTime() - session.startedAt.getTime()) / 1000,
-      );
-      const cappedSeconds = Math.min(
-        Math.max(realSeconds, 0),
-        MAX_SESSION_SECONDS,
-      );
-
-      const stored = session.durationSeconds ?? 0;
-
-      if (stored !== cappedSeconds) {
-        if (stored > MAX_SESSION_SECONDS) {
-          logger.info(
-            `Capping session ${session.id}: ${stored}s → ${cappedSeconds}s`,
-          );
-          sessionsCapped++;
-        } else {
-          sessionsRecalculated++;
-        }
-
-        await prisma.playSession.updateMany({
-          where: { id: session.id },
-          data: { durationSeconds: cappedSeconds },
-        });
-      }
-    }
-
+    // ── Phase 2: Recompute cumulative totals (merge overlaps) ──────
     logger.info(
-      `Phase 1 done: ${orphans.length} orphans closed, ${sessionsCapped} sessions capped, ${sessionsRecalculated} sessions recalculated`,
+      "Phase 2: Recomputing cumulative playtime (merging overlapping sessions)",
     );
-
-    progress(50);
-
-    // ── Diagnostic: dump sessions for games with high playtime ─────
-    logger.info("Diagnostic: inspecting sessions for high-playtime games");
 
     const playtimeRecords = await prisma.playtime.findMany({
       select: { gameId: true, userId: true, seconds: true },
     });
-
-    for (const record of playtimeRecords) {
-      if (record.seconds > 3600) {
-        // More than 1 hour — log all sessions
-        const sessions = await prisma.playSession.findMany({
-          where: { gameId: record.gameId, userId: record.userId },
-          orderBy: { startedAt: "asc" },
-          select: {
-            id: true,
-            startedAt: true,
-            endedAt: true,
-            durationSeconds: true,
-          },
-        });
-
-        logger.info(
-          `Game ${record.gameId} user ${record.userId}: cumulative=${record.seconds}s (${(record.seconds / 3600).toFixed(1)}h), ${sessions.length} sessions`,
-        );
-        for (const s of sessions) {
-          const dur = s.durationSeconds ?? "null";
-          const ended = s.endedAt ? s.endedAt.toISOString() : "OPEN";
-          logger.info(
-            `  Session ${s.id}: started=${s.startedAt.toISOString()} ended=${ended} duration=${dur}s`,
-          );
-        }
-      }
-    }
-
-    // ── Phase 2: Recompute cumulative totals ───────────────────────
-    logger.info("Phase 2: Recomputing cumulative playtime totals");
 
     let corrected = 0;
 
     for (let i = 0; i < playtimeRecords.length; i++) {
       const record = playtimeRecords[i];
 
-      const aggregate = await prisma.playSession.aggregate({
+      // Fetch all finished sessions for this game/user, sorted by start
+      const sessions = await prisma.playSession.findMany({
         where: {
           gameId: record.gameId,
           userId: record.userId,
           endedAt: { not: null },
-          durationSeconds: { not: null },
         },
-        _sum: { durationSeconds: true },
+        orderBy: { startedAt: "asc" },
+        select: { startedAt: true, endedAt: true },
       });
 
-      const correctSeconds = aggregate._sum.durationSeconds ?? 0;
+      // Merge overlapping intervals and sum wall-clock time
+      const correctSeconds = mergeAndSum(sessions);
 
       if (record.seconds !== correctSeconds) {
         logger.info(
           `Correcting playtime for game=${record.gameId} user=${record.userId}: ` +
-            `${record.seconds}s → ${correctSeconds}s (was off by ${record.seconds - correctSeconds}s)`,
+            `${record.seconds}s (${(record.seconds / 3600).toFixed(1)}h) → ` +
+            `${correctSeconds}s (${(correctSeconds / 3600).toFixed(1)}h) ` +
+            `[${sessions.length} sessions]`,
         );
 
         await prisma.playtime.updateMany({
@@ -181,13 +106,50 @@ const recalculatePlaytime = defineDropTask({
         corrected++;
       }
 
-      progress(50 + Math.round(((i + 1) / playtimeRecords.length) * 50));
+      progress(20 + Math.round(((i + 1) / playtimeRecords.length) * 80));
     }
 
     logger.info(
-      `Phase 2 done: checked ${playtimeRecords.length} records, corrected ${corrected}.`,
+      `Phase 2: checked ${playtimeRecords.length} records, corrected ${corrected}`,
     );
   },
 });
+
+/**
+ * Merge overlapping time intervals and return total non-overlapping seconds.
+ * Input must be sorted by startedAt ascending.
+ *
+ * Example: if session A covers 18:00–22:00 and session B covers 20:00–23:00,
+ * the merged interval is 18:00–23:00 = 5 hours (not 4+3 = 7 hours).
+ */
+function mergeAndSum(
+  sessions: { startedAt: Date; endedAt: Date | null }[],
+): number {
+  if (sessions.length === 0) return 0;
+
+  let totalSeconds = 0;
+  let currentStart = sessions[0].startedAt.getTime();
+  let currentEnd = sessions[0].endedAt?.getTime() ?? currentStart;
+
+  for (let i = 1; i < sessions.length; i++) {
+    const start = sessions[i].startedAt.getTime();
+    const end = sessions[i].endedAt?.getTime() ?? start;
+
+    if (start <= currentEnd) {
+      // Overlapping or adjacent — extend the current interval
+      currentEnd = Math.max(currentEnd, end);
+    } else {
+      // Gap — commit the current interval and start a new one
+      totalSeconds += Math.floor((currentEnd - currentStart) / 1000);
+      currentStart = start;
+      currentEnd = end;
+    }
+  }
+
+  // Commit the last interval
+  totalSeconds += Math.floor((currentEnd - currentStart) / 1000);
+
+  return totalSeconds;
+}
 
 export default recalculatePlaytime;

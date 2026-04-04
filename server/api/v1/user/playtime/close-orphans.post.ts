@@ -6,8 +6,8 @@ import prisma from "~/server/internal/db/database";
  * An orphaned session is one that was started but never stopped
  * (no endedAt) and is older than 1 hour.
  *
- * This is a self-service endpoint so users can fix their own
- * broken sessions without waiting for the 24h auto-close.
+ * After closing orphans, recomputes cumulative playtime using
+ * interval merging to avoid double-counting overlapping sessions.
  */
 export default defineEventHandler(async (h3) => {
   const user = await aclManager.getUserACL(h3, ["read"]);
@@ -15,7 +15,6 @@ export default defineEventHandler(async (h3) => {
 
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
 
-  // Find orphaned sessions (no endedAt, started more than 1h ago)
   const orphans = await prisma.playSession.findMany({
     where: {
       userId: user.id,
@@ -33,43 +32,36 @@ export default defineEventHandler(async (h3) => {
     return { closed: 0 };
   }
 
-  // Close each orphan, then recompute cumulative playtime per affected game
+  // Close each orphan with its real elapsed time
   const affectedGameIds = new Set<string>();
-  let closed = 0;
+  const now = Date.now();
 
   for (const orphan of orphans) {
-    const endedAt = new Date(
-      Math.min(
-        new Date(orphan.startedAt).getTime() + 24 * 60 * 60 * 1000,
-        Date.now(),
-      ),
-    );
-    const durationSeconds = Math.floor(
-      (endedAt.getTime() - new Date(orphan.startedAt).getTime()) / 1000,
+    const elapsed = Math.floor(
+      (now - new Date(orphan.startedAt).getTime()) / 1000,
     );
 
     await prisma.playSession.updateMany({
       where: { id: orphan.id },
-      data: { endedAt, durationSeconds },
+      data: { endedAt: new Date(now), durationSeconds: elapsed },
     });
 
     affectedGameIds.add(orphan.gameId);
-    closed++;
   }
 
-  // Recompute cumulative playtime for each affected game from session records
+  // Recompute cumulative playtime using interval merging
   for (const gameId of affectedGameIds) {
-    const aggregate = await prisma.playSession.aggregate({
+    const sessions = await prisma.playSession.findMany({
       where: {
         gameId,
         userId: user.id,
         endedAt: { not: null },
-        durationSeconds: { not: null },
       },
-      _sum: { durationSeconds: true },
+      orderBy: { startedAt: "asc" },
+      select: { startedAt: true, endedAt: true },
     });
 
-    const totalSeconds = aggregate._sum.durationSeconds ?? 0;
+    const totalSeconds = mergeAndSumSessions(sessions);
 
     await prisma.playtime.upsert({
       where: { gameId_userId: { gameId, userId: user.id } },
@@ -78,5 +70,32 @@ export default defineEventHandler(async (h3) => {
     });
   }
 
-  return { closed };
+  return { closed: orphans.length };
 });
+
+/** Merge overlapping time intervals and return total non-overlapping seconds. */
+function mergeAndSumSessions(
+  sessions: { startedAt: Date; endedAt: Date | null }[],
+): number {
+  if (sessions.length === 0) return 0;
+
+  let totalSeconds = 0;
+  let curStart = sessions[0].startedAt.getTime();
+  let curEnd = sessions[0].endedAt?.getTime() ?? curStart;
+
+  for (let i = 1; i < sessions.length; i++) {
+    const start = sessions[i].startedAt.getTime();
+    const end = sessions[i].endedAt?.getTime() ?? start;
+
+    if (start <= curEnd) {
+      curEnd = Math.max(curEnd, end);
+    } else {
+      totalSeconds += Math.floor((curEnd - curStart) / 1000);
+      curStart = start;
+      curEnd = end;
+    }
+  }
+
+  totalSeconds += Math.floor((curEnd - curStart) / 1000);
+  return totalSeconds;
+}

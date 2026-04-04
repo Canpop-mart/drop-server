@@ -37,15 +37,9 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     });
 
   const now = new Date();
-  const rawSeconds = Math.floor(
-    (now.getTime() - session.startedAt.getTime()) / 1000,
-  );
-
-  // Cap individual sessions at 24 hours to prevent runaway durations
-  const MAX_SESSION_SECONDS = 24 * 60 * 60;
-  const durationSeconds = Math.min(
-    Math.max(rawSeconds, 0),
-    MAX_SESSION_SECONDS,
+  const durationSeconds = Math.max(
+    Math.floor((now.getTime() - session.startedAt.getTime()) / 1000),
+    0,
   );
 
   // Finalize the session
@@ -63,19 +57,19 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
       statusMessage: "Session not found.",
     });
 
-  // Recompute cumulative playtime from all finished sessions
-  // (avoids drift from incremental accounting)
-  const aggregate = await prisma.playSession.aggregate({
+  // Recompute cumulative playtime by merging overlapping session intervals.
+  // This prevents duplicate/concurrent sessions from inflating the total.
+  const sessions = await prisma.playSession.findMany({
     where: {
       gameId: session.gameId,
       userId: user.id,
       endedAt: { not: null },
-      durationSeconds: { not: null },
     },
-    _sum: { durationSeconds: true },
+    orderBy: { startedAt: "asc" },
+    select: { startedAt: true, endedAt: true },
   });
 
-  const totalSeconds = aggregate._sum.durationSeconds ?? durationSeconds;
+  const totalSeconds = mergeAndSumSessions(sessions);
 
   await prisma.playtime.upsert({
     where: {
@@ -96,3 +90,30 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
 
   return { durationSeconds };
 });
+
+/** Merge overlapping time intervals and return total non-overlapping seconds. */
+function mergeAndSumSessions(
+  sessions: { startedAt: Date; endedAt: Date | null }[],
+): number {
+  if (sessions.length === 0) return 0;
+
+  let totalSeconds = 0;
+  let curStart = sessions[0].startedAt.getTime();
+  let curEnd = sessions[0].endedAt?.getTime() ?? curStart;
+
+  for (let i = 1; i < sessions.length; i++) {
+    const start = sessions[i].startedAt.getTime();
+    const end = sessions[i].endedAt?.getTime() ?? start;
+
+    if (start <= curEnd) {
+      curEnd = Math.max(curEnd, end);
+    } else {
+      totalSeconds += Math.floor((curEnd - curStart) / 1000);
+      curStart = start;
+      curEnd = end;
+    }
+  }
+
+  totalSeconds += Math.floor((curEnd - curStart) / 1000);
+  return totalSeconds;
+}
