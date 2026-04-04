@@ -281,6 +281,11 @@ const scheduledTasks: {
     description:
       "Scans all games for SmartSteamEmu and replaces it with GBE for proper achievement support. Creates backups of original files.",
   },
+  "refresh:achievement-defs": {
+    name: "Refresh Achievement Definitions",
+    description:
+      "Re-fetches achievement definitions from Steam for all Goldberg-enabled games and updates the local configs.",
+  },
 };
 
 async function startTask(taskGroup: string) {
