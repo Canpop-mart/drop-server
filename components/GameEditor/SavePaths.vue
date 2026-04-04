@@ -265,7 +265,9 @@ onMounted(async () => {
       params: { id: props.modelValue.id },
     });
     if (data && typeof data === "object" && "files" in (data as object)) {
-      files.value = fromServerFormat(data as any);
+      files.value = fromServerFormat(
+        data as Parameters<typeof fromServerFormat>[0],
+      );
     }
   } catch {
     // No save paths yet — that's fine
@@ -294,3 +296,4 @@ async function save() {
   }
 }
 </script>
+                                               
