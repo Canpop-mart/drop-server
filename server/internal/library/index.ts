@@ -17,10 +17,7 @@ import type { GameModel } from "~/prisma/client/models";
 import { createHash } from "node:crypto";
 import type { WorkingLibrarySource } from "~/server/api/v1/admin/library/sources/index.get";
 import gameSizeManager from "~/server/internal/gamesize";
-import {
-  resolveGameVersionDir,
-  setupGoldberg,
-} from "~/server/internal/goldberg";
+import { setupGoldberg } from "~/server/internal/goldberg";
 import type { ImportVersion } from "~/server/api/v1/admin/import/version/index.post";
 import { GameType, type Platform } from "~/prisma/client/enums";
 import { castManifest } from "./manifest/utils";
@@ -683,5 +680,4 @@ class LibraryManager {
   }
 }
 
-export const libraryManager = new LibraryManager();
-export default libraryManager;
+export const libraryManager = new LibraryManager()
