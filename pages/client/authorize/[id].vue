@@ -155,7 +155,7 @@ import {
   XCircleIcon,
 } from "@heroicons/vue/16/solid";
 import { LockClosedIcon } from "@heroicons/vue/20/solid";
-import { CheckCircleIcon, CloudIcon } from "@heroicons/vue/24/outline";
+import { CheckCircleIcon } from "@heroicons/vue/24/outline";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/vue/24/solid";
 import type { FetchError } from "ofetch";
 
