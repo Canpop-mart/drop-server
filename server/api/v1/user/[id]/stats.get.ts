@@ -1,5 +1,6 @@
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
+import { mergeAndSumSessions } from "~/server/internal/playtime/merge-sessions";
 
 export default defineEventHandler(async (h3) => {
   const requestingUser = await aclManager.getUserACL(h3, ["read"]);
@@ -49,6 +50,7 @@ export default defineEventHandler(async (h3) => {
       startedAt: true,
       endedAt: true,
       durationSeconds: true,
+      lastHeartbeatAt: true,
     },
   });
 
@@ -65,6 +67,7 @@ export default defineEventHandler(async (h3) => {
   const gameMap = Object.fromEntries(games.map((g) => [g.id, g]));
 
   // Auto-close orphaned sessions (started more than 4h ago with no endedAt).
+  // If a heartbeat was received, use it as the end time for better accuracy.
   const orphanedSessions = recentSessions.filter(
     (s) =>
       !s.endedAt &&
@@ -72,12 +75,14 @@ export default defineEventHandler(async (h3) => {
   );
 
   const affectedGameIds = new Set<string>();
-  const now = Date.now();
 
   for (const orphan of orphanedSessions) {
-    const endedAt = new Date(now);
+    // Prefer lastHeartbeatAt (more accurate) over now (assumes game ran the whole time)
+    const endedAt = orphan.lastHeartbeatAt
+      ? new Date(orphan.lastHeartbeatAt)
+      : new Date();
     const durationSeconds = Math.floor(
-      (now - new Date(orphan.startedAt).getTime()) / 1000,
+      (endedAt.getTime() - new Date(orphan.startedAt).getTime()) / 1000,
     );
 
     await prisma.playSession.updateMany({
@@ -138,30 +143,3 @@ export default defineEventHandler(async (h3) => {
     }),
   };
 });
-
-/** Merge overlapping time intervals and return total non-overlapping seconds. */
-function mergeAndSumSessions(
-  sessions: { startedAt: Date; endedAt: Date | null }[],
-): number {
-  if (sessions.length === 0) return 0;
-
-  let totalSeconds = 0;
-  let curStart = sessions[0].startedAt.getTime();
-  let curEnd = sessions[0].endedAt?.getTime() ?? curStart;
-
-  for (let i = 1; i < sessions.length; i++) {
-    const start = sessions[i].startedAt.getTime();
-    const end = sessions[i].endedAt?.getTime() ?? start;
-
-    if (start <= curEnd) {
-      curEnd = Math.max(curEnd, end);
-    } else {
-      totalSeconds += Math.floor((curEnd - curStart) / 1000);
-      curStart = start;
-      curEnd = end;
-    }
-  }
-
-  totalSeconds += Math.floor((curEnd - curStart) / 1000);
-  return totalSeconds;
-}

@@ -234,9 +234,10 @@ model PlaySession {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  startedAt       DateTime @default(now()) @db.Timestamptz(6)
+  startedAt       DateTime  @default(now()) @db.Timestamptz(6)
   endedAt         DateTime? @db.Timestamptz(6)
   durationSeconds Int?
+  lastHeartbeatAt DateTime? @db.Timestamptz(6)
 
   @@index([gameId, userId])
   @@index([userId])

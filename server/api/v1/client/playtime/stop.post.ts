@@ -2,6 +2,7 @@ import { type } from "arktype";
 import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
+import { mergeAndSumSessions } from "~/server/internal/playtime/merge-sessions";
 
 const StopBody = type({
   sessionId: "string",
@@ -90,30 +91,3 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
 
   return { durationSeconds };
 });
-
-/** Merge overlapping time intervals and return total non-overlapping seconds. */
-function mergeAndSumSessions(
-  sessions: { startedAt: Date; endedAt: Date | null }[],
-): number {
-  if (sessions.length === 0) return 0;
-
-  let totalSeconds = 0;
-  let curStart = sessions[0].startedAt.getTime();
-  let curEnd = sessions[0].endedAt?.getTime() ?? curStart;
-
-  for (let i = 1; i < sessions.length; i++) {
-    const start = sessions[i].startedAt.getTime();
-    const end = sessions[i].endedAt?.getTime() ?? start;
-
-    if (start <= curEnd) {
-      curEnd = Math.max(curEnd, end);
-    } else {
-      totalSeconds += Math.floor((curEnd - curStart) / 1000);
-      curStart = start;
-      curEnd = end;
-    }
-  }
-
-  totalSeconds += Math.floor((curEnd - curStart) / 1000);
-  return totalSeconds;
-}
