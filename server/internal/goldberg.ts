@@ -415,139 +415,70 @@ export async function setupGoldberg(
     console.log(
       `[GOLDBERG] Done: ${count} achievements for game=${gameId} appId=${appId}`,
     );
-
-    // ── 6. Auto-populate savePaths if not already set ────────────────────
-    // Uses the <base> placeholder so the path resolves correctly on any
-    // client machine. <base> = <root>/<game> = DATA_ROOT_DIR/games/<gameId>
-    // which maps to the game's install directory.
-    await autoSetSavePaths(gameId, versionDir, settingsRoot);
   } catch (e) {
     console.log(`[GOLDBERG] Setup failed for game=${gameId}: ${e}`);
   }
 }
 
 /**
- * Sets the game's `savePaths` to the Goldberg drop-goldberg directory
- * if no save paths are configured yet.
+ * Auto-populate a game's `savePaths` from the Ludusavi manifest.
  *
- * The path uses the `<base>` placeholder so it resolves on any client:
- *   <base>/relative/path/to/drop-goldberg
+ * Lookup order:
+ *   1. Steam AppID (from Goldberg external link or metadata)
+ *   2. Game name (fuzzy trigram match)
  *
- * Where `<base>` expands to `DATA_ROOT_DIR/games/<gameId>` at runtime.
+ * Only writes if `savePaths` is not already set (admin override wins).
+ * Called during version import for ALL game types.
  */
-async function autoSetSavePaths(
-  gameId: string,
-  versionDir: string,
-  settingsRoot: string,
-): Promise<void> {
-  // Don't overwrite manually-configured save paths
-  const game = await prisma.game.findUnique({
-    where: { id: gameId },
-    select: { savePaths: true },
-  });
-  if (game?.savePaths) {
-    console.log(
-      `[GOLDBERG] savePaths already set for ${gameId}, skipping auto-set`,
-    );
-    return;
-  }
-
-  // Build a placeholder-based path relative to the game root.
-  // settingsRoot might be a subdirectory of versionDir (e.g. GameData/Plugins/x86_64/)
-  const relative = path.relative(versionDir, settingsRoot);
-  const segments =
-    relative && relative !== "."
-      ? `<base>/${relative.split(path.sep).join("/")}/drop-goldberg`
-      : "<base>/drop-goldberg";
-
-  const savePaths = JSON.stringify({
-    files: [
-      {
-        path: segments,
-        dataType: "file",
-        tags: ["save"],
-        conditions: [{ type: "os", value: "windows" }],
-      },
-      {
-        path: segments,
-        dataType: "file",
-        tags: ["save"],
-        conditions: [{ type: "os", value: "linux" }],
-      },
-    ],
-  });
-
-  await prisma.game.updateMany({
-    where: { id: gameId },
-    data: { savePaths },
-  });
-
-  console.log(`[GOLDBERG] Auto-set savePaths for ${gameId}: ${segments}`);
-}
-
-/**
- * Ensures every game has a `savePaths` value after version import.
- *
- * Goldberg games already get theirs from `autoSetSavePaths` (called by
- * `setupGoldberg`).  This function is the universal fallback — if no
- * savePaths were set by the time it runs, it writes a default path
- * pointing to `<base>/drop-saves`.
- *
- * The directory is also created on disk (inside the version directory)
- * so it's included in the download manifest and exists on the client
- * from the first install.
- *
- * For emulated games (ROMs), the emulator's launch command can be
- * configured to use `{dir}/drop-saves` as its save directory argument.
- */
-export async function ensureDefaultSavePaths(
-  gameId: string,
-  versionDir: string | undefined,
-): Promise<void> {
+export async function autoPopulateSavePaths(gameId: string): Promise<void> {
   try {
     const game = await prisma.game.findUnique({
       where: { id: gameId },
-      select: { savePaths: true },
+      select: {
+        savePaths: true,
+        mName: true,
+        metadataSource: true,
+        metadataId: true,
+        externalLinks: {
+          where: { provider: ExternalAccountProvider.Goldberg },
+          select: { externalGameId: true },
+          take: 1,
+        },
+      },
     });
 
-    // Already set (by admin or by setupGoldberg) — nothing to do
-    if (game?.savePaths) return;
+    if (!game) return;
 
-    // Create the drop-saves directory on disk so it ships with the game
-    if (versionDir) {
-      const saveDir = path.join(versionDir, "drop-saves");
-      if (!fs.existsSync(saveDir)) {
-        fs.mkdirSync(saveDir, { recursive: true });
-        console.log(`[SAVES] Created ${saveDir}`);
-      }
+    // Don't overwrite manually-configured save paths
+    if (game.savePaths) {
+      console.log(`[SAVES] savePaths already set for ${gameId}, skipping`);
+      return;
     }
 
-    const savePaths = JSON.stringify({
-      files: [
-        {
-          path: "<base>/drop-saves",
-          dataType: "file",
-          tags: ["save"],
-          conditions: [{ type: "os", value: "windows" }],
-        },
-        {
-          path: "<base>/drop-saves",
-          dataType: "file",
-          tags: ["save"],
-          conditions: [{ type: "os", value: "linux" }],
-        },
-      ],
-    });
+    // Resolve the Steam AppID from Goldberg link or Steam metadata
+    const steamAppId =
+      game.externalLinks[0]?.externalGameId ??
+      (game.metadataSource === "Steam" ? game.metadataId : null);
 
-    await prisma.game.updateMany({
-      where: { id: gameId },
-      data: { savePaths },
-    });
+    const { lookupSavePaths } = await import("~/server/internal/ludusavi");
+    const savePaths = await lookupSavePaths(steamAppId, game.mName);
 
-    console.log(
-      `[SAVES] Auto-set default savePaths for ${gameId}: <base>/drop-saves`,
-    );
+    if (savePaths) {
+      await prisma.game.updateMany({
+        where: { id: gameId },
+        data: { savePaths },
+      });
+      console.log(
+        `[SAVES] Auto-populated savePaths for "${game.mName}" from Ludusavi manifest`,
+      );
+    } else {
+      console.log(
+        `[SAVES] No Ludusavi match for "${game.mName}" (AppID ${steamAppId ?? "none"})`,
+      );
+    }
   } catch (e) {
-    console.log(`[SAVES] Failed to set default savePaths for ${gameId}: ${e}`);
+    console.log(
+      `[SAVES] Failed to auto-populate savePaths for ${gameId}: ${e}`,
+    );
   }
 }

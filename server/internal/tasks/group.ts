@@ -38,6 +38,9 @@ export const taskGroups = {
   "recalculate:playtime": {
     concurrency: false,
   },
+  "ludusavi:refresh": {
+    concurrency: false,
+  },
 } as const;
 
 export type TaskGroup = keyof typeof taskGroups;

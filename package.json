@@ -69,7 +69,8 @@
     "vue-router": "latest",
     "vue3-carousel": "^0.16.0",
     "vue3-carousel-nuxt": "^1.1.5",
-    "vuedraggable": "^4.1.0"
+    "vuedraggable": "^4.1.0",
+    "yaml": "^2.7.0"
   },
   "devDependencies": {
     "@bufbuild/buf": "^1.65.0",

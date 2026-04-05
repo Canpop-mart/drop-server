@@ -19,7 +19,7 @@ import type { WorkingLibrarySource } from "~/server/api/v1/admin/library/sources
 import gameSizeManager from "~/server/internal/gamesize";
 import {
   setupGoldberg,
-  ensureDefaultSavePaths,
+  autoPopulateSavePaths,
 } from "~/server/internal/goldberg";
 import type { ImportVersion } from "~/server/api/v1/admin/import/version/index.post";
 import { GameType, type Platform } from "~/prisma/client/enums";
@@ -509,12 +509,10 @@ class LibraryManager {
                 await setupGoldberg(gameId, versionDir);
               }
 
-              // Ensure every game has a default savePaths — Goldberg games
-              // get theirs from setupGoldberg above (drop-goldberg).  All
-              // other games (ROMs, emulated, native non-Steam) get a
-              // generic <base>/drop-saves directory so the cloud save
-              // system always has somewhere to look.
-              await ensureDefaultSavePaths(gameId, versionDir);
+              // Auto-populate savePaths from the Ludusavi manifest.
+              // Looks up the game by Steam AppID or name and writes the
+              // real save file locations (from PCGamingWiki data).
+              await autoPopulateSavePaths(gameId);
             } catch (e) {
               logger.warn(
                 `Pre-manifest emulator setup failed (non-critical): ${e}`,
@@ -544,10 +542,9 @@ class LibraryManager {
             fileList = unimportedVersion.fileList;
             progress(90);
 
-            // Depot imports have no local directory, but still need a
-            // default savePaths so cloud saves work out of the box.
-            // The client will create the drop-saves/ dir on first launch.
-            await ensureDefaultSavePaths(gameId, undefined);
+            // Depot imports have no local directory, but still need
+            // savePaths populated from the Ludusavi manifest.
+            await autoPopulateSavePaths(gameId);
           } else {
             throw "Could not find or create manifest for this version.";
           }

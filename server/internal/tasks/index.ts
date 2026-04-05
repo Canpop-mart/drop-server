@@ -19,6 +19,7 @@ import checkGoldbergStatus, {
 } from "./registry/goldberg-status";
 import { upgradeAllToGbe, downloadGbe } from "./registry/upgrade-to-gbe";
 import recalculatePlaytime from "./registry/recalculate-playtime";
+import refreshLudusavi from "./registry/ludusavi";
 
 type TaskActionLink = `${string}:${string}`;
 
@@ -79,6 +80,7 @@ class TaskHandler {
     this.saveScheduledTask(downloadGbe);
     this.saveScheduledTask(upgradeAllToGbe);
     this.saveScheduledTask(recalculatePlaytime);
+    this.saveScheduledTask(refreshLudusavi);
   }
 
   /**

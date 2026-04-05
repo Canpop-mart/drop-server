@@ -266,3 +266,21 @@ model ObjectHash {
   id   String @id
   hash String
 }
+
+/// Cached entries from the Ludusavi manifest — a community-maintained
+/// database of PC game save file locations compiled from PCGamingWiki.
+/// Refreshed periodically by the ludusavi:refresh task.
+model LudusaviGame {
+  /// The game's canonical name (key in the manifest YAML).
+  name    String @id
+  /// Steam AppID, if known.
+  steamId Int?
+  /// GOG product ID, if known.
+  gogId   Int?
+  /// The raw files/registry data in Drop savePaths format (JSON).
+  /// Already converted from Ludusavi format on import.
+  savePaths String
+
+  @@index([steamId])
+  @@index([name(ops: raw("gist_trgm_ops(siglen=32)"))], type: Gist)
+}
