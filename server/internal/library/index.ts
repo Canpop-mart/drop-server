@@ -17,7 +17,10 @@ import type { GameModel } from "~/prisma/client/models";
 import { createHash } from "node:crypto";
 import type { WorkingLibrarySource } from "~/server/api/v1/admin/library/sources/index.get";
 import gameSizeManager from "~/server/internal/gamesize";
-import { setupGoldberg } from "~/server/internal/goldberg";
+import {
+  setupGoldberg,
+  ensureDefaultSavePaths,
+} from "~/server/internal/goldberg";
 import type { ImportVersion } from "~/server/api/v1/admin/import/version/index.post";
 import { GameType, type Platform } from "~/prisma/client/enums";
 import { castManifest } from "./manifest/utils";
@@ -505,6 +508,13 @@ class LibraryManager {
                 await autoUpgradeSseIfNeeded(versionDir, gameId, logger);
                 await setupGoldberg(gameId, versionDir);
               }
+
+              // Ensure every game has a default savePaths — Goldberg games
+              // get theirs from setupGoldberg above (drop-goldberg).  All
+              // other games (ROMs, emulated, native non-Steam) get a
+              // generic <base>/drop-saves directory so the cloud save
+              // system always has somewhere to look.
+              await ensureDefaultSavePaths(gameId, versionDir);
             } catch (e) {
               logger.warn(
                 `Pre-manifest emulator setup failed (non-critical): ${e}`,
@@ -533,6 +543,11 @@ class LibraryManager {
             manifest = castManifest(unimportedVersion.manifest);
             fileList = unimportedVersion.fileList;
             progress(90);
+
+            // Depot imports have no local directory, but still need a
+            // default savePaths so cloud saves work out of the box.
+            // The client will create the drop-saves/ dir on first launch.
+            await ensureDefaultSavePaths(gameId, undefined);
           } else {
             throw "Could not find or create manifest for this version.";
           }
