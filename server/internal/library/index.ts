@@ -680,4 +680,5 @@ class LibraryManager {
   }
 }
 
-export const libraryManager = new LibraryManager()
+export const libraryManager = new LibraryManager();
+export default libraryManager;
