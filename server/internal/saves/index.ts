@@ -38,7 +38,7 @@ class SaveManager {
     const newSaveStream = await objectHandler.createWithStream(
       newSaveObjectId,
       { saveSlot: JSON.stringify({ userId, gameId, index }) },
-      [],
+      [`${userId}:read`],
     );
     if (!newSaveStream)
       throw createError({
