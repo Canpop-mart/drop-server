@@ -477,7 +477,7 @@ async function autoSetSavePaths(
     ],
   });
 
-  await prisma.game.update({
+  await prisma.game.updateMany({
     where: { id: gameId },
     data: { savePaths },
   });
@@ -539,7 +539,7 @@ export async function ensureDefaultSavePaths(
       ],
     });
 
-    await prisma.game.update({
+    await prisma.game.updateMany({
       where: { id: gameId },
       data: { savePaths },
     });
