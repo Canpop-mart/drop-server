@@ -5,7 +5,6 @@ import prisma from "~/server/internal/db/database";
  * Returns per-game stats for the authenticated user:
  * - playtimeSeconds: total seconds played
  * - lastPlayedAt: most recent session end (or start if still active)
- * - cloudSaveCount: number of cloud save slots
  * - achievementsUnlocked: number of achievements the user has unlocked
  * - achievementsTotal: total number of (deduplicated) achievements for this game
  */
@@ -17,7 +16,7 @@ export default defineEventHandler(async (h3) => {
   if (!gameId)
     throw createError({ statusCode: 400, statusMessage: "Missing game ID." });
 
-  const [playtime, lastSession, saveCount, achievementData, userUnlocks] =
+  const [playtime, lastSession, achievementData, userUnlocks] =
     await Promise.all([
       prisma.playtime.findUnique({
         where: { gameId_userId: { gameId, userId } },
@@ -28,10 +27,6 @@ export default defineEventHandler(async (h3) => {
         where: { gameId, userId },
         orderBy: { startedAt: "desc" },
         select: { startedAt: true, endedAt: true },
-      }),
-
-      prisma.saveSlot.count({
-        where: { gameId, userId },
       }),
 
       prisma.achievement.findMany({
@@ -65,7 +60,6 @@ export default defineEventHandler(async (h3) => {
   return {
     playtimeSeconds: playtime?.seconds ?? 0,
     lastPlayedAt: lastSession?.endedAt ?? lastSession?.startedAt ?? null,
-    cloudSaveCount: saveCount,
     achievementsUnlocked,
     achievementsTotal,
   };

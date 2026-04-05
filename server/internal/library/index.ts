@@ -17,10 +17,7 @@ import type { GameModel } from "~/prisma/client/models";
 import { createHash } from "node:crypto";
 import type { WorkingLibrarySource } from "~/server/api/v1/admin/library/sources/index.get";
 import gameSizeManager from "~/server/internal/gamesize";
-import {
-  setupGoldberg,
-  autoPopulateSavePaths,
-} from "~/server/internal/goldberg";
+import { setupGoldberg } from "~/server/internal/goldberg";
 import type { ImportVersion } from "~/server/api/v1/admin/import/version/index.post";
 import { GameType, type Platform } from "~/prisma/client/enums";
 import { castManifest } from "./manifest/utils";
@@ -508,11 +505,6 @@ class LibraryManager {
                 await autoUpgradeSseIfNeeded(versionDir, gameId, logger);
                 await setupGoldberg(gameId, versionDir);
               }
-
-              // Auto-populate savePaths from the Ludusavi manifest.
-              // Looks up the game by Steam AppID or name and writes the
-              // real save file locations (from PCGamingWiki data).
-              await autoPopulateSavePaths(gameId);
             } catch (e) {
               logger.warn(
                 `Pre-manifest emulator setup failed (non-critical): ${e}`,
@@ -541,10 +533,6 @@ class LibraryManager {
             manifest = castManifest(unimportedVersion.manifest);
             fileList = unimportedVersion.fileList;
             progress(90);
-
-            // Depot imports have no local directory, but still need
-            // savePaths populated from the Ludusavi manifest.
-            await autoPopulateSavePaths(gameId);
           } else {
             throw "Could not find or create manifest for this version.";
           }

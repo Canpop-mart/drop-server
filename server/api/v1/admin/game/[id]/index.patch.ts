@@ -15,7 +15,6 @@ const GameUpdate = type({
   mBannerObjectId: "string?",
   mCoverObjectId: "string?",
   featured: "boolean?",
-  savePaths: "string?",
 }).configure(throwingArktype);
 
 export default defineEventHandler(async (h3) => {

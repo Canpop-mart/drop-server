@@ -66,25 +66,6 @@
         v-if="!statsLoading"
         class="mt-6 mx-4 sm:mx-8 flex items-center gap-6 rounded-lg bg-zinc-800/60 backdrop-blur-sm px-6 py-3 border border-zinc-700/50"
       >
-        <div
-          v-if="stats.cloudSaveCount > 0"
-          class="flex items-center gap-2 text-sm"
-        >
-          <CloudIcon class="size-4 text-blue-400 shrink-0" />
-          <span class="text-zinc-400">{{
-            $t("library.stats.cloudStatus")
-          }}</span>
-          <span class="text-zinc-100 font-medium">{{
-            stats.cloudSaveCount > 0
-              ? $t(
-                  "library.stats.cloudSaves",
-                  [stats.cloudSaveCount],
-                  stats.cloudSaveCount,
-                )
-              : $t("library.stats.noSaves")
-          }}</span>
-        </div>
-        <div v-if="stats.cloudSaveCount > 0" class="w-px h-4 bg-zinc-600" />
         <div v-if="stats.lastPlayedAt" class="flex items-center gap-2 text-sm">
           <CalendarIcon class="size-4 text-zinc-400 shrink-0" />
           <span class="text-zinc-400">{{
@@ -677,7 +658,6 @@ const statsLoading = ref(true);
 const stats = reactive({
   playtimeSeconds: 0,
   lastPlayedAt: null as string | null,
-  cloudSaveCount: 0,
   achievementsUnlocked: 0,
   achievementsTotal: 0,
 });

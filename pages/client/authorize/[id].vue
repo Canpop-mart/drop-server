@@ -231,13 +231,6 @@ const scopes = [
     href: "/docs/access/network",
     icon: LockClosedIcon,
   },
-  clientData.capabilities["cloudSaves"] && {
-    name: "Upload and sync cloud saves",
-    description:
-      "The client will be able to upload new cloud saves, and edit your existing ones.",
-    href: "/docs/access/cloud",
-    icon: CloudIcon,
-  },
 ].filter((e) => e !== undefined);
 
 useHead({

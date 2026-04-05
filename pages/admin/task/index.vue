@@ -290,11 +290,6 @@ const scheduledTasks: {
     description:
       "Recomputes all cumulative playtime from actual session records. Fixes any inflated totals caused by orphan double-counting.",
   },
-  "ludusavi:refresh": {
-    name: "Refresh Ludusavi Manifest",
-    description:
-      "Downloads the latest Ludusavi save-path manifest from PCGamingWiki and updates the local database.",
-  },
 };
 
 async function startTask(taskGroup: string) {

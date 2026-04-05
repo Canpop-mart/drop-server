@@ -51,8 +51,6 @@ model Game {
   libraryPath String
 
   collections CollectionEntry[]
-  savePaths   String?        // CloudSaveMetadata as JSON string — save file locations for auto-sync
-  saves       SaveSlot[]
   screenshots Screenshot[]
   tags        GameTag[]
   playtime      Playtime[]
@@ -171,29 +169,6 @@ model LaunchConfiguration {
   emulations LaunchConfiguration[] @relation("emulator")
 }
 
-// A save slot for a game
-model SaveSlot {
-  gameId String
-  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  index  Int
-
-  name      String   @default("")
-  createdAt DateTime @default(now())
-  playtime  Float    @default(0) // hours
-
-  lastUsedClientId String?
-  lastUsedClient   Client? @relation(fields: [lastUsedClientId], references: [id])
-
-  historyObjectIds String[] // list of objects
-  historyChecksums String[] // list of hashes
-
-  lastSyncedAt DateTime? @db.Timestamptz(6)
-
-  @@id([gameId, userId, index], name: "id")
-}
-
 model Screenshot {
   id String @id @default(uuid())
 
@@ -268,21 +243,3 @@ model ObjectHash {
   hash String
 }
 
-/// Cached entries from the Ludusavi manifest — a community-maintained
-/// database of PC game save file locations compiled from PCGamingWiki.
-/// Refreshed periodically by the ludusavi:refresh task.
-model LudusaviGame {
-  /// The game's canonical name (key in the manifest YAML).
-  name    String @id
-  /// Steam AppID, if known.
-  steamId Int?
-  /// GOG product ID, if known.
-  gogId   Int?
-  /// The raw files/registry data in Drop savePaths format (JSON).
-  /// Already converted from Ludusavi format on import.
-  /// Null when the manifest has no usable file paths for this game.
-  savePaths String?
-
-  @@index([steamId])
-  @@index([name(ops: raw("gist_trgm_ops(siglen=32)"))], type: Gist)
-}

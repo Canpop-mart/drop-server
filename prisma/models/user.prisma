@@ -24,7 +24,6 @@ model User {
     tokens   APIToken[]
     sessions Session[]
 
-    saves       SaveSlot[]
     screenshots Screenshot[]
     playtime      Playtime[]
     playSessions  PlaySession[]

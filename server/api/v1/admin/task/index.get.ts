@@ -46,7 +46,6 @@ export default defineEventHandler(async (h3) => {
     "download:gbe",
     "refresh:achievement-defs",
     "recalculate:playtime",
-    "ludusavi:refresh",
   ];
 
   return { runningTasks, historicalTasks, dailyTasks, weeklyTasks, other };
