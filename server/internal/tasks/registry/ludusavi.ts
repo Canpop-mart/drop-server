@@ -4,7 +4,7 @@ import { refreshManifest } from "../../ludusavi";
 export default defineDropTask({
   buildId: () => `ludusavi:refresh:${new Date().toISOString()}`,
   name: "Refresh Ludusavi manifest",
-  acls: ["system:admin"],
+  acls: ["system:maintenance:read"],
   taskGroup: "ludusavi:refresh",
   async run({ progress, logger }) {
     logger.info("Starting Ludusavi manifest refresh…");
