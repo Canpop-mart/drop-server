@@ -85,11 +85,16 @@ export async function refreshManifest(
     const ops = chunk
       .map(([name, entry]) => {
         const savePaths = convertToDropSavePaths(name, entry);
-        if (!savePaths) return null; // No usable file paths
-
         const steamId = entry.steam?.id ?? null;
         const gogId = entry.gog?.id ?? null;
-        const savePathsJson = JSON.stringify(savePaths);
+
+        // Skip entries that have no save paths AND no platform IDs.
+        // We still import games without save paths when they have a
+        // steamId or gogId so the AppID lookup works even if we
+        // can't auto-populate save paths for them yet.
+        if (!savePaths && !steamId && !gogId) return null;
+
+        const savePathsJson = savePaths ? JSON.stringify(savePaths) : null;
 
         return prisma.ludusaviGame.upsert({
           where: { name },
@@ -138,8 +143,18 @@ export async function lookupSavePaths(
         where: { steamId: id },
       });
       if (match) {
-        logger.info(`[LUDUSAVI] Matched "${match.name}" by Steam AppID ${id}`);
-        return match.savePaths;
+        if (match.savePaths) {
+          logger.info(
+            `[LUDUSAVI] Matched "${match.name}" by Steam AppID ${id}`,
+          );
+          return match.savePaths;
+        }
+        logger.info(
+          `[LUDUSAVI] Found "${match.name}" by Steam AppID ${id} but it has no save paths in the manifest`,
+        );
+        // Don't fall through to name search — the AppID match is
+        // authoritative, we just don't have save path data for it.
+        return null;
       }
     }
   }
@@ -148,17 +163,19 @@ export async function lookupSavePaths(
   if (gameName) {
     // Use Postgres trigram similarity for fuzzy matching.
     // The GiST index on name makes this efficient.
+    // Threshold of 0.6 avoids false positives like "Chess Survivors"
+    // matching "Vampire Survivors" (which scored 0.42).
     const matches = await prisma.$queryRaw<
-      { name: string; savePaths: string; similarity: number }[]
+      { name: string; savePaths: string | null; similarity: number }[]
     >`
       SELECT name, "savePaths", similarity(name, ${gameName}) AS similarity
       FROM "LudusaviGame"
-      WHERE similarity(name, ${gameName}) > 0.3
+      WHERE similarity(name, ${gameName}) > 0.6
       ORDER BY similarity DESC
       LIMIT 1
     `;
 
-    if (matches.length > 0) {
+    if (matches.length > 0 && matches[0].savePaths) {
       logger.info(
         `[LUDUSAVI] Matched "${matches[0].name}" by name (similarity ${matches[0].similarity.toFixed(2)}) for "${gameName}"`,
       );

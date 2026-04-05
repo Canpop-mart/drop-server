@@ -280,7 +280,8 @@ model LudusaviGame {
   gogId   Int?
   /// The raw files/registry data in Drop savePaths format (JSON).
   /// Already converted from Ludusavi format on import.
-  savePaths String
+  /// Null when the manifest has no usable file paths for this game.
+  savePaths String?
 
   @@index([steamId])
   @@index([name(ops: raw("gist_trgm_ops(siglen=32)"))], type: Gist)
