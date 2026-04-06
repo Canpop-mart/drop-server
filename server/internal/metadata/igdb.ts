@@ -551,3 +551,5 @@ export class IGDBProvider implements MetadataProvider {
     }
 
     return undefined;
+  }
+}
