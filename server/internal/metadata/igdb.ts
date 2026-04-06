@@ -220,13 +220,33 @@ export class IGDBProvider implements MetadataProvider {
         "content-type": "text/plain",
       },
     };
-    const response = await $fetch<T[] | IGDBErrorResponse[]>(
-      finalURL,
-      Object.assign({}, options, overlay),
-    );
+    // Retry with exponential backoff on 429 (rate limit)
+    const maxRetries = 3;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await $fetch<T[] | IGDBErrorResponse[]>(
+          finalURL,
+          Object.assign({}, options, overlay),
+        );
 
-    // should not have an error object if the status code is 200
-    return <T[]>response;
+        // should not have an error object if the status code is 200
+        return <T[]>response;
+      } catch (e: any) {
+        const status = e?.response?.status ?? e?.statusCode;
+        if (status === 429 && attempt < maxRetries) {
+          const delay = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
+          logger.warn(
+            `IGDB rate limited on ${resource}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`,
+          );
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+        throw e;
+      }
+    }
+
+    // Unreachable, but satisfies TypeScript
+    throw new Error("IGDB request failed after retries");
   }
 
   private async _getMediaInternal(
@@ -531,5 +551,3 @@ export class IGDBProvider implements MetadataProvider {
     }
 
     return undefined;
-  }
-}
