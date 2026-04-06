@@ -8,6 +8,7 @@ export const CLIENT_WEBTOKEN_ACLS: UserACL = [
   "store:read",
   "object:read",
   "settings:read",
+  "news:read",
 
   "collections:read",
   "collections:new",

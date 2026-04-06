@@ -242,7 +242,7 @@
                     v-model="searchText"
                     type="text"
                     :placeholder="$t('store.search.placeholder')"
-                    class="flex-1 bg-transparent text-sm text-zinc-100 placeholder-zinc-500 outline-none"
+                    class="flex-1 min-w-0 bg-transparent text-sm text-zinc-100 placeholder-zinc-500 outline-none"
                     @keydown.enter.prevent
                   />
                 </div>

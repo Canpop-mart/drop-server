@@ -362,7 +362,21 @@ The `savePaths` JSON tells the client where on disk to find save files:
 
 1. Check server for `Game.savePaths` → if set, use it
 2. Detect emulator → use `<dll_dir>/drop-goldberg/` for Goldberg games
-3. If neither → manual upload/download only (no auto-sync)
+3. Detect RetroArch → use `<emulator_install>/drop-saves/<game_id>/saves` for ROM games
+4. If none of the above → manual upload/download only (no auto-sync)
+
+### RetroArch Save Convention
+
+When a ROM game launches via RetroArch, the client's `retroarch.rs` module configures per-game save isolation:
+
+```
+<emulator_install>/drop-saves/<game_id>/
+├── saves/         ← SRAM / battery saves (savefile_directory)
+├── states/        ← save states (savestate_directory)
+└── screenshots/   ← in-game screenshots
+```
+
+The `configure_retroarch_for_game()` function patches `retroarch.cfg` on every launch to set absolute paths for these directories, plus core/system/autoconfig directories. This ensures zero-config operation regardless of where RetroArch is installed.
 
 ### Path Placeholders
 

@@ -310,7 +310,15 @@ export class IGDBProvider implements MetadataProvider {
   }
 
   async search(query: string): Promise<GameMetadataSearchResult[]> {
-    const body = `search "${query}"; fields name,cover,first_release_date,summary; limit 3;`;
+    // Support searching by IGDB numeric ID (e.g. "1075") in addition to name
+    const trimmed = query.trim();
+    const numericId = Number(trimmed);
+    const isIdSearch =
+      trimmed.length > 0 && Number.isInteger(numericId) && numericId > 0;
+
+    const body = isIdSearch
+      ? `where id = ${numericId}; fields name,cover,first_release_date,summary;`
+      : `search "${query}"; fields name,cover,first_release_date,summary; limit 3;`;
     const response = await this.request<IGDBSearchStub>("games", body);
 
     const results: GameMetadataSearchResult[] = [];

@@ -59,6 +59,16 @@ export class WebSocketHandler {
 
   listen(callback: WebSocketCallback) {
     this.listeners.push(callback);
+
+    // Drain any messages that arrived before this listener was registered.
+    // Without this, task completion messages that arrive during the initial
+    // connection phase are silently dropped, causing the UI to spin forever.
+    if (this.inQueue.length > 0) {
+      for (const message of this.inQueue) {
+        callback(message);
+      }
+      this.inQueue = [];
+    }
   }
 
   send(message: string) {
