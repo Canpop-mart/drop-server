@@ -231,8 +231,12 @@ export class IGDBProvider implements MetadataProvider {
 
         // should not have an error object if the status code is 200
         return <T[]>response;
-      } catch (e: any) {
-        const status = e?.response?.status ?? e?.statusCode;
+      } catch (e: unknown) {
+        const err = e as {
+          response?: { status?: number };
+          statusCode?: number;
+        };
+        const status = err?.response?.status ?? err?.statusCode;
         if (status === 429 && attempt < maxRetries) {
           const delay = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
           logger.warn(
