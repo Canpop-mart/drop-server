@@ -46,3 +46,6 @@ drop-custom.tar
 
 # Audit/temporary artifacts
 AUDIT_REPORT.md
+
+# Local scripts with hardcoded API keys / credentials
+scripts/
