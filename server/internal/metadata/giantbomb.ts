@@ -264,6 +264,7 @@ export class GiantBombProvider implements MetadataProvider {
       bannerId: banner,
       coverId: images[1] ?? banner,
       images,
+      screenshots: imageURLs.map(createObject),
     };
 
     context?.logger.info("GiantBomb provider finished.");

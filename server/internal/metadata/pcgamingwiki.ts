@@ -449,6 +449,7 @@ export class PCGamingWikiProvider implements MetadataProvider {
       bannerId: icon,
       coverId: icon,
       images: [icon],
+      screenshots: [],
     };
 
     context?.logger.info("PCGamingWiki provider finished.");

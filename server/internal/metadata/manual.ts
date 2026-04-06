@@ -40,6 +40,7 @@ export class ManualMetadataProvider implements MetadataProvider {
       coverId: iconId,
       bannerId: iconId,
       images: [iconId],
+      screenshots: [],
     };
   }
   async fetchCompany(

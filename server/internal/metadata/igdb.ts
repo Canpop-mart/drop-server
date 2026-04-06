@@ -398,6 +398,8 @@ export class IGDBProvider implements MetadataProvider {
     let banner;
 
     const images = [coverID];
+    const screenshots: typeof images = [];
+
     for (const art of currentGame.artworks ?? []) {
       const objectId = createObject(await this.getArtworkURL(art));
       if (!banner) {
@@ -413,6 +415,7 @@ export class IGDBProvider implements MetadataProvider {
     for (const screenshot of currentGame.screenshots ?? []) {
       const objectId = createObject(await this.getScreenshotURL(screenshot));
       images.push(objectId);
+      screenshots.push(objectId);
     }
 
     context?.progress(20);
@@ -510,6 +513,7 @@ export class IGDBProvider implements MetadataProvider {
       bannerId: banner,
       coverId: coverID,
       images,
+      screenshots,
     };
 
     context?.logger.info("IGDB provider finished.");

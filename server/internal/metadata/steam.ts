@@ -259,7 +259,7 @@ export class SteamProvider implements MetadataProvider {
     context?.progress(10);
 
     context?.logger.info("Processing game images and assets...");
-    const { icon, cover, banner, images } = this._processImages(
+    const { icon, cover, banner, images, screenshots } = this._processImages(
       currentGame,
       createObject,
       context,
@@ -438,6 +438,7 @@ export class SteamProvider implements MetadataProvider {
       bannerId: banner,
       coverId: cover,
       images,
+      screenshots,
     } as GameMetadata;
   }
 
@@ -662,7 +663,13 @@ export class SteamProvider implements MetadataProvider {
     game: SteamAppDetailsLarge,
     createObject: (input: string | Buffer) => string,
     context?: TaskRunContext,
-  ): { icon: string; cover: string; banner: string; images: string[] } {
+  ): {
+    icon: string;
+    cover: string;
+    banner: string;
+    images: string[];
+    screenshots: string[];
+  } {
     const imageURLFormat = game.assets?.asset_url_format;
 
     context?.logger.info("Processing game icon...");
@@ -711,6 +718,7 @@ export class SteamProvider implements MetadataProvider {
     context?.progress(40);
 
     const images = [cover, banner];
+    const screenshotRefs: string[] = [];
 
     const screenshots = game.screenshots?.all_ages_screenshots || [];
     screenshots.push(...(game.screenshots?.mature_content_screenshots || []));
@@ -720,7 +728,9 @@ export class SteamProvider implements MetadataProvider {
 
     for (const image of screenshots) {
       const imageUrl = this._getImageUrl(image.filename);
-      images.push(createObject(imageUrl));
+      const ref = createObject(imageUrl);
+      images.push(ref);
+      screenshotRefs.push(ref);
     }
 
     context?.logger.info(
@@ -728,7 +738,7 @@ export class SteamProvider implements MetadataProvider {
     );
     context?.progress(50);
 
-    return { icon, cover, banner, images };
+    return { icon, cover, banner, images, screenshots: screenshotRefs };
   }
 
   private async _getTagNames(

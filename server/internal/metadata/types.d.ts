@@ -48,6 +48,8 @@ export interface GameMetadata {
   bannerId: ObjectReference;
   coverId: ObjectReference;
   images: ObjectReference[];
+  /** Gameplay screenshots only — used for the store carousel */
+  screenshots: ObjectReference[];
 }
 
 export interface CompanyMetadata {
