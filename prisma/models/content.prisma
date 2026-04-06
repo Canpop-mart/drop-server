@@ -50,6 +50,10 @@ model Game {
   library     Library @relation(fields: [libraryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   libraryPath String
 
+  // For multi-disc games: ordered list of actual disc folder names relative to
+  // the library base dir. Empty for single-disc games.
+  discFolders String[] @default([])
+
   collections CollectionEntry[]
   screenshots Screenshot[]
   tags        GameTag[]
@@ -159,6 +163,11 @@ model LaunchConfiguration {
   emulatorId          String?
   emulator            LaunchConfiguration? @relation(fields: [emulatorId], references: [launchId], name: "emulator")
   emulatorSuggestions String[]
+
+  // Ordered disc image paths for multi-disc games (relative to game install dir).
+  // Empty for single-disc games. When populated, the client generates a temporary
+  // .m3u playlist at launch time and passes it to the emulator via {rom}.
+  discPaths String[] @default([])
 
   umuIdOverride    String?
   umuStoreOverride String?

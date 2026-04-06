@@ -123,6 +123,7 @@ export class MetadataHandler {
     libraryId: string,
     libraryPath: string,
     type: GameType,
+    discFolders?: string[],
   ) {
     return await this.createGame(
       {
@@ -133,6 +134,7 @@ export class MetadataHandler {
       libraryId,
       libraryPath,
       type,
+      discFolders,
     );
   }
 
@@ -181,6 +183,7 @@ export class MetadataHandler {
     libraryId: string,
     libraryPath: string,
     type: GameType,
+    discFolders?: string[],
   ) {
     const provider = this.providers.get(result.sourceId);
     if (!provider)
@@ -296,6 +299,7 @@ export class MetadataHandler {
 
             libraryId,
             libraryPath,
+            discFolders: discFolders ?? [],
 
             type,
           },

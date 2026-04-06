@@ -24,6 +24,69 @@ import { castManifest } from "./manifest/utils";
 import { Shescape } from "shescape";
 import type { Prisma } from "~/prisma/client/client";
 
+/** Regex to detect multi-disc folder names like "Game (Disc 1)" or "Game (Disc 2) (Rev 1)" */
+const DISC_REGEX = /^(.+?)\s*\(Disc\s+(\d+)\)(.*)$/i;
+
+export interface DiscGroup {
+  /** Canonical game name without disc suffix */
+  baseName: string;
+  /** Ordered list of original folder names, sorted by disc number */
+  folders: string[];
+}
+
+/**
+ * Groups folder names by their base game name, detecting (Disc N) patterns.
+ * Returns a map of base name → DiscGroup for multi-disc games, plus a list
+ * of ungrouped (single-disc) folder names.
+ */
+export function groupDiscFolders(folders: string[]): {
+  groups: Map<string, DiscGroup>;
+  singles: string[];
+} {
+  const discEntries: { baseName: string; discNum: number; folder: string }[] =
+    [];
+  const singles: string[] = [];
+
+  for (const folder of folders) {
+    const match = DISC_REGEX.exec(folder);
+    if (match) {
+      const baseName = match[1].trim();
+      const discNum = parseInt(match[2], 10);
+      discEntries.push({ baseName, discNum, folder });
+    } else {
+      singles.push(folder);
+    }
+  }
+
+  // Group by base name
+  const byBase = new Map<
+    string,
+    { baseName: string; discNum: number; folder: string }[]
+  >();
+  for (const entry of discEntries) {
+    const key = entry.baseName.toLowerCase();
+    if (!byBase.has(key)) byBase.set(key, []);
+    byBase.get(key)!.push(entry);
+  }
+
+  const groups = new Map<string, DiscGroup>();
+  for (const [key, entries] of byBase) {
+    if (entries.length < 2) {
+      // Only one disc — treat as a normal single game
+      singles.push(entries[0].folder);
+      continue;
+    }
+    // Sort by disc number
+    entries.sort((a, b) => a.discNum - b.discNum);
+    groups.set(key, {
+      baseName: entries[0].baseName,
+      folders: entries.map((e) => e.folder),
+    });
+  }
+
+  return { groups, singles };
+}
+
 export function createGameImportTaskId(libraryId: string, libraryPath: string) {
   return createHash("md5")
     .update(`import:${libraryId}:${libraryPath}`)
@@ -110,6 +173,9 @@ class LibraryManager {
 
   async fetchUnimportedGames() {
     const unimportedGames: { [key: string]: string[] } = {};
+    const discGroups: {
+      [libraryId: string]: { [baseName: string]: DiscGroup };
+    } = {};
     const instanceGames = await this.fetchGamesByLibrary();
 
     for (const [id, library] of this.libraries.entries()) {
@@ -119,10 +185,26 @@ class LibraryManager {
           !instanceGames[id]?.[libraryPath] &&
           !taskHandler.hasTaskKey(createGameImportTaskId(id, libraryPath)),
       );
-      unimportedGames[id] = providerUnimportedGames;
+
+      // Detect multi-disc groups among unimported games.
+      // Grouped discs are returned under their base name instead of as
+      // individual disc folders, so "Xenogears (Disc 1)" and "(Disc 2)"
+      // appear as a single "Xenogears" entry.
+      const { groups, singles } = groupDiscFolders(providerUnimportedGames);
+
+      const gameNames = [...singles];
+      if (groups.size > 0) {
+        discGroups[id] = {};
+        for (const [, group] of groups) {
+          gameNames.push(group.baseName);
+          discGroups[id][group.baseName] = group;
+        }
+      }
+
+      unimportedGames[id] = gameNames;
     }
 
-    return unimportedGames;
+    return { unimportedGames, discGroups };
   }
 
   async fetchUnimportedGameVersions(
@@ -321,12 +403,38 @@ class LibraryManager {
 
     const options: Array<VersionGuess> = [];
 
+    // For multi-disc games, read the game's discFolders to know which
+    // physical folders to scan for ROM files.
+    const gameRecord = await prisma.game.findUnique({
+      where: { id: gameId },
+      select: { discFolders: true },
+    });
+    const discFolders = gameRecord?.discFolders ?? [];
+
     let files;
     if (versionIdentifier.type === "local") {
-      files = await library.versionReaddir(
-        game.libraryPath,
-        versionIdentifier.identifier,
-      );
+      if (discFolders.length > 1) {
+        // Multi-disc: scan files from each disc folder, prefixing each
+        // file with the disc folder name so we can resolve disc paths later.
+        const allFiles: string[] = [];
+        for (const folder of discFolders) {
+          try {
+            const folderFiles = await library.versionReaddir(
+              folder,
+              versionIdentifier.identifier,
+            );
+            allFiles.push(...folderFiles.map((f) => path.join(folder, f)));
+          } catch {
+            // Disc folder might not exist as a valid game dir — skip
+          }
+        }
+        files = allFiles;
+      } else {
+        files = await library.versionReaddir(
+          game.libraryPath,
+          versionIdentifier.identifier,
+        );
+      }
     } else if (versionIdentifier.type === "depot") {
       const unimported = await prisma.unimportedGameVersion.findUnique({
         where: {
@@ -393,7 +501,21 @@ class LibraryManager {
       })) > 0;
     if (hasGame) return false;
 
-    return true;
+    // For disc groups the libraryPath is the base name (e.g. "Xenogears (USA)")
+    // which may not exist as an actual folder. Validate either the folder exists
+    // OR it matches a disc group discovered by fetchUnimportedGames.
+    const library = this.libraries.get(libraryId);
+    if (!library) return false;
+    const allFolders = await library.listGames();
+    if (allFolders.includes(libraryPath)) return true;
+
+    // Check if libraryPath matches a disc group base name
+    const { groups } = groupDiscFolders(allFolders);
+    for (const [, group] of groups) {
+      if (group.baseName === libraryPath) return true;
+    }
+
+    return false;
   }
 
   /*
@@ -589,6 +711,7 @@ class LibraryManager {
                           : undefined),
                         emulatorSuggestions:
                           game.type === "Emulator" ? (v.suggestions ?? []) : [],
+                        discPaths: v.discPaths ?? [],
                       })),
                     }
                   : { data: [] },

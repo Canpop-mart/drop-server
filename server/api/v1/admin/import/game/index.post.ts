@@ -14,6 +14,9 @@ const ImportGameBody = type({
     sourceId: "string",
     name: "string",
   },
+  // For multi-disc games: the ordered list of actual disc folder names
+  // (e.g. ["Xenogears (USA) (Disc 1)", "Xenogears (USA) (Disc 2)"])
+  ["discFolders?"]: "string[]",
 }).configure(throwingArktype);
 
 export default defineEventHandler<{ body: typeof ImportGameBody.infer }>(
@@ -21,10 +24,8 @@ export default defineEventHandler<{ body: typeof ImportGameBody.infer }>(
     const allowed = await aclManager.allowSystemACL(h3, ["import:game:new"]);
     if (!allowed) throw createError({ statusCode: 403 });
 
-    const { library, path, metadata, type } = await readDropValidatedBody(
-      h3,
-      ImportGameBody,
-    );
+    const { library, path, metadata, type, discFolders } =
+      await readDropValidatedBody(h3, ImportGameBody);
 
     if (!path)
       throw createError({
@@ -40,8 +41,19 @@ export default defineEventHandler<{ body: typeof ImportGameBody.infer }>(
       });
 
     const taskId = metadata
-      ? await metadataHandler.createGame(metadata, library, path, type)
-      : await metadataHandler.createGameWithoutMetadata(library, path, type);
+      ? await metadataHandler.createGame(
+          metadata,
+          library,
+          path,
+          type,
+          discFolders,
+        )
+      : await metadataHandler.createGameWithoutMetadata(
+          library,
+          path,
+          type,
+          discFolders,
+        );
 
     if (!taskId)
       throw createError({

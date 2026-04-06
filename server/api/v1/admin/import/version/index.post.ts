@@ -20,6 +20,7 @@ export const ImportVersion = type({
     umuId: "string?",
     emulatorId: "string?",
     suggestions: "string[]?",
+    discPaths: "string[]?",
   }).array(),
 
   setups: type({
