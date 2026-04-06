@@ -27,6 +27,27 @@ import { ExternalAccountProvider } from "~/prisma/client/enums";
  * fields once the player unlocks it in-game.
  */
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Steam's GetSchemaForGame/v2 can return localised fields as either a plain
+ * string or an object keyed by language, e.g.
+ *   { english: "BONExYARD", german: "KNOCHENxGRUBE", french: "NÉCROxPOLE" }
+ *
+ * This helper always returns a plain string.
+ */
+function resolveLocalised(
+  value: string | Record<string, string> | undefined,
+  fallback: string = "",
+): string {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === "string") return value;
+  if (typeof value === "object") {
+    return value.english ?? value.token ?? Object.values(value)[0] ?? fallback;
+  }
+  return fallback;
+}
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export interface GoldbergAchievementDef {
@@ -179,8 +200,8 @@ export async function fetchSteamAchievements(
         availableGameStats?: {
           achievements?: {
             name: string;
-            displayName?: string;
-            description?: string;
+            displayName?: string | Record<string, string>;
+            description?: string | Record<string, string>;
             icon?: string;
             icongray?: string;
             hidden?: number;
@@ -203,8 +224,8 @@ export async function fetchSteamAchievements(
 
     return achievements.map((a) => ({
       name: a.name,
-      displayName: a.displayName,
-      description: a.description,
+      displayName: resolveLocalised(a.displayName, a.name),
+      description: resolveLocalised(a.description, ""),
       icon: a.icon,
       icon_gray: a.icongray,
       hidden: a.hidden,
@@ -337,21 +358,42 @@ export async function setupGoldberg(
       definitions = await fetchSteamAchievements(appId);
     }
 
-    // Write definitions to both locations:
-    //   steam_settings/achievements.json  — emulator reads definitions here
-    //   drop-goldberg/<AppID>/achievements.json — emulator reads/writes runtime state here
+    // Write definitions to steam_settings/ (array format — GBE reads these)
+    // and a runtime seed to drop-goldberg/<AppID>/ (map format — GBE reads/writes)
     if (definitions.length > 0) {
-      const json = JSON.stringify(definitions, null, 2);
+      const defJson = JSON.stringify(definitions, null, 2);
 
       const settingsAchPath = path.join(steamSettings, "achievements.json");
-      fs.writeFileSync(settingsAchPath, json, "utf-8");
+      fs.writeFileSync(settingsAchPath, defJson, "utf-8");
 
+      // Runtime file uses GBE's native map format:
+      //   {"ACH_NAME": {"earned": false, "earned_time": 0}, ...}
+      // This ensures GBE can read/write it correctly when achievements unlock.
+      // Only write if the file doesn't already exist (preserve existing unlock state).
       const runtimeAchPath = path.join(saveDir, "achievements.json");
-      fs.writeFileSync(runtimeAchPath, json, "utf-8");
-
-      console.log(
-        `[GOLDBERG] Wrote ${definitions.length} achievements to steam_settings/ and drop-goldberg/${appId}/`,
-      );
+      if (!fs.existsSync(runtimeAchPath)) {
+        const runtimeMap: Record<
+          string,
+          { earned: boolean; earned_time: number }
+        > = {};
+        for (const def of definitions) {
+          if (def.name) {
+            runtimeMap[def.name] = { earned: false, earned_time: 0 };
+          }
+        }
+        fs.writeFileSync(
+          runtimeAchPath,
+          JSON.stringify(runtimeMap, null, 2),
+          "utf-8",
+        );
+        console.log(
+          `[GOLDBERG] Wrote ${definitions.length} achievements: definitions to steam_settings/, runtime seed (map format) to drop-goldberg/${appId}/`,
+        );
+      } else {
+        console.log(
+          `[GOLDBERG] Wrote ${definitions.length} definitions to steam_settings/ (runtime file already exists, preserved)`,
+        );
+      }
     }
 
     // ── 4. Create/update the DB external link ────────────────────────────
