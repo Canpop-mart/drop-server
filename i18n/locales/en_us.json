@@ -683,6 +683,10 @@
       "title": "Libraries",
       "version": {
         "description": "All versions imported for your game.",
+        "edit": {
+          "saving": "Saving changes…",
+          "title": "Edit Version"
+        },
         "noSetups": "No setups configured.",
         "noVersions": "You have no versions of this game available.",
         "setupOnly": "Version configured as in setup-only mode.",
