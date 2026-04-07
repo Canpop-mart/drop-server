@@ -452,6 +452,9 @@ async function importGame(useMetadata: boolean) {
       library: option.library.id,
       metadata,
       type: importMode.value,
+      ...(option.discGroup
+        ? { discFolders: option.discGroup.folders }
+        : undefined),
     },
   });
 
