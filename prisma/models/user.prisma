@@ -35,6 +35,7 @@ model User {
     showcases        ProfileShowcase[]
     leaderboardEntries LeaderboardEntry[]
     requestVotes     RequestVote[]
+    externalAccounts UserExternalAccount[]
 }
 
 model FavoriteGame {

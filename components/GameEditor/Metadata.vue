@@ -293,8 +293,146 @@
             </div>
           </div>
         </div>
+
+        <!-- RetroAchievements Linking -->
+        <div class="mt-8 border-t border-zinc-800 pt-6">
+          <div class="border-b border-zinc-800 pb-3">
+            <h3
+              class="text-base font-semibold font-display leading-6 text-zinc-100"
+            >
+              RetroAchievements
+            </h3>
+            <p class="mt-1 text-sm text-zinc-400 max-w-lg">
+              Link this game to a RetroAchievements entry to import and sync
+              achievements.
+            </p>
+          </div>
+
+          <div v-if="raLinkedGame" class="mt-3 space-y-3">
+            <div
+              class="flex items-center gap-3 rounded-lg bg-zinc-800/50 p-3 ring-1 ring-white/5"
+            >
+              <TrophyIcon class="size-5 text-yellow-500 shrink-0" />
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-medium text-zinc-100">
+                  Linked to RA Game #{{ raLinkedGame.externalGameId }}
+                </p>
+                <p class="text-xs text-green-400">
+                  {{ raLinkedGame.achievementCount }} achievements imported
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              class="text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+              @click="showRALinkModal = true"
+            >
+              Re-link to different game
+            </button>
+          </div>
+
+          <div v-else class="mt-3">
+            <button
+              type="button"
+              class="relative inline-flex items-center gap-x-2 rounded-md bg-yellow-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-yellow-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-600"
+              @click="showRALinkModal = true"
+            >
+              <TrophyIcon class="size-4" />
+              Link to RetroAchievements
+            </button>
+          </div>
+        </div>
       </div>
     </div>
+
+    <!-- RA Link Modal -->
+    <ModalTemplate v-model="showRALinkModal">
+      <template #default>
+        <div class="space-y-4 p-4">
+          <p class="text-sm text-zinc-400">
+            Search for a game on RetroAchievements by name, or enter an RA game
+            ID directly.
+          </p>
+
+          <div class="flex gap-2">
+            <input
+              v-model="raSearchQuery"
+              type="text"
+              placeholder="Search by name or enter RA ID..."
+              class="flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
+              @keyup.enter="searchRA"
+            />
+            <button
+              type="button"
+              :disabled="raSearching || !raSearchQuery"
+              class="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              @click="searchRA"
+            >
+              {{ raSearching ? "Searching..." : "Search" }}
+            </button>
+          </div>
+
+          <div
+            v-if="raSearchResults.length > 0"
+            class="max-h-60 overflow-y-auto space-y-1"
+          >
+            <button
+              v-for="result in raSearchResults"
+              :key="result.ID"
+              :class="[
+                'flex items-center justify-between w-full p-2 rounded text-left text-sm transition-colors',
+                raSelectedId === result.ID
+                  ? 'bg-blue-600/20 ring-1 ring-blue-500'
+                  : 'hover:bg-zinc-800',
+              ]"
+              @click="raSelectedId = result.ID"
+            >
+              <div class="flex items-center gap-2 min-w-0">
+                <img
+                  v-if="result.ImageIcon"
+                  :src="`https://media.retroachievements.org${result.ImageIcon}`"
+                  class="size-8 rounded"
+                />
+                <div class="min-w-0">
+                  <span class="text-zinc-200 truncate block">
+                    {{ result.Title }}
+                  </span>
+                  <span class="text-xs text-zinc-500">
+                    {{ result.ConsoleName }}
+                  </span>
+                </div>
+              </div>
+              <span class="text-xs text-zinc-400 shrink-0 ml-2">
+                {{ result.AchievementCount }} achievements
+              </span>
+            </button>
+          </div>
+
+          <div v-if="raSearchError" class="text-sm text-red-400">
+            {{ raSearchError }}
+          </div>
+        </div>
+      </template>
+      <template #buttons>
+        <LoadingButton
+          type="button"
+          :loading="raLinkLoading"
+          :disabled="!raSelectedId"
+          :class="['inline-flex w-full shadow-sm sm:ml-3 sm:w-auto']"
+          @click="linkRAGame"
+        >
+          Link Game
+        </LoadingButton>
+        <button
+          type="button"
+          class="mt-3 inline-flex w-full justify-center rounded-md bg-zinc-900 px-3 py-2 text-sm font-semibold text-zinc-100 shadow-sm ring-1 ring-inset ring-zinc-700 hover:bg-zinc-950 transition-all duration-200 hover:scale-105 hover:shadow-lg active:scale-95 sm:mt-0 sm:w-auto"
+          @click="showRALinkModal = false"
+        >
+          {{ $t("cancel") }}
+        </button>
+      </template>
+    </ModalTemplate>
+
     <ModalUploadFile
       v-model="showUploadModal"
       :options="{ id: game.id }"
@@ -474,6 +612,7 @@ import {
   DocumentIcon,
   PencilIcon,
   PhotoIcon,
+  TrophyIcon,
 } from "@heroicons/vue/24/solid";
 import type { SerializeObject } from "nitropack";
 import type { H3Error } from "h3";
@@ -838,5 +977,122 @@ async function createTag(value: string): Promise<string> {
   });
   tags.value.push({ name: tag.name, param: tag.id });
   return tag.id;
+}
+
+// ── RetroAchievements Linking ─────────────────────────────────────────────
+
+type RALinkedGame = {
+  externalGameId: string;
+  achievementCount: number;
+};
+
+type RASearchResult = {
+  ID: number;
+  Title: string;
+  ConsoleName: string;
+  ImageIcon: string;
+  AchievementCount: number;
+};
+
+const showRALinkModal = ref(false);
+const raLinkedGame = ref<RALinkedGame | null>(null);
+const raSearchQuery = ref("");
+const raSearchResults = ref<RASearchResult[]>([]);
+const raSelectedId = ref<number | null>(null);
+const raSearching = ref(false);
+const raLinkLoading = ref(false);
+const raSearchError = ref("");
+
+// Check if game is already linked to RA
+try {
+  const links = await $dropFetch<
+    Array<{ provider: string; externalGameId: string }>
+  >(`/api/v1/admin/game/${game.value.id}/external-links`).catch(() => []);
+  const raLink = links?.find((l) => l.provider === "RetroAchievements");
+  if (raLink) {
+    // Count achievements for this game from RA provider
+    const achievements = await $dropFetch<Array<{ id: string }>>(
+      `/api/v1/games/${game.value.id}/achievements`,
+    ).catch(() => []);
+    raLinkedGame.value = {
+      externalGameId: raLink.externalGameId,
+      achievementCount: achievements?.length ?? 0,
+    };
+  }
+} catch {
+  // ignore
+}
+
+async function searchRA() {
+  if (!raSearchQuery.value) return;
+  raSearching.value = true;
+  raSearchError.value = "";
+  raSearchResults.value = [];
+  raSelectedId.value = null;
+
+  try {
+    // Check if input is a number (direct RA game ID)
+    const asNum = parseInt(raSearchQuery.value, 10);
+    if (!isNaN(asNum) && String(asNum) === raSearchQuery.value.trim()) {
+      raSelectedId.value = asNum;
+      raSearchResults.value = [
+        {
+          ID: asNum,
+          Title: `RA Game #${asNum}`,
+          ConsoleName: "Direct ID",
+          ImageIcon: "",
+          AchievementCount: 0,
+        },
+      ];
+      return;
+    }
+
+    const results = await $dropFetch<RASearchResult[]>(
+      `/api/v1/admin/retroachievements/search`,
+      { query: { q: raSearchQuery.value } },
+    );
+    raSearchResults.value = results ?? [];
+    if (raSearchResults.value.length === 0) {
+      raSearchError.value = "No games found on RetroAchievements.";
+    }
+  } catch (err: unknown) {
+    raSearchError.value =
+      err && typeof err === "object" && "statusMessage" in err
+        ? String((err as { statusMessage: string }).statusMessage)
+        : "Search failed";
+  } finally {
+    raSearching.value = false;
+  }
+}
+
+async function linkRAGame() {
+  if (!raSelectedId.value) return;
+  raLinkLoading.value = true;
+  raSearchError.value = "";
+
+  try {
+    const result = await $dropFetch<{
+      achievementCount: number;
+      raGameId: number;
+    }>(`/api/v1/admin/game/${game.value.id}/link-retroachievements`, {
+      method: "POST",
+      body: { raGameId: raSelectedId.value },
+    });
+    raLinkedGame.value = {
+      externalGameId: String(result.raGameId),
+      achievementCount: result.achievementCount,
+    };
+    showRALinkModal.value = false;
+    raSearchQuery.value = "";
+    raSearchResults.value = [];
+    raSelectedId.value = null;
+  } catch (err: unknown) {
+    raSearchError.value =
+      err && typeof err === "object" && "statusMessage" in err
+        ? String((err as { statusMessage: string }).statusMessage)
+        : "Failed to link game";
+  } finally {
+    raLinkLoading.value = false;
+  }
 }
 </script>

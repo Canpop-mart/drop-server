@@ -45,3 +45,15 @@ model UserAchievement {
     @@index([userId])
     @@index([achievementId])
 }
+
+model UserExternalAccount {
+    id         String                  @id @default(uuid())
+    userId     String
+    user       User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+    provider   ExternalAccountProvider
+    externalId String                  // RA username
+    token      String                  @default("") // RA API key (encrypted)
+
+    @@unique([userId, provider])
+    @@index([provider, externalId])
+}

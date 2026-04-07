@@ -160,6 +160,155 @@
       </div>
     </section>
 
+    <!-- Connected Accounts -->
+    <section>
+      <h2 class="text-xl font-bold font-display text-zinc-100 mb-1">
+        Connected Accounts
+      </h2>
+      <p class="text-sm text-zinc-400 mb-6">
+        Link external accounts for achievement tracking and game progress sync.
+      </p>
+
+      <div class="space-y-4">
+        <!-- RetroAchievements -->
+        <div
+          class="flex items-center justify-between rounded-lg bg-zinc-800/50 ring-1 ring-white/5 p-4"
+        >
+          <div class="flex items-center gap-3">
+            <div
+              class="size-10 rounded-lg bg-yellow-600/20 flex items-center justify-center"
+            >
+              <TrophyIcon class="size-5 text-yellow-500" />
+            </div>
+            <div>
+              <p class="text-sm font-medium text-zinc-100">RetroAchievements</p>
+              <p v-if="raAccount" class="text-xs text-green-400">
+                Connected as {{ raAccount.externalId }}
+              </p>
+              <p v-else class="text-xs text-zinc-500">Not connected</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="raAccount"
+              class="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 transition-colors"
+              :disabled="raUnlinking"
+              @click="unlinkRA"
+            >
+              {{ raUnlinking ? "Unlinking..." : "Unlink" }}
+            </button>
+            <button
+              v-else
+              class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-md transition-colors"
+              @click="raDialogOpen = true"
+            >
+              Connect
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RA Link Dialog -->
+    <TransitionRoot as="template" :show="raDialogOpen">
+      <Dialog as="div" class="relative z-50" @close="raDialogOpen = false">
+        <TransitionChild
+          as="template"
+          enter="ease-out duration-300"
+          enter-from="opacity-0"
+          enter-to="opacity-100"
+          leave="ease-in duration-200"
+          leave-from="opacity-100"
+          leave-to="opacity-0"
+        >
+          <div class="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm" />
+        </TransitionChild>
+
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+          <div
+            class="flex min-h-full items-center justify-center p-4 text-center"
+          >
+            <TransitionChild
+              as="template"
+              enter="ease-out duration-300"
+              enter-from="opacity-0 scale-95"
+              enter-to="opacity-100 scale-100"
+              leave="ease-in duration-200"
+              leave-from="opacity-100 scale-100"
+              leave-to="opacity-0 scale-95"
+            >
+              <DialogPanel
+                class="w-full max-w-md transform rounded-xl bg-zinc-900 p-6 text-left shadow-xl transition-all ring-1 ring-white/10"
+              >
+                <DialogTitle
+                  class="text-lg font-bold font-display text-zinc-100 mb-2"
+                >
+                  Connect RetroAchievements
+                </DialogTitle>
+                <p class="text-sm text-zinc-400 mb-4">
+                  Enter your RetroAchievements username and API key. You can
+                  find your API key in your
+                  <a
+                    href="https://retroachievements.org/controlpanel.php"
+                    target="_blank"
+                    class="text-blue-400 hover:underline"
+                    >RA account settings</a
+                  >
+                  under "Keys".
+                </p>
+
+                <div class="space-y-3">
+                  <div>
+                    <label class="block text-sm font-medium text-zinc-300 mb-1">
+                      Username
+                    </label>
+                    <input
+                      v-model="raUsername"
+                      type="text"
+                      placeholder="YourRAUsername"
+                      class="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-zinc-300 mb-1">
+                      API Key
+                    </label>
+                    <input
+                      v-model="raApiKey"
+                      type="password"
+                      placeholder="Your Web API Key"
+                      class="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
+                    />
+                  </div>
+                </div>
+
+                <div v-if="raLinkError" class="mt-3 text-sm text-red-400">
+                  {{ raLinkError }}
+                </div>
+
+                <div class="flex justify-end gap-2 mt-6">
+                  <button
+                    class="px-4 py-2 rounded-md text-sm text-zinc-300 hover:text-zinc-100 transition-colors"
+                    @click="raDialogOpen = false"
+                  >
+                    Cancel
+                  </button>
+                  <LoadingButton
+                    :loading="raLinking"
+                    :disabled="!raUsername || !raApiKey"
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    @click="linkRA"
+                  >
+                    Connect
+                  </LoadingButton>
+                </div>
+              </DialogPanel>
+            </TransitionChild>
+          </div>
+        </div>
+      </Dialog>
+    </TransitionRoot>
+
     <!-- Game Showcase -->
     <section>
       <h2 class="text-xl font-bold font-display text-zinc-100 mb-1">
@@ -535,6 +684,75 @@ async function uploadBanner(e: Event) {
     await updateUser();
   } finally {
     bannerUploading.value = false;
+  }
+}
+
+// ── Connected Accounts (RetroAchievements) ────────────────────────────────
+
+type ExternalAccount = {
+  id: string;
+  provider: string;
+  externalId: string;
+};
+
+const raAccount = ref<ExternalAccount | null>(null);
+const raDialogOpen = ref(false);
+const raUsername = ref("");
+const raApiKey = ref("");
+const raLinking = ref(false);
+const raUnlinking = ref(false);
+const raLinkError = ref("");
+
+// Fetch existing external accounts
+try {
+  const { accounts } = await $dropFetch<{ accounts: ExternalAccount[] }>(
+    "/api/v1/user/external-accounts",
+  );
+  raAccount.value =
+    accounts?.find((a) => a.provider === "RetroAchievements") ?? null;
+} catch {
+  // ignore – user may not have any linked accounts
+}
+
+async function linkRA() {
+  if (!raUsername.value || !raApiKey.value) return;
+  raLinking.value = true;
+  raLinkError.value = "";
+  try {
+    const account = await $dropFetch<ExternalAccount>(
+      "/api/v1/user/external-accounts/retroachievements",
+      {
+        method: "PUT",
+        body: {
+          username: raUsername.value,
+          apiKey: raApiKey.value,
+        },
+      },
+    );
+    raAccount.value = account;
+    raDialogOpen.value = false;
+    raUsername.value = "";
+    raApiKey.value = "";
+  } catch (err: unknown) {
+    const msg =
+      err && typeof err === "object" && "statusMessage" in err
+        ? String((err as { statusMessage: string }).statusMessage)
+        : "Failed to link account";
+    raLinkError.value = msg;
+  } finally {
+    raLinking.value = false;
+  }
+}
+
+async function unlinkRA() {
+  raUnlinking.value = true;
+  try {
+    await $dropFetch("/api/v1/user/external-accounts/retroachievements", {
+      method: "DELETE",
+    });
+    raAccount.value = null;
+  } finally {
+    raUnlinking.value = false;
   }
 }
 

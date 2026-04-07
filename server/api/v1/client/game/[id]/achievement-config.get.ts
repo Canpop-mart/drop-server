@@ -4,6 +4,7 @@ import prisma from "~/server/internal/db/database";
 // Lower number = higher priority when deduplicating cross-provider achievements
 const PROVIDER_PRIORITY: Record<string, number> = {
   Goldberg: 0,
+  RetroAchievements: 1,
 };
 
 export default defineClientEventHandler(async (h3, { fetchUser }) => {

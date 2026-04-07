@@ -7,7 +7,7 @@ import notificationSystem from "~/server/internal/notifications";
 const AchievementReport = type({
   achievements: type({
     externalId: "string",
-    provider: "'Goldberg'",
+    provider: "'Goldberg' | 'RetroAchievements'",
     unlockedAt: "string",
   }).array(),
 });

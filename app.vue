@@ -28,7 +28,9 @@ import { XMarkIcon } from "@heroicons/vue/24/outline";
 await updateUser();
 
 const user = useUser();
-const apiDetails = await $dropFetch("/api/v1");
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore Excessive stack depth from large route union
+const apiDetails = await $dropFetch("/api/v1") as { appName: string; version: string; gitRef: string; external: string; serverName: string; mLogoObjectId: string };
 const clientMode = isClientRequest();
 
 const showExternalUrlWarning = ref(false);
