@@ -36,7 +36,7 @@
           :value="launchConfiguration.launch"
           nullable
           class="w-full"
-          @update:model-value="(v) => updateLaunchCommand(v)"
+          @update:model-value="(v) => handleComboboxSelect(v)"
         >
           <div class="relative">
             <ComboboxInput
@@ -61,10 +61,10 @@
               class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-zinc-900 py-1 text-base shadow-lg ring-1 ring-white/5 focus:outline-none sm:text-sm"
             >
               <ComboboxOption
-                v-for="guess in launchFilteredVersionGuesses"
-                :key="guess.filename"
+                v-for="(guess, guessIdx) in launchFilteredVersionGuesses"
+                :key="`${guess.filename}-${guess.platform}-${guessIdx}`"
                 v-slot="{ active, selected }"
-                :value="guess.filename"
+                :value="guess"
                 as="template"
               >
                 <li
@@ -290,26 +290,48 @@ const launchFilteredVersionGuesses = computed(() =>
   ),
 );
 
-function updateLaunchCommand(command: string) {
+/**
+ * Handle combobox selection. The value can be either a VersionGuess object
+ * (when selecting from suggestions) or a raw string (when typing a custom command).
+ */
+function handleComboboxSelect(value: VersionGuess | string) {
+  if (typeof value === "object" && value !== null && "filename" in value) {
+    // Selected a version guess — use the exact guess for auto-detection
+    applyGuess(value);
+  } else {
+    // Raw string typed by the user
+    updateLaunchCommand(value as string, undefined);
+  }
+}
+
+function applyGuess(guess: VersionGuess) {
+  launchConfiguration.value.launch = guess.filename;
+  if (guess.type === "platform") {
+    launchConfiguration.value.platform = guess.platform;
+  } else if (guess.type === "emulator") {
+    emulator.value = {
+      launchId: guess.emulatorId,
+      gameName: guess.gameName,
+      gameIcon: guess.icon,
+      versionName: guess.launchName,
+      launchName: guess.launchName,
+      platform: guess.platform,
+    } satisfies EmulatorLaunchObject;
+    launchConfiguration.value.platform = guess.platform;
+  }
+}
+
+function updateLaunchCommand(
+  command: string,
+  _guess: VersionGuess | undefined,
+) {
   launchConfiguration.value.launch = command;
   if (launchConfiguration.value.platform === undefined) {
     const autosetGuess = props.versionGuesses?.find(
       (v) => v.filename == command,
     );
     if (autosetGuess) {
-      if (autosetGuess.type === "platform") {
-        launchConfiguration.value.platform = autosetGuess.platform;
-      } else if (autosetGuess.type === "emulator") {
-        emulator.value = {
-          launchId: autosetGuess.emulatorId,
-          gameName: autosetGuess.gameName,
-          gameIcon: autosetGuess.icon,
-          versionName: autosetGuess.launchName,
-          launchName: autosetGuess.launchName,
-          platform: autosetGuess.platform,
-        } satisfies EmulatorLaunchObject;
-        launchConfiguration.value.platform = autosetGuess.platform;
-      }
+      applyGuess(autosetGuess);
     }
   }
 }

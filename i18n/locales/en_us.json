@@ -490,7 +490,8 @@
       "detectedVersion": "Drop has detected you have new versions of this game to import.",
       "fileExtSelector": {
         "add": "Add \"{0}\"",
-        "noSelected": "No extensions selected."
+        "noSelected": "No extensions selected.",
+        "placeholder": ".gba, .nes, .sfc ..."
       },
       "game": {
         "addCarouselNoImages": "No images to add.",
