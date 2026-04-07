@@ -30,7 +30,14 @@ await updateUser();
 const user = useUser();
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore Excessive stack depth from large route union
-const apiDetails = await $dropFetch("/api/v1") as { appName: string; version: string; gitRef: string; external: string; serverName: string; mLogoObjectId: string };
+const apiDetails = (await $dropFetch("/api/v1")) as {
+  appName: string;
+  version: string;
+  gitRef: string;
+  external: string;
+  serverName: string;
+  mLogoObjectId: string;
+};
 const clientMode = isClientRequest();
 
 const showExternalUrlWarning = ref(false);
