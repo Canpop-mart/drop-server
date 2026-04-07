@@ -17,20 +17,9 @@ export default defineEventHandler(async (h3) => {
 
   const body = await readDropValidatedBody(h3, LinkRAAccount);
 
-  // Get admin RA credentials from env
-  const adminUsername = process.env.RA_USERNAME ?? "";
-  const adminApiKey = process.env.RA_API_KEY ?? "";
-
-  if (!adminUsername || !adminApiKey) {
-    logger.warn("RA_USERNAME or RA_API_KEY not configured");
-    throw createError({
-      statusCode: 500,
-      statusMessage: "RetroAchievements integration not configured",
-    });
-  }
-
-  // Validate the user's credentials
-  const raClient = createRAClient(adminUsername, adminApiKey);
+  // Validate the user's credentials directly against RA API
+  // (validateCredentials uses the provided username/apiKey, not admin creds)
+  const raClient = createRAClient(body.username, body.apiKey);
   const isValid = await raClient.validateCredentials(
     body.username,
     body.apiKey,
