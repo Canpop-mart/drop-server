@@ -534,7 +534,7 @@ export class IGDBProvider implements MetadataProvider {
       const logo = createObject(await this.getCompanyLogoURl(company.logo));
 
       let company_url = "";
-      for (const companySite of company.websites) {
+      for (const companySite of company.websites ?? []) {
         const companySiteRes = await this.request<IGDBCompanyWebsite>(
           "company_websites",
           `where id = ${companySite}; fields *;`,

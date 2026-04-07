@@ -178,11 +178,26 @@ class LibraryManager {
     } = {};
     const instanceGames = await this.fetchGamesByLibrary();
 
+    // Build a set of disc folder names that belong to already-imported games
+    // so we can exclude them from the unimported list.
+    const importedDiscFolders: { [libraryId: string]: Set<string> } = {};
+    for (const [libId, games] of Object.entries(instanceGames)) {
+      for (const game of Object.values(games)) {
+        if (game.discFolders && game.discFolders.length > 0) {
+          importedDiscFolders[libId] ??= new Set();
+          for (const folder of game.discFolders) {
+            importedDiscFolders[libId].add(folder);
+          }
+        }
+      }
+    }
+
     for (const [id, library] of this.libraries.entries()) {
       const providerGames = await library.listGames();
       const providerUnimportedGames = providerGames.filter(
         (libraryPath) =>
           !instanceGames[id]?.[libraryPath] &&
+          !importedDiscFolders[id]?.has(libraryPath) &&
           !taskHandler.hasTaskKey(createGameImportTaskId(id, libraryPath)),
       );
 
@@ -229,6 +244,7 @@ class LibraryManager {
         },
         select: {
           id: true,
+          discFolders: true,
           versions: {
             select: {
               versionPath: true,
@@ -256,9 +272,32 @@ class LibraryManager {
       };
     }
 
+    // For multi-disc games, the libraryPath is the baseName (e.g. "Xenogears")
+    // which doesn't exist as an actual folder. Use the first disc folder instead
+    // to check for versions.
+    let effectivePath = libraryPath;
+    if (!noFetchParams) {
+      const gameRecord = await prisma.game.findUnique({
+        where: { libraryKey: { libraryId, libraryPath } },
+        select: { discFolders: true },
+      });
+      if (gameRecord?.discFolders && gameRecord.discFolders.length > 0) {
+        effectivePath = gameRecord.discFolders[0];
+      }
+    } else {
+      // When called from fetchGamesWithStatus, look up discFolders
+      const gameRecord = await prisma.game.findUnique({
+        where: { id: params.gameId },
+        select: { discFolders: true },
+      });
+      if (gameRecord?.discFolders && gameRecord.discFolders.length > 0) {
+        effectivePath = gameRecord.discFolders[0];
+      }
+    }
+
     try {
       const versions = await provider.listVersions(
-        libraryPath,
+        effectivePath,
         params.versions,
       );
       const unimportedVersions = versions
