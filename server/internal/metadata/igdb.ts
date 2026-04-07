@@ -296,8 +296,9 @@ export class IGDBProvider implements MetadataProvider {
     return await this._getMediaInternal(id, "company_logos", "t_original");
   }
 
-  private trimMessage(msg: string, len: number) {
-    return msg.length > len ? msg.substring(0, 280) + "..." : msg;
+  private trimMessage(msg: string | undefined, len: number) {
+    if (!msg) return "";
+    return msg.length > len ? msg.substring(0, len) + "..." : msg;
   }
 
   private async _getGenreInternal(genreID: IGDBID) {
@@ -548,7 +549,7 @@ export class IGDBProvider implements MetadataProvider {
         id: "" + company.id,
         name: company.name,
         shortDescription: this.trimMessage(company.description, 280),
-        description: company.description,
+        description: company.description ?? "",
         website: company_url,
 
         logo: logo,
