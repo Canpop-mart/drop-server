@@ -2,7 +2,10 @@
 {
   "en": {
     "↓": "↓",
-    "↑": "↑"
+    "↑": "↑",
+    "previous": "Previous",
+    "next": "Next",
+    "pageInfo": "Showing {start} to {end} of {total} games"
   }
 }
 </i18n>
@@ -318,45 +321,116 @@
             </form>
 
             <!-- Product grid -->
-            <div
-              v-if="games?.length ?? 0 > 0"
-              ref="product-grid"
-              class="col-span-4 grid gap-5 grid-cols-[repeat(auto-fill,minmax(150px,auto))]"
-            >
-              <!-- Your content -->
-              <GamePanel
-                v-for="game in games"
-                :key="game.id"
-                :game="game"
-                :href="`/store/${game.id}`"
-                :show-title-description="showGamePanelTextDecoration"
-              />
+            <div class="col-span-4">
               <div
-                v-if="loading"
-                class="absolute inset-0 bg-zinc-900/40 flex items-center justify-center"
+                v-if="games?.length ?? 0 > 0"
+                class="relative grid gap-5 grid-cols-[repeat(auto-fill,minmax(150px,auto))]"
               >
-                <svg
-                  aria-hidden="true"
-                  class="w-8 h-8 text-transparent animate-spin fill-blue-600"
-                  viewBox="0 0 100 101"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
+                <GamePanel
+                  v-for="game in games"
+                  :key="game.id"
+                  :game="game"
+                  :href="`/store/${game.id}`"
+                  :show-title-description="showGamePanelTextDecoration"
+                />
+                <div
+                  v-if="loading"
+                  class="absolute inset-0 bg-zinc-900/40 flex items-center justify-center rounded-lg"
                 >
-                  <path
-                    d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
-                    fill="currentColor"
-                  />
-                  <path
-                    d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z"
-                    fill="currentFill"
-                  />
-                </svg>
+                  <svg
+                    aria-hidden="true"
+                    class="w-8 h-8 text-transparent animate-spin fill-blue-600"
+                    viewBox="0 0 100 101"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
+                      fill="currentColor"
+                    />
+                    <path
+                      d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z"
+                      fill="currentFill"
+                    />
+                  </svg>
+                </div>
               </div>
-            </div>
-            <div v-else class="flex lg:col-span-4 items-start justify-center">
-              <span class="uppercase text-zinc-700 font-display font-bold">{{
-                $t("common.noResults")
-              }}</span>
+              <div v-else-if="!loading" class="flex items-start justify-center">
+                <span class="uppercase text-zinc-700 font-display font-bold">{{
+                  $t("common.noResults")
+                }}</span>
+              </div>
+
+              <!-- Pagination -->
+              <nav
+                v-if="totalPages > 1"
+                class="flex items-center justify-between border-t border-zinc-700 mt-8 pt-4"
+              >
+                <div class="flex flex-1 justify-between sm:hidden">
+                  <button
+                    :disabled="currentPage <= 1"
+                    class="relative inline-flex items-center rounded-md px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                    @click="goToPage(currentPage - 1)"
+                  >
+                    {{ $t("previous") }}
+                  </button>
+                  <button
+                    :disabled="currentPage >= totalPages"
+                    class="relative ml-3 inline-flex items-center rounded-md px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                    @click="goToPage(currentPage + 1)"
+                  >
+                    {{ $t("next") }}
+                  </button>
+                </div>
+                <div
+                  class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between"
+                >
+                  <p class="text-sm text-zinc-400">
+                    {{
+                      $t("pageInfo", {
+                        start: pageStart,
+                        end: pageEnd,
+                        total: totalCount,
+                      })
+                    }}
+                  </p>
+                  <div class="flex items-center gap-1">
+                    <button
+                      :disabled="currentPage <= 1"
+                      class="relative inline-flex items-center rounded-md px-2 py-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                      @click="goToPage(currentPage - 1)"
+                    >
+                      <ChevronLeftIcon class="size-5" />
+                    </button>
+                    <template v-for="page in visiblePages" :key="page">
+                      <span
+                        v-if="page === '...'"
+                        class="px-2 py-2 text-sm text-zinc-500"
+                        >...</span
+                      >
+                      <button
+                        v-else
+                        :class="[
+                          'relative inline-flex items-center rounded-md px-3 py-2 text-sm font-medium',
+                          page === currentPage
+                            ? 'bg-blue-600 text-white'
+                            : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+                        ]"
+                        @click="goToPage(page as number)"
+                      >
+                        {{ page }}
+                      </button>
+                    </template>
+                    <button
+                      :disabled="currentPage >= totalPages"
+                      class="relative inline-flex items-center rounded-md px-2 py-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                      @click="goToPage(currentPage + 1)"
+                    >
+                      <ChevronRightIcon class="size-5" />
+                    </button>
+                  </div>
+                </div>
+              </nav>
             </div>
           </div>
         </section>
@@ -382,6 +456,8 @@ import {
 import { XMarkIcon, MagnifyingGlassIcon } from "@heroicons/vue/24/outline";
 import {
   ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   FunnelIcon,
   MinusIcon,
   PlusIcon,
@@ -488,52 +564,82 @@ const filterQuery = computed(() => {
   return parts;
 });
 
+const ITEMS_PER_PAGE = 50;
 const games = ref<Array<SerializeObject<GameModel>>>();
 const loading = ref(false);
+const totalCount = ref(0);
+const currentPage = ref(1);
 
-const productGrid = useTemplateRef<HTMLElement>("product-grid");
-
-const { reset } = useInfiniteScroll(
-  productGrid,
-  async () => await updateGames(filterQuery.value, false),
-  {
-    distance: 10,
-    canLoadMore: () => {
-      return canLoadMore.value;
-    },
-  },
+const totalPages = computed(() =>
+  Math.max(1, Math.ceil(totalCount.value / ITEMS_PER_PAGE)),
+);
+const pageStart = computed(() =>
+  Math.min((currentPage.value - 1) * ITEMS_PER_PAGE + 1, totalCount.value),
+);
+const pageEnd = computed(() =>
+  Math.min(currentPage.value * ITEMS_PER_PAGE, totalCount.value),
 );
 
-const canLoadMore = ref(true);
-async function updateGames(query: string, resetGames: boolean) {
+const visiblePages = computed(() => {
+  const total = totalPages.value;
+  const current = currentPage.value;
+  const pages: Array<number | string> = [];
+
+  if (total <= 7) {
+    for (let i = 1; i <= total; i++) pages.push(i);
+    return pages;
+  }
+
+  pages.push(1);
+  if (current > 3) pages.push("...");
+
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  for (let i = start; i <= end; i++) pages.push(i);
+
+  if (current < total - 2) pages.push("...");
+  pages.push(total);
+
+  return pages;
+});
+
+async function fetchPage(query: string, page: number) {
   loading.value = true;
-  games.value ??= [];
+  const skip = (page - 1) * ITEMS_PER_PAGE;
   const newValues = await $dropFetch<{
     results: Array<SerializeObject<GameModel>>;
     count: number;
   }>(
-    `/api/v1/store?take=50&skip=${resetGames ? 0 : games.value?.length || 0}&sort=${currentSort.value}&order=${sortOrder.value}${query ? "&" + query : ""}`,
+    `/api/v1/store?take=${ITEMS_PER_PAGE}&skip=${skip}&sort=${currentSort.value}&order=${sortOrder.value}${query ? "&" + query : ""}`,
   );
-  if (resetGames) {
-    games.value = newValues.results;
-    if (import.meta.client) await reset();
-  } else {
-    games.value.push(...newValues.results);
-  }
-  canLoadMore.value = games.value.length < newValues.count;
+  games.value = newValues.results;
+  totalCount.value = newValues.count;
   loading.value = false;
 }
-watch(filterQuery, (newUrl) => {
-  updateGames(newUrl, true);
+
+function goToPage(page: number) {
+  if (page < 1 || page > totalPages.value || page === currentPage.value) return;
+  currentPage.value = page;
+  if (import.meta.client) window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+watch(filterQuery, () => {
+  currentPage.value = 1;
+  fetchPage(filterQuery.value, 1);
 });
-watch(currentSort, (_) => {
-  updateGames(filterQuery.value, true);
+watch(currentSort, () => {
+  currentPage.value = 1;
+  fetchPage(filterQuery.value, 1);
 });
-watch(sortOrder, (_) => {
-  updateGames(filterQuery.value, true);
+watch(sortOrder, () => {
+  currentPage.value = 1;
+  fetchPage(filterQuery.value, 1);
+});
+watch(currentPage, (page) => {
+  fetchPage(filterQuery.value, page);
 });
 
-await updateGames(filterQuery.value, true);
+await fetchPage(filterQuery.value, 1);
 
 function handleSortClick(option: StoreSortOption, event: MouseEvent) {
   event.stopPropagation();
