@@ -276,8 +276,12 @@ async function scanProvider(provider: string) {
     });
     await refreshData(selectedGameId.value);
     alert(t("admin.achievements.scanComplete"));
-  } catch {
-    alert(t("admin.achievements.scanFailed"));
+  } catch (err: unknown) {
+    const msg =
+      err && typeof err === "object" && "statusMessage" in err
+        ? String((err as { statusMessage: string }).statusMessage)
+        : String(err);
+    alert(`${t("admin.achievements.scanFailed")}\n\n${msg}`);
   } finally {
     scanning.value = false;
   }
