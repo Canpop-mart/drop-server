@@ -1,7 +1,10 @@
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
 import { ExternalAccountProvider } from "~/prisma/client/enums";
-import { createRAClient } from "~/server/internal/retroachievements";
+import {
+  createRAClient,
+  resolveRACredentials,
+} from "~/server/internal/retroachievements";
 import { logger } from "~/server/internal/logging";
 
 /**
@@ -25,15 +28,6 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   let syncedCount = 0;
 
   try {
-    // Get admin RA credentials
-    const adminUsername = process.env.RA_USERNAME ?? "";
-    const adminApiKey = process.env.RA_API_KEY ?? "";
-
-    if (!adminUsername || !adminApiKey) {
-      logger.warn("[RA Sync] RA_USERNAME or RA_API_KEY not configured");
-      return { synced: 0 };
-    }
-
     // Check if game has a RA link
     const raLink = await prisma.gameExternalLink.findUnique({
       where: {
@@ -48,7 +42,14 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
       return { synced: 0 };
     }
 
-    // Check if user has a linked RA account
+    // Resolve RA credentials: env vars first, then user's linked RA account
+    const raCreds = await resolveRACredentials(user.id);
+    if (!raCreds) {
+      logger.warn("[RA Sync] No RA credentials available for user " + user.id);
+      return { synced: 0 };
+    }
+
+    // Check if user has a linked RA account (needed for username to query progress)
     const userRaAccount = await prisma.userExternalAccount.findUnique({
       where: {
         userId_provider: {
@@ -62,7 +63,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
       return { synced: 0 };
     }
 
-    const raClient = createRAClient(adminUsername, adminApiKey);
+    const raClient = createRAClient(raCreds.username, raCreds.apiKey);
 
     // Fetch user's progress for this game
     const raGameId = parseInt(raLink.externalGameId, 10);

@@ -3,7 +3,10 @@ import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
 import { ExternalAccountProvider } from "~/prisma/client/enums";
-import { createRAClient } from "~/server/internal/retroachievements";
+import {
+  createRAClient,
+  resolveRACredentials,
+} from "~/server/internal/retroachievements";
 import { logger } from "~/server/internal/logging";
 
 const LinkRAGame = type({
@@ -14,6 +17,9 @@ export default defineEventHandler(async (h3) => {
   const allowed = await aclManager.allowSystemACL(h3, ["game:update"]);
   if (!allowed) throw createError({ statusCode: 403 });
 
+  const userId = await aclManager.getUserIdACL(h3, ["read"]);
+  if (!userId) throw createError({ statusCode: 403 });
+
   const gameId = getRouterParam(h3, "id");
   if (!gameId) {
     throw createError({ statusCode: 400, statusMessage: "No game ID." });
@@ -21,18 +27,16 @@ export default defineEventHandler(async (h3) => {
 
   const body = await readDropValidatedBody(h3, LinkRAGame);
 
-  // Get admin RA credentials from env
-  const adminUsername = process.env.RA_USERNAME ?? "";
-  const adminApiKey = process.env.RA_API_KEY ?? "";
-
-  if (!adminUsername || !adminApiKey) {
+  const raCreds = await resolveRACredentials(userId);
+  if (!raCreds) {
     throw createError({
       statusCode: 500,
-      statusMessage: "RetroAchievements integration not configured",
+      statusMessage:
+        "RetroAchievements not configured. Set RA_USERNAME/RA_API_KEY or link your RA account in Settings.",
     });
   }
 
-  const raClient = createRAClient(adminUsername, adminApiKey);
+  const raClient = createRAClient(raCreds.username, raCreds.apiKey);
 
   // Fetch game info and achievements from RA
   const gameInfo = await raClient.getGameAchievements(body.raGameId);

@@ -23,16 +23,13 @@ export const taskGroups = {
   "check:game-updates": {
     concurrency: false,
   },
-  "check:goldberg-status": {
+  "scan:achievements": {
     concurrency: false,
   },
   "download:gbe": {
     concurrency: false,
   },
   "upgrade:all-to-gbe": {
-    concurrency: false,
-  },
-  "refresh:achievement-defs": {
     concurrency: false,
   },
   "recalculate:playtime": {

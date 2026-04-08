@@ -1,7 +1,10 @@
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
 import { ExternalAccountProvider } from "~/prisma/client/enums";
-import { createRAClient } from "~/server/internal/retroachievements";
+import {
+  createRAClient,
+  resolveRACredentials,
+} from "~/server/internal/retroachievements";
 import { logger } from "~/server/internal/logging";
 
 /**
@@ -13,18 +16,19 @@ export default defineEventHandler(async (h3) => {
   const allowed = await aclManager.allowSystemACL(h3, ["game:update"]);
   if (!allowed) throw createError({ statusCode: 403 });
 
-  // Get admin RA credentials
-  const adminUsername = process.env.RA_USERNAME ?? "";
-  const adminApiKey = process.env.RA_API_KEY ?? "";
+  const userId = await aclManager.getUserIdACL(h3, ["read"]);
+  if (!userId) throw createError({ statusCode: 403 });
 
-  if (!adminUsername || !adminApiKey) {
+  const raCreds = await resolveRACredentials(userId);
+  if (!raCreds) {
     throw createError({
       statusCode: 500,
-      statusMessage: "RetroAchievements integration not configured",
+      statusMessage:
+        "RetroAchievements not configured. Set RA_USERNAME/RA_API_KEY or link your RA account in Settings.",
     });
   }
 
-  const raClient = createRAClient(adminUsername, adminApiKey);
+  const raClient = createRAClient(raCreds.username, raCreds.apiKey);
 
   // Find all games (typically ROM-based games have emulator configs)
   const games = await prisma.game.findMany({

@@ -7,7 +7,10 @@ import {
   resolveGameVersionDir,
   setupGoldberg,
 } from "~/server/internal/goldberg";
-import { createRAClient } from "~/server/internal/retroachievements";
+import {
+  createRAClient,
+  resolveRACredentials,
+} from "~/server/internal/retroachievements";
 import { logger } from "~/server/internal/logging";
 
 const ScanRequest = type({
@@ -19,9 +22,12 @@ export default defineEventHandler(async (h3) => {
   const allowed = await aclManager.allowSystemACL(h3, ["game:update"]);
   if (!allowed) throw createError({ statusCode: 403 });
 
+  const userId = await aclManager.getUserIdACL(h3, ["read"]);
+  if (!userId) throw createError({ statusCode: 403 });
+
   const body = await readDropValidatedBody(h3, ScanRequest);
 
-  console.log(
+  logger.info(
     `[ACH-SCAN] Scan requested for game=${body.gameId} provider=${body.provider}`,
   );
 
@@ -43,18 +49,17 @@ export default defineEventHandler(async (h3) => {
   }
 
   if (body.provider === "RetroAchievements") {
-    const adminUsername = process.env.RA_USERNAME ?? "";
-    const adminApiKey = process.env.RA_API_KEY ?? "";
-
-    if (!adminUsername || !adminApiKey) {
+    // Resolve RA credentials: env vars first, then user's linked RA account
+    const raCreds = await resolveRACredentials(userId);
+    if (!raCreds) {
       throw createError({
         statusCode: 500,
         statusMessage:
-          "RetroAchievements integration not configured. Set RA_USERNAME and RA_API_KEY.",
+          "No RetroAchievements credentials available. Either set RA_USERNAME/RA_API_KEY env vars or link your RA account in account settings.",
       });
     }
 
-    const raClient = createRAClient(adminUsername, adminApiKey);
+    const raClient = createRAClient(raCreds.username, raCreds.apiKey);
 
     // Get game name for RA search
     const game = await prisma.game.findUnique({

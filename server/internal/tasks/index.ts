@@ -14,9 +14,7 @@ import checkUpdate from "./registry/update";
 import cleanupObjects from "./registry/objects";
 import checkIntegrity from "./registry/check-integrity";
 import checkGameUpdates from "./registry/game-update";
-import checkGoldbergStatus, {
-  refreshAchievementDefinitions,
-} from "./registry/goldberg-status";
+import scanAchievements from "./registry/achievement-scan";
 import { upgradeAllToGbe, downloadGbe } from "./registry/upgrade-to-gbe";
 import recalculatePlaytime from "./registry/recalculate-playtime";
 
@@ -74,8 +72,7 @@ class TaskHandler {
     this.saveScheduledTask(cleanupObjects);
     this.saveScheduledTask(checkIntegrity);
     this.saveScheduledTask(checkGameUpdates);
-    this.saveScheduledTask(checkGoldbergStatus);
-    this.saveScheduledTask(refreshAchievementDefinitions);
+    this.saveScheduledTask(scanAchievements);
     this.saveScheduledTask(downloadGbe);
     this.saveScheduledTask(upgradeAllToGbe);
     this.saveScheduledTask(recalculatePlaytime);

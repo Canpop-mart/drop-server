@@ -17,7 +17,6 @@
       "sortNewest": "Newest",
       "sortOldest": "Oldest",
       "subtitle": "{count} achievements unlocked",
-      "sync": "Sync Now",
       "title": "Achievements"
     },
     "devices": {
@@ -264,6 +263,7 @@
     "noData": "No data",
     "noResults": "No results",
     "noSelected": "No items selected.",
+    "refresh": "Refresh",
     "remove": "Remove",
     "save": "Save",
     "saved": "Saved",

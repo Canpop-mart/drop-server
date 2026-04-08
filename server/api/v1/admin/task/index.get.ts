@@ -42,9 +42,8 @@ export default defineEventHandler(async (h3) => {
   const other: TaskGroup[] = [
     "import:check-integrity",
     "check:game-updates",
-    "check:goldberg-status",
+    "scan:achievements",
     "download:gbe",
-    "refresh:achievement-defs",
     "recalculate:playtime",
   ];
 

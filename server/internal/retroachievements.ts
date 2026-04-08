@@ -304,3 +304,38 @@ export function createRAClient(
 ): RetroAchievementsClient {
   return new RetroAchievementsClient(adminUsername, adminApiKey);
 }
+
+/**
+ * Resolve RetroAchievements API credentials.
+ * Priority: env vars (RA_USERNAME + RA_API_KEY) → authenticated user's linked RA account.
+ * Returns { username, apiKey } or null if no credentials are available.
+ */
+export async function resolveRACredentials(
+  userId?: string,
+): Promise<{ username: string; apiKey: string } | null> {
+  // 1. Try environment variables first
+  const envUsername = process.env.RA_USERNAME ?? "";
+  const envApiKey = process.env.RA_API_KEY ?? "";
+  if (envUsername && envApiKey) {
+    return { username: envUsername, apiKey: envApiKey };
+  }
+
+  // 2. Fall back to the authenticated user's linked RA account
+  if (userId) {
+    const { default: prisma } = await import("~/server/internal/db/database");
+    const { ExternalAccountProvider } = await import("~/prisma/client/enums");
+    const userRa = await prisma.userExternalAccount.findUnique({
+      where: {
+        userId_provider: {
+          userId,
+          provider: ExternalAccountProvider.RetroAchievements,
+        },
+      },
+    });
+    if (userRa && userRa.externalId && userRa.token) {
+      return { username: userRa.externalId, apiKey: userRa.token };
+    }
+  }
+
+  return null;
+}

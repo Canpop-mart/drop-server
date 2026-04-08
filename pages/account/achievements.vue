@@ -14,11 +14,12 @@
         </p>
       </div>
       <button
-        class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors"
-        :disabled="syncing"
-        @click="syncAchievements"
+        class="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 transition-colors flex items-center gap-1.5"
+        :disabled="refreshing"
+        @click="refreshList"
       >
-        {{ syncing ? $t("common.srLoading") : $t("account.achievements.sync") }}
+        <ArrowPathIcon class="size-4" :class="{ 'animate-spin': refreshing }" />
+        {{ refreshing ? $t("common.srLoading") : $t("common.refresh") }}
       </button>
     </div>
 
@@ -418,6 +419,7 @@
 
 <script setup lang="ts">
 import { TrophyIcon } from "@heroicons/vue/24/solid";
+import { ArrowPathIcon } from "@heroicons/vue/24/outline";
 import {
   Dialog,
   DialogPanel,
@@ -458,7 +460,7 @@ type AchievementItem = {
 const allAchievements = ref<AchievementItem[]>([]);
 const selectedGameId = ref("");
 const sortBy = ref<"newest" | "oldest" | "game">("newest");
-const syncing = ref(false);
+const refreshing = ref(false);
 
 // ── Connected Accounts (RetroAchievements) ────────────────────────────────
 
@@ -637,16 +639,15 @@ const filteredAchievements = computed(() => {
   return items;
 });
 
-async function syncAchievements() {
-  syncing.value = true;
+async function refreshList() {
+  refreshing.value = true;
   try {
-    await $dropFetch("/api/v1/user/achievements/sync", { method: "POST" });
     const refreshed = (await $dropFetch("/api/v1/user/achievements/list").catch(
       () => [],
     )) as AchievementItem[];
     allAchievements.value = refreshed;
   } finally {
-    syncing.value = false;
+    refreshing.value = false;
   }
 }
 

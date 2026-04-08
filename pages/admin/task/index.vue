@@ -266,10 +266,10 @@ const scheduledTasks: {
     description:
       "Checks Steam for new build IDs and flags any games that have an update available.",
   },
-  "check:goldberg-status": {
-    name: "Check Goldberg Achievement Status",
+  "scan:achievements": {
+    name: "Scan All Achievements",
     description:
-      "Verifies every game has the files and DB records needed for achievements. Auto-fixes missing setup where possible.",
+      "Checks Goldberg readiness, refreshes Steam achievement definitions, and auto-links RetroAchievements for all games.",
   },
   "download:gbe": {
     name: "Download GBE DLLs",
@@ -279,11 +279,6 @@ const scheduledTasks: {
   "upgrade:all-to-gbe": {
     name: "",
     description: "",
-  },
-  "refresh:achievement-defs": {
-    name: "Refresh Achievement Definitions",
-    description:
-      "Re-fetches achievement definitions from Steam for all Goldberg-enabled games and updates the local configs.",
   },
   "recalculate:playtime": {
     name: "Recalculate Playtime",
