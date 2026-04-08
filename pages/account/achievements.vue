@@ -62,7 +62,14 @@
 
     <!-- RA Link Dialog -->
     <TransitionRoot as="template" :show="raDialogOpen">
-      <Dialog as="div" class="relative z-50" @close="raDialogOpen = false">
+      <Dialog
+        as="div"
+        class="relative z-50"
+        @close="
+          raDialogOpen = false;
+          raPassword = '';
+        "
+      >
         <TransitionChild
           as="template"
           enter="ease-out duration-300"
@@ -97,15 +104,16 @@
                   Connect RetroAchievements
                 </DialogTitle>
                 <p class="text-sm text-zinc-400 mb-4">
-                  Enter your RetroAchievements username and API key. You can
-                  find your API key in your
+                  Enter your RetroAchievements credentials. Your API key is in
+                  your
                   <a
                     href="https://retroachievements.org/controlpanel.php"
                     target="_blank"
                     class="text-blue-400 hover:underline"
-                    >RA account settings</a
+                    >RA settings</a
                   >
-                  under "Keys".
+                  under "Keys". Your password is used once to obtain a login
+                  token for in-game achievement tracking and is never stored.
                 </p>
 
                 <div class="space-y-3">
@@ -122,7 +130,7 @@
                   </div>
                   <div>
                     <label class="block text-sm font-medium text-zinc-300 mb-1">
-                      API Key
+                      Web API Key
                     </label>
                     <input
                       v-model="raApiKey"
@@ -130,6 +138,21 @@
                       placeholder="Your Web API Key"
                       class="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
                     />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-zinc-300 mb-1">
+                      Password
+                    </label>
+                    <input
+                      v-model="raPassword"
+                      type="password"
+                      placeholder="Your RA password"
+                      class="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
+                    />
+                    <p class="text-xs text-zinc-500 mt-1">
+                      Used once to get a login token for RetroArch. Never
+                      stored.
+                    </p>
                   </div>
                 </div>
 
@@ -146,7 +169,7 @@
                   </button>
                   <LoadingButton
                     :loading="raLinking"
-                    :disabled="!raUsername || !raApiKey"
+                    :disabled="!raUsername || !raApiKey || !raPassword"
                     class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     @click="linkRA"
                   >
@@ -474,6 +497,7 @@ const raAccount = ref<ExternalAccount | null>(null);
 const raDialogOpen = ref(false);
 const raUsername = ref("");
 const raApiKey = ref("");
+const raPassword = ref("");
 const raLinking = ref(false);
 const raUnlinking = ref(false);
 const raLinkError = ref("");
@@ -490,7 +514,7 @@ try {
 }
 
 async function linkRA() {
-  if (!raUsername.value || !raApiKey.value) return;
+  if (!raUsername.value || !raApiKey.value || !raPassword.value) return;
   raLinking.value = true;
   raLinkError.value = "";
   try {
@@ -501,6 +525,7 @@ async function linkRA() {
         body: {
           username: raUsername.value,
           apiKey: raApiKey.value,
+          password: raPassword.value,
         },
       },
     )) as ExternalAccount;
@@ -508,6 +533,7 @@ async function linkRA() {
     raDialogOpen.value = false;
     raUsername.value = "";
     raApiKey.value = "";
+    raPassword.value = "";
   } catch (err: unknown) {
     const msg =
       err && typeof err === "object" && "statusMessage" in err

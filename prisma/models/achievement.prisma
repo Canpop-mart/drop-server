@@ -51,8 +51,9 @@ model UserExternalAccount {
     userId     String
     user       User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
     provider   ExternalAccountProvider
-    externalId String                  // RA username
-    token      String                  @default("") // RA API key (encrypted)
+    externalId   String                  // RA username
+    token        String                  @default("") // RA Web API key
+    connectToken String                  @default("") // RA Connect token (for emulator auth)
 
     @@unique([userId, provider])
     @@index([provider, externalId])
