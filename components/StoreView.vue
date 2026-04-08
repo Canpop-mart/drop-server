@@ -1,6 +1,6 @@
 <i18n>
 {
-  "en": {
+  "en-us": {
     "↓": "↓",
     "↑": "↑",
     "previous": "Previous",

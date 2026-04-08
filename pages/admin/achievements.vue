@@ -76,6 +76,27 @@
           {{ $t("admin.achievements.noLinks") }}
         </p>
 
+        <!-- Quick RA scan (auto-searches by game name) -->
+        <div
+          v-if="!links.some((l) => l.provider === 'RetroAchievements')"
+          class="pt-3 border-t border-zinc-700/50"
+        >
+          <button
+            class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium rounded-md transition-colors"
+            :disabled="scanning"
+            @click="scanProvider('RetroAchievements')"
+          >
+            {{
+              scanning
+                ? $t("common.srLoading")
+                : $t("admin.achievements.searchRA")
+            }}
+          </button>
+          <span class="ml-2 text-xs text-zinc-500">{{
+            $t("admin.achievements.searchRAHint")
+          }}</span>
+        </div>
+
         <!-- Add link form -->
         <div class="flex items-end gap-3 pt-3 border-t border-zinc-700/50">
           <div class="flex-1">
@@ -87,6 +108,7 @@
               class="w-full rounded-md bg-zinc-900 border-zinc-700 text-zinc-100 text-sm px-3 py-2"
             >
               <option value="Goldberg">Goldberg</option>
+              <option value="RetroAchievements">RetroAchievements</option>
             </select>
           </div>
           <div class="flex-1">

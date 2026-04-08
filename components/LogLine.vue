@@ -1,6 +1,6 @@
 <template>
   <span class="text-xs font-mono text-zinc-400 inline-flex items-top gap-x-2"
-    ><span v-if="!short" class="text-zinc-500">{{ log.time }}</span>
+    ><span v-if="!short" class="text-zinc-500">{{ formatTime(log.time) }}</span>
     <span
       :class="[
         colours[log.level] || 'text-green-400',
@@ -17,6 +17,20 @@
 import type { TaskLog } from "~/server/internal/tasks";
 
 defineProps<{ log: typeof TaskLog.infer; short?: boolean }>();
+
+function formatTime(iso: string): string {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
 
 const colours: { [key: string]: string } = {
   info: "text-blue-400",

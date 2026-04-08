@@ -5,7 +5,7 @@ import prisma from "~/server/internal/db/database";
 import type { ExternalAccountProvider } from "~/prisma/client/enums";
 
 const CreateLink = type({
-  provider: "'Goldberg'",
+  provider: "'Goldberg' | 'RetroAchievements'",
   externalGameId: "string",
 }).configure(throwingArktype);
 

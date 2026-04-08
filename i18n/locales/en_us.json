@@ -152,8 +152,10 @@
       "resetAll": "Reset All",
       "resetConfirm": "Delete all achievements and unlock records for this game? This cannot be undone.",
       "scan": "Scan",
-      "scanComplete": "Scanned {count} achievements.",
+      "scanComplete": "Scan complete.",
       "scanFailed": "Scan failed. Check server logs.",
+      "searchRA": "Search RetroAchievements",
+      "searchRAHint": "Auto-searches by game name and imports achievements",
       "selectGame": "Game",
       "subtitle": "Manage achievement imports, external links, and scanning.",
       "title": "Achievements"
