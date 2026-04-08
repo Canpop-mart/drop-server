@@ -69,33 +69,19 @@
                     : $t("admin.achievements.scan")
                 }}
               </button>
+              <button
+                class="px-3 py-1.5 bg-red-600/80 hover:bg-red-500 text-white text-xs font-medium rounded-md transition-colors"
+                :disabled="scanning"
+                @click="removeLink(link.provider)"
+              >
+                {{ $t("admin.achievements.removeLink") }}
+              </button>
             </div>
           </div>
         </div>
         <p v-else class="text-sm text-zinc-500">
           {{ $t("admin.achievements.noLinks") }}
         </p>
-
-        <!-- Quick RA scan (auto-searches by game name) -->
-        <div
-          v-if="!links.some((l) => l.provider === 'RetroAchievements')"
-          class="pt-3 border-t border-zinc-700/50"
-        >
-          <button
-            class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium rounded-md transition-colors"
-            :disabled="scanning"
-            @click="scanProvider('RetroAchievements')"
-          >
-            {{
-              scanning
-                ? $t("common.srLoading")
-                : $t("admin.achievements.searchRA")
-            }}
-          </button>
-          <span class="ml-2 text-xs text-zinc-500">{{
-            $t("admin.achievements.searchRAHint")
-          }}</span>
-        </div>
 
         <!-- Add link form -->
         <div class="flex items-end gap-3 pt-3 border-t border-zinc-700/50">
@@ -264,6 +250,27 @@ async function addLink() {
   });
   newLinkExternalId.value = "";
   await refreshData(selectedGameId.value);
+}
+
+async function removeLink(provider: string) {
+  if (!selectedGameId.value) return;
+  if (!confirm(t("admin.achievements.removeLinkConfirm"))) return;
+  try {
+    await $dropFetch(
+      `/api/v1/admin/game/${selectedGameId.value}/external-link`,
+      {
+        method: "DELETE",
+        body: { provider },
+      },
+    );
+    await refreshData(selectedGameId.value);
+  } catch (err: unknown) {
+    const msg =
+      err && typeof err === "object" && "statusMessage" in err
+        ? String((err as { statusMessage: string }).statusMessage)
+        : String(err);
+    alert(msg);
+  }
 }
 
 async function scanProvider(provider: string) {

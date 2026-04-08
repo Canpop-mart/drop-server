@@ -69,23 +69,7 @@ export default defineEventHandler(async (h3) => {
     const raClient = createRAClient(raCreds.username, raCreds.apiKey);
 
     try {
-      // Get game name for RA search
-      const game = await prisma.game.findUnique({
-        where: { id: body.gameId },
-        select: { mName: true, libraryPath: true },
-      });
-
-      if (!game) {
-        throw createError({
-          statusCode: 404,
-          statusMessage: "Game not found",
-        });
-      }
-
-      const gameName = game.mName ?? game.libraryPath;
-      logger.info(`[ACH-SCAN] Searching RA for "${gameName}"`);
-
-      // Check if already linked — if so, refresh existing achievements
+      // Require an existing external link — admin must add the RA game ID first
       const existingLink = await prisma.gameExternalLink.findUnique({
         where: {
           gameId_provider: {
@@ -95,39 +79,18 @@ export default defineEventHandler(async (h3) => {
         },
       });
 
-      let raGameId: number;
-
-      if (existingLink) {
-        raGameId = parseInt(existingLink.externalGameId, 10);
-        logger.info(
-          `[ACH-SCAN] Existing RA link found, refreshing game ${raGameId}`,
-        );
-      } else {
-        // Search RA for this game
-        const searchResults = await raClient.searchGame(gameName);
-        logger.info(
-          `[ACH-SCAN] RA search returned ${searchResults.length} results`,
-        );
-        if (searchResults.length === 0) {
-          throw createError({
-            statusCode: 404,
-            statusMessage: `No RetroAchievements match found for "${gameName}"`,
-          });
-        }
-        raGameId = searchResults[0].ID;
-        logger.info(
-          `[ACH-SCAN] Best match: ${searchResults[0].Title} (ID=${raGameId})`,
-        );
-
-        // Create the external link
-        await prisma.gameExternalLink.create({
-          data: {
-            gameId: body.gameId,
-            provider: ExternalAccountProvider.RetroAchievements,
-            externalGameId: String(raGameId),
-          },
+      if (!existingLink) {
+        throw createError({
+          statusCode: 400,
+          statusMessage:
+            "No RetroAchievements link found. Add the RA game ID first, then scan.",
         });
       }
+
+      const raGameId = parseInt(existingLink.externalGameId, 10);
+      logger.info(
+        `[ACH-SCAN] Scanning RA game ${raGameId} for game ${body.gameId}`,
+      );
 
       // Fetch and upsert achievement definitions
       const gameInfo = await raClient.getGameAchievements(raGameId);
