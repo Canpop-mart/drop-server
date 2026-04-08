@@ -74,8 +74,19 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     );
 
     if (!userProgress || !userProgress.Achievements) {
+      logger.warn(
+        `[RA Sync] Empty progress from RA API for user=${userRaAccount.externalId} raGame=${raGameId}`,
+      );
       return { synced: 0 };
     }
+
+    const raAchievements = Object.entries(userProgress.Achievements);
+    const raUnlocked = raAchievements.filter(
+      ([, a]) => a.DateEarned || a.DateEarnedHardcore,
+    );
+    logger.info(
+      `[RA Sync] Session-end: RA API returned ${raAchievements.length} achievements, ${raUnlocked.length} unlocked for user=${userRaAccount.externalId} raGame=${raGameId}`,
+    );
 
     // Get all achievements for this game (RA provider only)
     const achievements = await prisma.achievement.findMany({

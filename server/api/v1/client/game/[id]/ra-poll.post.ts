@@ -34,12 +34,14 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   });
 
   if (!raLink) {
+    logger.info(`[RA-POLL] No RA link for game ${gameId}`);
     return { newlyUnlocked: [] };
   }
 
   // Resolve RA API credentials (for making API calls)
   const raCreds = await resolveRACredentials(user.id);
   if (!raCreds) {
+    logger.warn(`[RA-POLL] No RA credentials for user ${user.id}`);
     return { newlyUnlocked: [] };
   }
 
@@ -54,6 +56,9 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   });
 
   if (!userRaAccount || !userRaAccount.externalId || !userRaAccount.token) {
+    logger.warn(
+      `[RA-POLL] Missing RA account data for user ${user.id}: account=${!!userRaAccount}, externalId=${userRaAccount?.externalId}, hasToken=${!!userRaAccount?.token}`,
+    );
     return { newlyUnlocked: [] };
   }
 
@@ -68,8 +73,19 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     );
 
     if (!userProgress || !userProgress.Achievements) {
+      logger.warn(
+        `[RA-POLL] Empty progress from RA API for user=${userRaAccount.externalId} game=${raGameId}`,
+      );
       return { newlyUnlocked: [] };
     }
+
+    const raAchievements = Object.entries(userProgress.Achievements);
+    const raUnlocked = raAchievements.filter(
+      ([, a]) => a.DateEarned || a.DateEarnedHardcore,
+    );
+    logger.info(
+      `[RA-POLL] RA API returned ${raAchievements.length} achievements, ${raUnlocked.length} unlocked for user=${userRaAccount.externalId} raGame=${raGameId}`,
+    );
 
     // Get all RA achievements for this game from DB
     const achievements = await prisma.achievement.findMany({
@@ -94,6 +110,10 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     });
     const alreadyUnlockedIds = new Set(
       existingUnlocks.map((u) => u.achievementId),
+    );
+
+    logger.info(
+      `[RA-POLL] DB state: ${achievements.length} achievements in DB, ${alreadyUnlockedIds.size} already unlocked by user`,
     );
 
     // Get game name for notifications
