@@ -33,7 +33,7 @@
         </span>
         <Combobox
           as="div"
-          :value="launchConfiguration.launch"
+          :value="selectedComboboxValue"
           nullable
           class="w-full"
           @update:model-value="(v) => handleComboboxSelect(v)"
@@ -44,6 +44,7 @@
               :placeholder="
                 $t('library.admin.import.version.launchPlaceholder')
               "
+              :display-value="getComboboxDisplayValue"
               @change="launchProcessQuery = $event.target.value"
               @blur="launchProcessQuery = ''"
             />
@@ -242,11 +243,28 @@ import type { VersionGuess } from "~/server/internal/library";
 
 const launchProcessQuery = ref("");
 
+/**
+ * Track the currently selected combobox value. Can be a VersionGuess object
+ * (when selected from dropdown) or a string (typed manually / initial value).
+ * This lets HeadlessUI match the selected option and display it correctly.
+ */
+const selectedComboboxValue = ref<VersionGuess | string | null>(null);
+
+function getComboboxDisplayValue(value: unknown): string {
+  if (typeof value === "object" && value !== null && "filename" in value) {
+    return (value as VersionGuess).filename;
+  }
+  return (value as string) || "";
+}
+
 const launchConfiguration = defineModel<
   Omit<(typeof ImportVersion.infer)["launches"][number], "name"> & {
     name?: string;
   }
 >({ required: true });
+// Initialize combobox value from existing launch command
+selectedComboboxValue.value = launchConfiguration.value.launch || null;
+
 const _emulatorMetadata = ref<EmulatorLaunchObject | undefined>(undefined);
 const emulator = computed({
   get() {
@@ -295,6 +313,7 @@ const launchFilteredVersionGuesses = computed(() =>
  * (when selecting from suggestions) or a raw string (when typing a custom command).
  */
 function handleComboboxSelect(value: VersionGuess | string) {
+  selectedComboboxValue.value = value;
   if (typeof value === "object" && value !== null && "filename" in value) {
     // Selected a version guess — use the exact guess for auto-detection
     applyGuess(value);
@@ -326,6 +345,7 @@ function updateLaunchCommand(
   _guess: VersionGuess | undefined,
 ) {
   launchConfiguration.value.launch = command;
+  selectedComboboxValue.value = command;
   if (launchConfiguration.value.platform === undefined) {
     const autosetGuess = props.versionGuesses?.find(
       (v) => v.filename == command,
