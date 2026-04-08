@@ -68,111 +68,136 @@ export default defineEventHandler(async (h3) => {
 
     const raClient = createRAClient(raCreds.username, raCreds.apiKey);
 
-    // Get game name for RA search
-    const game = await prisma.game.findUnique({
-      where: { id: body.gameId },
-      select: { mName: true, libraryPath: true },
-    });
+    try {
+      // Get game name for RA search
+      const game = await prisma.game.findUnique({
+        where: { id: body.gameId },
+        select: { mName: true, libraryPath: true },
+      });
 
-    if (!game) {
-      throw createError({ statusCode: 404, statusMessage: "Game not found" });
-    }
-
-    const gameName = game.mName ?? game.libraryPath;
-
-    // Check if already linked — if so, refresh existing achievements
-    const existingLink = await prisma.gameExternalLink.findUnique({
-      where: {
-        gameId_provider: {
-          gameId: body.gameId,
-          provider: ExternalAccountProvider.RetroAchievements,
-        },
-      },
-    });
-
-    let raGameId: number;
-
-    if (existingLink) {
-      raGameId = parseInt(existingLink.externalGameId, 10);
-    } else {
-      // Search RA for this game
-      const searchResults = await raClient.searchGame(gameName);
-      if (searchResults.length === 0) {
+      if (!game) {
         throw createError({
           statusCode: 404,
-          statusMessage: `No RetroAchievements match found for "${gameName}"`,
+          statusMessage: "Game not found",
         });
       }
-      raGameId = searchResults[0].ID;
 
-      // Create the external link
-      await prisma.gameExternalLink.create({
-        data: {
-          gameId: body.gameId,
-          provider: ExternalAccountProvider.RetroAchievements,
-          externalGameId: String(raGameId),
+      const gameName = game.mName ?? game.libraryPath;
+      logger.info(`[ACH-SCAN] Searching RA for "${gameName}"`);
+
+      // Check if already linked — if so, refresh existing achievements
+      const existingLink = await prisma.gameExternalLink.findUnique({
+        where: {
+          gameId_provider: {
+            gameId: body.gameId,
+            provider: ExternalAccountProvider.RetroAchievements,
+          },
         },
       });
-    }
 
-    // Fetch and upsert achievement definitions
-    const gameInfo = await raClient.getGameAchievements(raGameId);
-    if (!gameInfo) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: `Failed to fetch achievements from RetroAchievements for game ${raGameId}`,
-      });
-    }
+      let raGameId: number;
 
-    let achievementCount = 0;
-    let order = 0;
+      if (existingLink) {
+        raGameId = parseInt(existingLink.externalGameId, 10);
+        logger.info(
+          `[ACH-SCAN] Existing RA link found, refreshing game ${raGameId}`,
+        );
+      } else {
+        // Search RA for this game
+        const searchResults = await raClient.searchGame(gameName);
+        logger.info(
+          `[ACH-SCAN] RA search returned ${searchResults.length} results`,
+        );
+        if (searchResults.length === 0) {
+          throw createError({
+            statusCode: 404,
+            statusMessage: `No RetroAchievements match found for "${gameName}"`,
+          });
+        }
+        raGameId = searchResults[0].ID;
+        logger.info(
+          `[ACH-SCAN] Best match: ${searchResults[0].Title} (ID=${raGameId})`,
+        );
 
-    for (const [externalId, achievement] of Object.entries(
-      gameInfo.Achievements || {},
-    )) {
-      const iconUrl = achievement.BadgeName
-        ? `https://media.retroachievements.org/Badge/${achievement.BadgeName}.png`
-        : "";
-      const iconLockedUrl = achievement.BadgeName
-        ? `https://media.retroachievements.org/Badge/${achievement.BadgeName}_lock.png`
-        : "";
+        // Create the external link
+        await prisma.gameExternalLink.create({
+          data: {
+            gameId: body.gameId,
+            provider: ExternalAccountProvider.RetroAchievements,
+            externalGameId: String(raGameId),
+          },
+        });
+      }
 
-      await prisma.achievement.upsert({
-        where: {
-          gameId_provider_externalId: {
+      // Fetch and upsert achievement definitions
+      const gameInfo = await raClient.getGameAchievements(raGameId);
+      if (!gameInfo) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: `Failed to fetch achievements from RetroAchievements for game ${raGameId}`,
+        });
+      }
+
+      let achievementCount = 0;
+      let order = 0;
+
+      for (const [externalId, achievement] of Object.entries(
+        gameInfo.Achievements || {},
+      )) {
+        const iconUrl = achievement.BadgeName
+          ? `https://media.retroachievements.org/Badge/${achievement.BadgeName}.png`
+          : "";
+        const iconLockedUrl = achievement.BadgeName
+          ? `https://media.retroachievements.org/Badge/${achievement.BadgeName}_lock.png`
+          : "";
+
+        await prisma.achievement.upsert({
+          where: {
+            gameId_provider_externalId: {
+              gameId: body.gameId,
+              provider: ExternalAccountProvider.RetroAchievements,
+              externalId,
+            },
+          },
+          create: {
             gameId: body.gameId,
             provider: ExternalAccountProvider.RetroAchievements,
             externalId,
+            title: achievement.Title || externalId,
+            description: achievement.Description || "",
+            iconUrl,
+            iconLockedUrl,
+            displayOrder: order,
           },
-        },
-        create: {
-          gameId: body.gameId,
-          provider: ExternalAccountProvider.RetroAchievements,
-          externalId,
-          title: achievement.Title || externalId,
-          description: achievement.Description || "",
-          iconUrl,
-          iconLockedUrl,
-          displayOrder: order,
-        },
-        update: {
-          title: achievement.Title || externalId,
-          description: achievement.Description || "",
-          iconUrl,
-          iconLockedUrl,
-          displayOrder: order,
-        },
+          update: {
+            title: achievement.Title || externalId,
+            description: achievement.Description || "",
+            iconUrl,
+            iconLockedUrl,
+            displayOrder: order,
+          },
+        });
+
+        achievementCount++;
+        order++;
+      }
+
+      logger.info(
+        `[ACH-SCAN] Scanned RA game ${raGameId} for game ${body.gameId}: ${achievementCount} achievements`,
+      );
+
+      return { scanned: true, raGameId, achievementCount };
+    } catch (e) {
+      // Log the actual error server-side before rethrowing
+      const msg = e instanceof Error ? e.message : String(e);
+      logger.error(`[ACH-SCAN] RA scan failed: ${msg}`);
+      // If it's already an H3 error, rethrow as-is; otherwise wrap it
+      if (e && typeof e === "object" && "statusCode" in e) throw e;
+      throw createError({
+        statusCode: 500,
+        statusMessage: `RetroAchievements scan failed: ${msg}`,
       });
-
-      achievementCount++;
-      order++;
     }
-
-    logger.info(
-      `[ACH-SCAN] Scanned RA game ${raGameId} for game ${body.gameId}: ${achievementCount} achievements`,
-    );
-
-    return { scanned: true, raGameId, achievementCount };
   }
 
   throw createError({ statusCode: 400, statusMessage: "Unknown provider" });
