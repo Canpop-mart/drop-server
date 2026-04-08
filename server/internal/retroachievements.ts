@@ -215,7 +215,7 @@ export class RetroAchievementsClient {
   async getGameAchievements(raGameId: number): Promise<RAGameInfo | null> {
     try {
       const result = await this.makeRequest<RAGameInfo>(
-        "API_GetGameInfoExtended.php",
+        "API_GetGameExtended.php",
         {
           i: raGameId,
         },
