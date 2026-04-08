@@ -88,20 +88,45 @@ export class RetroAchievementsClient {
       url.searchParams.set(key, String(value));
     }
 
-    try {
-      const response = await fetch(url.toString());
-      if (!response.ok) {
-        throw new Error(
-          `RA API error: ${response.status} ${response.statusText}`,
+    const maxRetries = 3;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(url.toString());
+
+        if (response.status === 429) {
+          if (attempt < maxRetries) {
+            const delay = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s
+            logger.warn(
+              `[RA] Rate limited (429), retrying in ${delay / 1000}s (attempt ${attempt + 1}/${maxRetries})`,
+            );
+            await new Promise((r) => setTimeout(r, delay));
+            continue;
+          }
+          throw new Error("RA API rate limit exceeded after retries");
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            `RA API error: ${response.status} ${response.statusText}`,
+          );
+        }
+        return (await response.json()) as T;
+      } catch (error) {
+        if (
+          attempt < maxRetries &&
+          error instanceof Error &&
+          error.message.includes("429")
+        ) {
+          continue; // already handled above, but just in case
+        }
+        logger.error(
+          `RetroAchievements API request failed: ${error instanceof Error ? error.message : String(error)}`,
         );
+        throw error;
       }
-      return (await response.json()) as T;
-    } catch (error) {
-      logger.error(
-        `RetroAchievements API request failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      throw error;
     }
+
+    throw new Error("RA API request failed after all retries");
   }
 
   /**

@@ -267,7 +267,8 @@ export default defineDropTask({
       }
 
       progress(60 + Math.round(((i + 1) / unlinkedGames.length) * 38));
-      await new Promise((r) => setTimeout(r, 300));
+      // RA API has strict rate limits — 2s between games (each game = 2 API calls)
+      await new Promise((r) => setTimeout(r, 2000));
     }
 
     logger.info(
