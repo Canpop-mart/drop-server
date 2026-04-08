@@ -28,7 +28,7 @@ export default defineEventHandler(async (h3) => {
   const body = await readDropValidatedBody(h3, ScanRequest);
 
   logger.info(
-    `[ACH-SCAN] Scan requested for game=${body.gameId} provider=${body.provider}`,
+    `[ACH-SCAN] Scan requested for game=${body.gameId} provider=${body.provider} userId=${userId}`,
   );
 
   if (body.provider === "Goldberg") {
@@ -49,15 +49,22 @@ export default defineEventHandler(async (h3) => {
   }
 
   if (body.provider === "RetroAchievements") {
-    // Resolve RA credentials: env vars first, then user's linked RA account
+    // Resolve RA credentials: env vars first, then user's linked RA account, then any user
+    logger.info(`[ACH-SCAN] Resolving RA credentials for userId=${userId}`);
     const raCreds = await resolveRACredentials(userId);
     if (!raCreds) {
+      logger.warn(
+        `[ACH-SCAN] No RA credentials found for userId=${userId}. Check UserExternalAccount table.`,
+      );
       throw createError({
         statusCode: 500,
         statusMessage:
           "No RetroAchievements credentials available. Either set RA_USERNAME/RA_API_KEY env vars or link your RA account in account settings.",
       });
     }
+    logger.info(
+      `[ACH-SCAN] Using RA credentials: username=${raCreds.username}`,
+    );
 
     const raClient = createRAClient(raCreds.username, raCreds.apiKey);
 

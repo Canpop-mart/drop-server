@@ -307,12 +307,18 @@ export function createRAClient(
 
 /**
  * Resolve RetroAchievements API credentials.
- * Priority: env vars (RA_USERNAME + RA_API_KEY) → authenticated user's linked RA account.
+ * Priority:
+ *   1. Environment variables (RA_USERNAME + RA_API_KEY)
+ *   2. Specific user's linked RA account (when userId provided)
+ *   3. Any user with a linked RA account (for system tasks with no user context)
  * Returns { username, apiKey } or null if no credentials are available.
  */
 export async function resolveRACredentials(
   userId?: string,
 ): Promise<{ username: string; apiKey: string } | null> {
+  const { default: prisma } = await import("~/server/internal/db/database");
+  const { ExternalAccountProvider } = await import("~/prisma/client/enums");
+
   // 1. Try environment variables first
   const envUsername = process.env.RA_USERNAME ?? "";
   const envApiKey = process.env.RA_API_KEY ?? "";
@@ -320,10 +326,8 @@ export async function resolveRACredentials(
     return { username: envUsername, apiKey: envApiKey };
   }
 
-  // 2. Fall back to the authenticated user's linked RA account
+  // 2. Fall back to the specific user's linked RA account
   if (userId) {
-    const { default: prisma } = await import("~/server/internal/db/database");
-    const { ExternalAccountProvider } = await import("~/prisma/client/enums");
     const userRa = await prisma.userExternalAccount.findUnique({
       where: {
         userId_provider: {
@@ -335,6 +339,21 @@ export async function resolveRACredentials(
     if (userRa && userRa.externalId && userRa.token) {
       return { username: userRa.externalId, apiKey: userRa.token };
     }
+  }
+
+  // 3. Fall back to any user with linked RA credentials (for system-level tasks)
+  const anyRa = await prisma.userExternalAccount.findFirst({
+    where: {
+      provider: ExternalAccountProvider.RetroAchievements,
+      externalId: { not: "" },
+      token: { not: "" },
+    },
+  });
+  if (anyRa && anyRa.externalId && anyRa.token) {
+    logger.info(
+      `[RA] Using linked RA credentials from user ${anyRa.userId} (${anyRa.externalId})`,
+    );
+    return { username: anyRa.externalId, apiKey: anyRa.token };
   }
 
   return null;
