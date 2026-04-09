@@ -63,11 +63,16 @@ export default defineEventHandler(async (h3) => {
     },
   });
 
-  const sizes = await Promise.all(
-    game.versions!.map(
-      async (v) => (await gameSizeManager.getVersionSize(v.versionId))!,
-    ),
+  const sizesRaw = await Promise.all(
+    game.versions!.map(async (v) => {
+      try {
+        return await gameSizeManager.getVersionSize(v.versionId);
+      } catch {
+        return null;
+      }
+    }),
   );
+  const sizes = sizesRaw.filter((s): s is NonNullable<typeof s> => s !== null);
 
   const platforms = new Set(
     game

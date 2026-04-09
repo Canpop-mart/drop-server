@@ -20,6 +20,9 @@ export default defineEventHandler(async (h3) => {
   if (query instanceof ArkErrors)
     throw createError({ statusCode: 400, message: query.summary });
 
+  // Limit results to prevent unbounded queries
+  const maxResults = 200;
+
   const results: {
     id: string;
     mName: string;
@@ -27,7 +30,7 @@ export default defineEventHandler(async (h3) => {
     mShortDescription: string;
     mReleased: string;
   }[] =
-    await prisma.$queryRaw`SELECT id, "mName", "mIconObjectId", "mShortDescription", "mReleased" FROM "Game" WHERE SIMILARITY("mName", ${query.q}) > 0.2 AND (${query.type || "undefined"} = 'undefined' OR type::text = ${query.type}) ORDER BY SIMILARITY("mName", ${query.q}) DESC;`;
+    await prisma.$queryRaw`SELECT id, "mName", "mIconObjectId", "mShortDescription", "mReleased" FROM "Game" WHERE SIMILARITY("mName", ${query.q}) > 0.2 AND (${query.type || "undefined"} = 'undefined' OR type::text = ${query.type}) ORDER BY SIMILARITY("mName", ${query.q}) DESC LIMIT ${maxResults};`;
 
   const resultsMapped = results.map(
     (v) =>

@@ -96,9 +96,15 @@ export async function createDownloadManifestDetails(
   let installSize = 0;
   let downloadSize = 0;
 
-  const existingChunks = previous
-    ? await createDownloadManifestDetails(previous)
-    : undefined;
+  let existingChunks: DownloadManifestDetails | undefined;
+  if (previous) {
+    try {
+      existingChunks = await createDownloadManifestDetails(previous);
+    } catch {
+      // Previous version no longer exists — treat as full download
+      existingChunks = undefined;
+    }
+  }
 
   // Now that we have our file list, filter the manifests
   const manifests = new Map<string, DropletManifest>();

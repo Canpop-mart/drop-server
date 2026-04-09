@@ -85,6 +85,7 @@ model LeaderboardEntry {
   @@index([leaderboardId])
   @@index([userId])
   @@index([score])
+  @@index([leaderboardId, score])
 }
 
 model ProfileShowcase {

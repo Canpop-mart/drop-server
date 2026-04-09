@@ -101,6 +101,7 @@ model GameRating {
   gameId String
 
   @@unique([metadataSource, metadataId], name: "metadataKey")
+  @@index([gameId])
 }
 
 model UnimportedGameVersion {

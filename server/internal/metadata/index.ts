@@ -139,20 +139,42 @@ export class MetadataHandler {
   }
 
   private async parseTags(tags: string[]) {
-    const results: Array<GameTagModel> = [];
+    if (tags.length === 0) return [];
 
-    for (const tag of tags) {
-      const rawResults: GameTagModel[] =
-        await prisma.$queryRaw`SELECT * FROM "GameTag" WHERE SIMILARITY(name, ${tag}) > 0.45;`;
-      let resultTag = rawResults.at(0);
-      if (!resultTag) {
-        resultTag = await prisma.gameTag.create({
-          data: {
-            name: tag,
-          },
+    // Parallelize tag lookups
+    const tagResults = await Promise.all(
+      tags.map(async (tag) => {
+        const rawResults: GameTagModel[] =
+          await prisma.$queryRaw`SELECT * FROM "GameTag" WHERE SIMILARITY(name, ${tag}) > 0.45;`;
+        return { tag, result: rawResults.at(0) };
+      }),
+    );
+
+    // Batch create missing tags
+    const tagsToCreate = tagResults
+      .filter(({ result }) => !result)
+      .map(({ tag }) => ({ name: tag }));
+
+    if (tagsToCreate.length > 0) {
+      await prisma.gameTag.createMany({
+        data: tagsToCreate,
+        skipDuplicates: true,
+      });
+    }
+
+    // Re-fetch created tags to get their IDs
+    const results: Array<GameTagModel> = [];
+    for (const { tag, result } of tagResults) {
+      if (result) {
+        results.push(result);
+      } else {
+        const newTag = await prisma.gameTag.findFirst({
+          where: { name: tag },
         });
+        if (newTag) {
+          results.push(newTag);
+        }
       }
-      results.push(resultTag);
     }
 
     return results;

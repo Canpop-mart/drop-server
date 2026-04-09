@@ -12,6 +12,7 @@ model GameExternalLink {
     externalGameId String
 
     @@unique([gameId, provider])
+    @@index([gameId])
 }
 
 model Achievement {

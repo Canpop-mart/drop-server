@@ -103,10 +103,17 @@ export default defineClientEventHandler(async (h3) => {
           }
         }
 
-        const size = await gameSizeManager.getVersionSize(
-          v.versionId,
-          query.previous,
-        );
+        let size: Awaited<ReturnType<typeof gameSizeManager.getVersionSize>>;
+        try {
+          size = await gameSizeManager.getVersionSize(
+            v.versionId,
+            query.previous,
+          );
+        } catch {
+          size = null;
+        }
+
+        if (!size) return [];
 
         return platformOptions
           .entries()
@@ -119,7 +126,7 @@ export default defineClientEventHandler(async (h3) => {
                 versionPath: v.versionPath || undefined,
                 platform,
                 requiredContent,
-                size: size!,
+                size,
               }) satisfies VersionDownloadOption,
           )
           .toArray();

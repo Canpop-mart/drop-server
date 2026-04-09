@@ -280,20 +280,22 @@ export class SteamProvider implements MetadataProvider {
 
     context?.progress(60);
 
+    // Parallelize independent API calls
     context?.logger.info(
       `Fetching tags from Steam (${currentGame.tagids?.length || 0} tags to process)...`,
     );
-    const tags = await this._getTagNames(currentGame.tagids || []);
+    context?.logger.info("Processing publishers and developers...");
+
+    const [tags, storePage] = await Promise.all([
+      this._getTagNames(currentGame.tagids || []),
+      $fetch<string>(`https://store.steampowered.com/app/${id}/`),
+    ]);
 
     context?.logger.info(
       `Successfully fetched ${tags.length} tags: ${tags.slice(0, 5).join(", ")}${tags.length > 5 ? "..." : ""}`,
     );
     context?.progress(70);
 
-    context?.logger.info("Processing publishers and developers...");
-    const storePage = await $fetch<string>(
-      `https://store.steampowered.com/app/${id}/`,
-    );
     const $ = load(storePage);
 
     const companyLinks = $("a")
@@ -335,10 +337,18 @@ export class SteamProvider implements MetadataProvider {
     const publishers = [];
     const developers = [];
 
-    for (const [companyName, types] of Object.entries(companies)) {
-      context?.logger.info(`Processing company: "${companyName}"`);
-      const comp = await company(companyName);
+    // Parallelize company fetches
+    const companyEntries = Object.entries(companies);
+    const companyResults = await Promise.all(
+      companyEntries.map(async ([companyName, types]) => {
+        context?.logger.info(`Processing company: "${companyName}"`);
+        const comp = await company(companyName);
+        return { companyName, types, comp };
+      }),
+    );
 
+    // Process results
+    for (const { companyName, types, comp } of companyResults) {
       if (types.dev) {
         developers.push(comp);
         context?.logger.info(
@@ -359,10 +369,18 @@ export class SteamProvider implements MetadataProvider {
     context?.progress(80);
 
     context?.logger.info("Fetching detailed description and reviews...");
-    const webAppDetails = (await this._getWebAppDetails(
-      id,
-      "metacritic",
-    )) as SteamWebAppDetailsLarge;
+    context?.logger.info("Attempting to fetch logo from SteamGridDB...");
+
+    // Parallelize web app details and SteamGridDB logo fetch
+    const apiKey = getSteamGridDBApiKey();
+    const [webAppDetails, sgdbLogoUrl] = await Promise.all([
+      this._getWebAppDetails(id, "metacritic"),
+      apiKey
+        ? sgdbGetBestLogoUrl(apiKey, id, currentGame.name)
+        : Promise.resolve(null as string | null),
+    ]);
+
+    const sgdbLogoUrl_resolved = (sgdbLogoUrl as string | null) || "";
 
     const detailedDescription =
       webAppDetails?.detailed_description ||
@@ -405,7 +423,11 @@ export class SteamProvider implements MetadataProvider {
       `Steam reviews: ${steamReviewCount} reviews, ${steamRating}% positive`,
     );
 
-    if (webAppDetails?.metacritic) {
+    if (
+      webAppDetails &&
+      "metacritic" in webAppDetails &&
+      webAppDetails.metacritic
+    ) {
       reviews.push({
         metadataId: id,
         metadataSource: MetadataSource.Metacritic,
@@ -422,22 +444,17 @@ export class SteamProvider implements MetadataProvider {
       `Review processing complete: ${reviews.length} rating sources found`,
     );
 
-    // Fetch logo from SteamGridDB if available
+    // Process pre-fetched logo from SteamGridDB
     let logoId = "";
-    const apiKey = getSteamGridDBApiKey();
-    if (apiKey) {
-      context?.logger.info("Attempting to fetch logo from SteamGridDB...");
-      const logoUrl = await sgdbGetBestLogoUrl(apiKey, id, currentGame.name);
-      if (logoUrl) {
-        try {
-          logoId = createObject(logoUrl);
-          context?.logger.info(`Successfully fetched logo from SteamGridDB`);
-        } catch (e) {
-          context?.logger.warn(`Failed to fetch logo from SteamGridDB: ${e}`);
-        }
-      } else {
-        context?.logger.info(`No logo found on SteamGridDB`);
+    if (sgdbLogoUrl_resolved) {
+      try {
+        logoId = createObject(sgdbLogoUrl_resolved);
+        context?.logger.info(`Successfully fetched logo from SteamGridDB`);
+      } catch (e) {
+        context?.logger.warn(`Failed to fetch logo from SteamGridDB: ${e}`);
       }
+    } else if (apiKey) {
+      context?.logger.info(`No logo found on SteamGridDB`);
     } else {
       context?.logger.info(
         `STEAMGRIDDB_API_KEY not configured, skipping logo fetch`,

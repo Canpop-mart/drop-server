@@ -101,7 +101,20 @@ export default defineEventHandler(async (h3) => {
         });
       }
 
-      let achievementCount = 0;
+      // Fetch existing achievements to determine create vs update
+      const existingAchievements = await prisma.achievement.findMany({
+        where: {
+          gameId: body.gameId,
+          provider: ExternalAccountProvider.RetroAchievements,
+        },
+        select: { externalId: true, id: true },
+      });
+      const existingMap = new Map(
+        existingAchievements.map((a) => [a.externalId, a.id]),
+      );
+
+      const toCreate = [];
+      const toUpdate = [];
       let order = 0;
 
       for (const [externalId, achievement] of Object.entries(
@@ -114,36 +127,46 @@ export default defineEventHandler(async (h3) => {
           ? `https://media.retroachievements.org/Badge/${achievement.BadgeName}_lock.png`
           : "";
 
-        await prisma.achievement.upsert({
-          where: {
-            gameId_provider_externalId: {
-              gameId: body.gameId,
-              provider: ExternalAccountProvider.RetroAchievements,
-              externalId,
-            },
-          },
-          create: {
+        const achievementData = {
+          title: achievement.Title || externalId,
+          description: achievement.Description || "",
+          iconUrl,
+          iconLockedUrl,
+          displayOrder: order,
+        };
+
+        if (existingMap.has(externalId)) {
+          toUpdate.push({
+            id: existingMap.get(externalId)!,
+            data: achievementData,
+          });
+        } else {
+          toCreate.push({
             gameId: body.gameId,
             provider: ExternalAccountProvider.RetroAchievements,
             externalId,
-            title: achievement.Title || externalId,
-            description: achievement.Description || "",
-            iconUrl,
-            iconLockedUrl,
-            displayOrder: order,
-          },
-          update: {
-            title: achievement.Title || externalId,
-            description: achievement.Description || "",
-            iconUrl,
-            iconLockedUrl,
-            displayOrder: order,
-          },
-        });
+            ...achievementData,
+          });
+        }
 
-        achievementCount++;
         order++;
       }
+
+      // Batch create new achievements
+      if (toCreate.length > 0) {
+        await prisma.achievement.createMany({ data: toCreate });
+      }
+
+      // Batch update existing achievements
+      if (toUpdate.length > 0) {
+        await Promise.all(
+          toUpdate.map(({ id, data }) =>
+            prisma.achievement.updateMany({ where: { id }, data }),
+          ),
+        );
+      }
+
+      const achievementCount = toCreate.length + toUpdate.length;
 
       logger.info(
         `[ACH-SCAN] Scanned RA game ${raGameId} for game ${body.gameId}: ${achievementCount} achievements`,
