@@ -211,7 +211,7 @@
             >
               <ImportVersionLaunchRow
                 v-model="editForm.setups[setupIdx]"
-                :version-guesses="[]"
+                :version-guesses="editVersionGuesses"
                 :needs-name="false"
               />
               <button
@@ -335,7 +335,7 @@
                 <DisclosurePanel as="dd" class="mt-2">
                   <ImportVersionLaunchRow
                     v-model="editForm.launches[launchIdx]"
-                    :version-guesses="[]"
+                    :version-guesses="editVersionGuesses"
                     :needs-name="true"
                     :allow-emulator="true"
                     :type="game.type"
@@ -471,6 +471,7 @@ import { XCircleIcon } from "@heroicons/vue/16/solid";
 import { FetchError } from "ofetch";
 import type { AdminFetchGameType } from "~/server/api/v1/admin/game/[id]/index.get";
 import type { Platform } from "~/prisma/client/enums";
+import type { VersionGuess } from "~/server/internal/library";
 
 const props = defineProps<{ unimportedVersions: string[] }>();
 
@@ -492,6 +493,108 @@ if (!game.value)
   });
 
 type VersionType = (typeof game.value.versions)[number];
+
+// ── File-based autocomplete guesses ─────────────────────────────────
+const EXECUTABLE_EXTENSIONS: Record<string, Platform> = {
+  ".exe": "Windows",
+  ".bat": "Windows",
+  ".msi": "Windows",
+  ".x86_64": "Linux",
+  ".x86": "Linux",
+  ".sh": "Linux",
+  ".appimage": "Linux",
+  ".app": "macOS",
+};
+
+const ROM_EXTENSIONS = new Set([
+  // Common ROM formats
+  ".z64",
+  ".n64",
+  ".v64",
+  ".ndd", // N64
+  ".gcm",
+  ".gcz",
+  ".iso",
+  ".ciso",
+  ".rvz",
+  ".wbfs",
+  ".wia",
+  ".nkit", // GC/Wii
+  ".gba",
+  ".gbc",
+  ".gb", // Game Boy
+  ".nds",
+  ".dsi", // DS
+  ".3ds",
+  ".cia", // 3DS
+  ".nes",
+  ".fds",
+  ".unf", // NES
+  ".sfc",
+  ".smc", // SNES
+  ".sms",
+  ".gg",
+  ".sg", // Sega 8-bit
+  ".md",
+  ".gen",
+  ".bin",
+  ".smd", // Genesis/Mega Drive
+  ".32x", // 32X
+  ".cue",
+  ".chd",
+  ".pbp",
+  ".m3u", // CD-based (PS1, Saturn, etc.)
+  ".xci",
+  ".nsp", // Switch
+  ".vpk", // Vita
+  ".pkg", // PS3
+  ".xex",
+  ".xbe", // Xbox
+  ".a26",
+  ".a78", // Atari
+  ".lnx", // Atari Lynx
+  ".pce", // PC Engine
+  ".ngp",
+  ".ngc", // Neo Geo Pocket
+  ".ws",
+  ".wsc", // WonderSwan
+  ".vb", // Virtual Boy
+  ".vec", // Vectrex
+  ".col", // ColecoVision
+  ".int", // Intellivision
+  ".j64", // Jaguar
+  ".min", // Pokemon Mini
+]);
+
+function generateGuessesFromFileList(fileList: string[]): VersionGuess[] {
+  const guesses: VersionGuess[] = [];
+  for (const file of fileList) {
+    const lower = file.toLowerCase();
+    const ext = lower.substring(lower.lastIndexOf("."));
+
+    if (EXECUTABLE_EXTENSIONS[ext]) {
+      guesses.push({
+        filename: file,
+        match: 1,
+        platform: EXECUTABLE_EXTENSIONS[ext],
+        type: "platform",
+      });
+    } else if (ROM_EXTENSIONS.has(ext)) {
+      // ROMs show up as platform guesses — emulator selection is separate
+      guesses.push({
+        filename: file,
+        match: 0.5,
+        platform: "Linux", // Default; user picks real platform
+        type: "platform",
+      });
+    }
+  }
+  // Sort executables first (higher match), then alphabetically
+  guesses.sort(
+    (a, b) => b.match - a.match || a.filename.localeCompare(b.filename),
+  );
+  return guesses;
+}
 
 // ── Edit state ──────────────────────────────────────────────────────
 const editingVersionId = ref<string | null>(null);
@@ -526,6 +629,17 @@ const editForm = ref<{
   delta: false,
   launches: [],
   setups: [],
+});
+
+const editVersionGuesses = computed<VersionGuess[]>(() => {
+  if (!editingVersionId.value) return [];
+  const version = game.value.versions.find(
+    (v) => v.versionId === editingVersionId.value,
+  );
+  if (!version || !("fileList" in version)) return [];
+  return generateGuessesFromFileList(
+    (version as VersionType & { fileList: string[] }).fileList,
+  );
 });
 
 function startEditing(version: VersionType) {

@@ -69,17 +69,44 @@
     </div>
   </div>
 
-  <!-- Fewer than 3 games fallback -->
-  <div
-    v-if="!loading && items.length > 0 && items.length < 3"
-    class="grid grid-cols-2 sm:grid-cols-3 gap-4 max-w-3xl mx-auto"
-  >
-    <GamePanel
-      v-for="game in items"
-      :key="game.id"
-      :game="game"
-      :href="`/store/${game.id}`"
-    />
+  <!-- Exactly 2 games: side-by-side podium -->
+  <div v-if="!loading && items.length === 2" class="mb-8">
+    <div class="flex items-end justify-center gap-3 sm:gap-5 max-w-4xl mx-auto">
+      <div class="flex-1 max-w-[320px]">
+        <PodiumCard
+          :game="items[0]"
+          :rank="1"
+          medal-color="from-yellow-400 to-amber-500"
+          medal-bg="bg-yellow-500/15 ring-yellow-500/30"
+          medal-text="text-yellow-400"
+          height-class="h-[380px] sm:h-[440px]"
+        />
+      </div>
+      <div class="flex-1 max-w-[280px]">
+        <PodiumCard
+          :game="items[1]"
+          :rank="2"
+          medal-color="from-zinc-300 to-zinc-400"
+          medal-bg="bg-zinc-400/15 ring-zinc-400/30"
+          medal-text="text-zinc-300"
+          height-class="h-[340px] sm:h-[380px]"
+        />
+      </div>
+    </div>
+  </div>
+
+  <!-- Only 1 game fallback -->
+  <div v-if="!loading && items.length === 1" class="flex justify-center mb-8">
+    <div class="max-w-[320px] w-full">
+      <PodiumCard
+        :game="items[0]"
+        :rank="1"
+        medal-color="from-yellow-400 to-amber-500"
+        medal-bg="bg-yellow-500/15 ring-yellow-500/30"
+        medal-text="text-yellow-400"
+        height-class="h-[380px] sm:h-[440px]"
+      />
+    </div>
   </div>
 </template>
 

@@ -141,12 +141,16 @@
         </div>
 
         <div v-else-if="recentlyAdded.length > 0" class="space-y-6">
-          <!-- Hero row: newest game large + 2 medium cards -->
-          <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <!-- Hero row: newest game large + 2 medium cards, matched height -->
+          <div
+            class="grid grid-cols-1 lg:grid-cols-5 gap-4"
+            style="--hero-h: 420px"
+          >
             <!-- Newest game — hero banner card -->
             <NuxtLink
               :href="`/store/${recentlyAdded[0].id}`"
-              class="lg:col-span-3 relative rounded-2xl overflow-hidden group aspect-video block ring-1 ring-white/5 hover:ring-blue-500/30 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10"
+              class="lg:col-span-3 relative rounded-2xl overflow-hidden group block ring-1 ring-white/5 hover:ring-blue-500/30 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10"
+              style="height: var(--hero-h)"
             >
               <img
                 :src="useObject(recentlyAdded[0].mBannerObjectId)"
@@ -173,13 +177,17 @@
               </div>
             </NuxtLink>
 
-            <!-- Next 2 games — tall cover cards -->
-            <div class="lg:col-span-2 grid grid-cols-2 gap-4">
+            <!-- Next 2 games — tall cover cards, same height as hero -->
+            <div
+              v-if="recentlyAdded.length > 1"
+              class="lg:col-span-2 grid grid-cols-2 gap-4"
+              style="height: var(--hero-h)"
+            >
               <NuxtLink
                 v-for="game in recentlyAdded.slice(1, 3)"
                 :key="game.id"
                 :href="`/store/${game.id}`"
-                class="relative rounded-xl overflow-hidden group aspect-[2/3] block ring-1 ring-white/5 hover:ring-blue-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-0.5"
+                class="relative rounded-xl overflow-hidden group block h-full ring-1 ring-white/5 hover:ring-blue-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-0.5"
               >
                 <img
                   :src="useObject(game.mCoverObjectId)"
@@ -207,13 +215,14 @@
             </div>
           </div>
 
-          <!-- Rest of the recently added games -->
+          <!-- Rest of the recently added games — single row -->
           <div
             v-if="recentlyAdded.length > 3"
-            class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3.5"
+            class="grid gap-3.5"
+            :style="`grid-template-columns: repeat(${recentlyAddedRowCount}, minmax(0, 1fr))`"
           >
             <GamePanel
-              v-for="game in recentlyAdded.slice(3, 21)"
+              v-for="game in recentlyAdded.slice(3, 3 + recentlyAddedRowCount)"
               :key="game.id"
               :game="game"
               :href="`/store/${game.id}`"
@@ -334,10 +343,13 @@ $fetch<{ results: TrendingGame[] }>("/api/v1/store/trending", {
     trendingLoading.value = false;
   });
 
+// How many games fit in a single row after the hero (approximation based on common widths)
+const recentlyAddedRowCount = 9;
+
 const recentlyAddedLoading = ref(true);
 const recentlyAdded = ref<StoreGame[]>([]);
 $fetch<{ results: StoreGame[] }>("/api/v1/store", {
-  query: { take: 21, sort: "recent", order: "desc" },
+  query: { take: 3 + recentlyAddedRowCount, sort: "recent", order: "desc" },
 })
   .then((data) => {
     recentlyAdded.value = data.results;

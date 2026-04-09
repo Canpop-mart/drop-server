@@ -235,6 +235,7 @@ class LibraryManager {
       gameId: string;
       versions: string[];
       depotVersions: { id: string; versionName: string }[];
+      discFolders?: string[];
     },
   ): Promise<UnimportedVersionInformation[] | undefined> {
     const provider = this.libraries.get(libraryId);
@@ -282,20 +283,19 @@ class LibraryManager {
     // which doesn't exist as an actual folder. Use the first disc folder instead
     // to check for versions.
     let effectivePath = libraryPath;
-    if (!noFetchParams) {
-      const gameRecord = await prisma.game.findUnique({
-        where: { libraryKey: { libraryId, libraryPath } },
-        select: { discFolders: true },
-      });
-      if (gameRecord?.discFolders && gameRecord.discFolders.length > 0) {
-        effectivePath = gameRecord.discFolders[0];
-      }
+    if (noFetchParams?.discFolders && noFetchParams.discFolders.length > 0) {
+      // Caller already provided discFolders (e.g. fetchGamesWithStatus batch)
+      effectivePath = noFetchParams.discFolders[0];
     } else {
-      // When called from fetchGamesWithStatus, look up discFolders
-      const gameRecord = await prisma.game.findUnique({
-        where: { id: params.gameId },
-        select: { discFolders: true },
-      });
+      const gameRecord = noFetchParams
+        ? await prisma.game.findUnique({
+            where: { id: params.gameId },
+            select: { discFolders: true },
+          })
+        : await prisma.game.findUnique({
+            where: { libraryKey: { libraryId, libraryPath } },
+            select: { discFolders: true },
+          });
       if (gameRecord?.discFolders && gameRecord.discFolders.length > 0) {
         effectivePath = gameRecord.discFolders[0];
       }
@@ -416,6 +416,7 @@ class LibraryManager {
               .map((v) => v.versionPath)
               .filter((v) => v !== null),
             depotVersions: gameUnimported,
+            discFolders: e.discFolders,
           },
         );
         return {
