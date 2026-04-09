@@ -46,8 +46,7 @@ export default defineEventHandler(async (h3) => {
           );
           continue;
         }
-        const chosenPreload = preload.at(0);
-        if (!chosenPreload) {
+        if (preload.length === 0) {
           logger.warn(
             `failed to find preload information for: ${version.version.name} (${version.version.type}), there were no auto-discovered executables`,
           );
@@ -58,20 +57,59 @@ export default defineEventHandler(async (h3) => {
           platform: Platform;
           launch: string;
           name: string;
+          emulatorId?: string;
         }> = [];
         const setups: Array<{ platform: Platform; launch: string }> = [];
 
         if (version.setupMode) {
+          const chosenPreload = preload[0];
           setups.push({
             platform: chosenPreload.platform,
             launch: chosenPreload.filename,
           });
         } else {
-          launches.push({
-            platform: chosenPreload.platform,
-            launch: chosenPreload.filename,
-            name: "Play",
-          });
+          // For emulator/ROM games: create a launch for each unique platform
+          // from the preload suggestions (e.g. Windows + Linux emulators).
+          // For native games: pick the best match per platform.
+          const seenPlatforms = new Set<Platform>();
+          for (const guess of preload) {
+            if (seenPlatforms.has(guess.platform)) continue;
+            seenPlatforms.add(guess.platform);
+
+            if (guess.type === "emulator") {
+              launches.push({
+                platform: guess.platform,
+                launch: guess.filename,
+                name: guess.launchName,
+                emulatorId: guess.emulatorId,
+              });
+            } else {
+              launches.push({
+                platform: guess.platform,
+                launch: guess.filename,
+                name: "Play",
+              });
+            }
+          }
+
+          // Fallback: if nothing matched, use the first preload
+          if (launches.length === 0) {
+            const fallback = preload[0];
+            if (fallback.type === "emulator") {
+              launches.push({
+                platform: fallback.platform,
+                launch: fallback.filename,
+                name: fallback.launchName,
+                emulatorId: fallback.emulatorId,
+              });
+            } else {
+              launches.push({
+                platform: fallback.platform,
+                launch: fallback.filename,
+                name: "Play",
+              });
+            }
+          }
         }
 
         logger.info(`importing ${version.version.name}`);

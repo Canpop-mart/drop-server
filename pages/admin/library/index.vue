@@ -9,7 +9,44 @@
           {{ $t("library.admin.subheader") }}
         </p>
       </div>
-      <div class="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
+      <div class="mt-4 sm:ml-16 sm:mt-0 sm:flex-none flex items-center gap-x-2">
+        <Menu v-if="libraries.length > 0" as="div" class="relative">
+          <MenuButton
+            class="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-red-500 hover:scale-105 active:scale-95"
+          >
+            Purge Versions
+          </MenuButton>
+          <transition
+            enter-active-class="transition ease-out duration-100"
+            enter-from-class="transform opacity-0 scale-95"
+            enter-to-class="transform opacity-100 scale-100"
+            leave-active-class="transition ease-in duration-75"
+            leave-from-class="transform opacity-100 scale-100"
+            leave-to-class="transform opacity-0 scale-95"
+          >
+            <MenuItems
+              class="absolute right-0 z-10 mt-2 w-56 origin-top-right rounded-md bg-zinc-950 shadow-2xl ring-1 ring-white/5 focus:outline-hidden"
+            >
+              <div class="py-1">
+                <MenuItem
+                  v-for="lib in libraries"
+                  :key="lib.id"
+                  v-slot="{ active }"
+                >
+                  <button
+                    :class="[
+                      active ? 'bg-zinc-900 text-white' : 'text-zinc-400',
+                      'w-full text-left block px-4 py-2 text-sm',
+                    ]"
+                    @click="purgeLibraryVersions(lib)"
+                  >
+                    {{ lib.name }}
+                  </button>
+                </MenuItem>
+              </div>
+            </MenuItems>
+          </transition>
+        </Menu>
         <NuxtLink
           to="/admin/library/sources"
           class="block rounded-md bg-blue-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-blue-500 hover:scale-105 hover:shadow-lg hover:shadow-blue-500/25 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
@@ -601,6 +638,23 @@ function previousPage() {
 }
 
 const toImport = ref(Object.values(unimportedGames).flat().length > 0);
+
+async function purgeLibraryVersions(lib: { id: string; name: string }) {
+  const confirmed = window.confirm(
+    `Delete ALL versions for every game in "${lib.name}"? This cannot be undone.`,
+  );
+  if (!confirmed) return;
+
+  const result = await $dropFetch("/api/v1/admin/library/purge-versions", {
+    method: "DELETE",
+    query: { libraryId: lib.id },
+    failTitle: "Failed to purge versions",
+  });
+  window.alert(
+    `Deleted ${result.deleted} version(s) across ${result.games} game(s) in "${result.library}".`,
+  );
+  await fetchPage();
+}
 
 const libraryGames = computed(() =>
   games.value.map((e) => {

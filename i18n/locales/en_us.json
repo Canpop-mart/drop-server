@@ -692,6 +692,8 @@
         },
         "noSetups": "No setups configured.",
         "noVersions": "You have no versions of this game available.",
+        "purgeAll": "Delete All Versions",
+        "purgeConfirm": "Are you sure you want to delete all {count} version(s)? This cannot be undone.",
         "setupOnly": "Version configured as in setup-only mode.",
         "table": {
           "delta": "Update mode",

@@ -10,7 +10,15 @@
           {{ $t("library.admin.version.description") }}
         </p>
       </div>
-      <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
+      <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none flex items-center gap-x-2">
+        <button
+          v-if="game.versions.length > 0"
+          type="button"
+          class="inline-flex w-fit items-center gap-x-2 rounded-md bg-red-600 hover:bg-red-500 px-3 py-1 text-sm font-semibold font-display text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 transition-all duration-200 hover:scale-105 active:scale-95"
+          @click="purgeAllVersions"
+        >
+          {{ $t("library.admin.version.purgeAll") }}
+        </button>
         <NuxtLink
           :href="canImport ? `/admin/library/${game.id}/import` : ''"
           type="button"
@@ -771,6 +779,37 @@ async function updateVersionOrder() {
       {
         title: t("errors.version.order.title"),
         description: t("errors.version.order.desc", {
+          error: (e as H3Error)?.statusMessage ?? t("errors.unknown"),
+        }),
+        buttonText: t("common.close"),
+      },
+      (e, c) => c(),
+    );
+  }
+}
+
+async function purgeAllVersions() {
+  const confirmed = window.confirm(
+    t("library.admin.version.purgeConfirm", {
+      count: game.value.versions.length,
+    }),
+  );
+  if (!confirmed) return;
+
+  try {
+    await $dropFetch("/api/v1/admin/game/:id/versions/purge", {
+      method: "DELETE",
+      params: { id: game.value.id },
+    });
+    game.value.versions = [];
+    hasDeleted.value = true;
+    editingVersionId.value = null;
+  } catch (e) {
+    createModal(
+      ModalType.Notification,
+      {
+        title: t("errors.version.delete.title"),
+        description: t("errors.version.delete.desc", {
           error: (e as H3Error)?.statusMessage ?? t("errors.unknown"),
         }),
         buttonText: t("common.close"),
