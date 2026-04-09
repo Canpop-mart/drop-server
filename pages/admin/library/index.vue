@@ -564,9 +564,13 @@ useHead({
   title: t("library.admin.title"),
 });
 
-const { unimportedGames, hasLibraries } = await $dropFetch(
+const { unimportedGames, hasLibraries, libraries } = (await $dropFetch(
   "/api/v1/admin/library/libraries",
-);
+)) as {
+  unimportedGames: Record<string, unknown[]>;
+  hasLibraries: boolean;
+  libraries: { id: string; name: string }[];
+};
 
 const route = useRoute();
 const router = useRouter();
@@ -664,20 +668,26 @@ function createFilterKey(
   return `${filter.value}.${subfilter.value}`;
 }
 
-const filters = computed(
-  () =>
-    ({
-      version: [
-        {
-          value: "none",
-          label: t("library.admin.nav.filters.version.none"),
-        },
-        /*{
-          value: "available",
-          label: t("library.admin.nav.filters.version.available"),
-        },*/
+const filterScaffold = computed(() => {
+  const scaffold: Record<
+    string,
+    {
+      title: string;
+      value: string;
+      values: Array<{ value: string; label: string }>;
+    }
+  > = {
+    version: {
+      title: t("library.admin.nav.filters.version.title"),
+      value: "version",
+      values: [
+        { value: "none", label: t("library.admin.nav.filters.version.none") },
       ],
-      metadata: [
+    },
+    metadata: {
+      title: t("library.admin.nav.filters.metadata.title"),
+      value: "metadata",
+      values: [
         {
           value: "featured",
           label: t("library.admin.nav.filters.metadata.featured"),
@@ -691,32 +701,19 @@ const filters = computed(
           label: t("library.admin.nav.filters.metadata.emptyDescription"),
         },
       ],
-    }) as const,
-);
-
-const filterScaffold = computed(
-  () =>
-    ({
-      version: {
-        title: t("library.admin.nav.filters.version.title"),
-        value: "version",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        values: filters.value.version as any,
-      },
-      metadata: {
-        title: t("library.admin.nav.filters.metadata.title"),
-        value: "metadata",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        values: filters.value.metadata as any,
-      },
-    }) satisfies {
-      [key in keyof typeof filters.value]: {
-        title: string;
-        value: string;
-        values: Array<{ value: string; label: string }>;
-      };
     },
-);
+  };
+
+  if (libraries.length > 1) {
+    scaffold.library = {
+      title: "Library",
+      value: "library",
+      values: libraries.map((l) => ({ value: l.id, label: l.name })),
+    };
+  }
+
+  return scaffold;
+});
 
 const sorts: Array<StoreSortOption> = [
   {

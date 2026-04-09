@@ -8,5 +8,9 @@ export default defineEventHandler(async (h3) => {
   const { unimportedGames } = await libraryManager.fetchUnimportedGames();
   const libraries = await libraryManager.fetchLibraries();
 
-  return { unimportedGames, hasLibraries: libraries.length > 0 };
+  return {
+    unimportedGames,
+    hasLibraries: libraries.length > 0,
+    libraries: libraries.map((l) => ({ id: l.id, name: l.name })),
+  };
 });

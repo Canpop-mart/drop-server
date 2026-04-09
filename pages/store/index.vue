@@ -115,22 +115,110 @@
         </div>
       </section>
 
-      <!-- Recently Added: 3-row × 7-col grid -->
+      <!-- Recently Added -->
       <section v-show="activeTab === 'recentlyAdded'">
-        <div v-if="recentlyAddedLoading" class="grid grid-cols-7 gap-3.5">
-          <div
-            v-for="i in 21"
-            :key="i"
-            class="aspect-[2/3] rounded-xl bg-zinc-800/50 animate-pulse"
-          />
+        <!-- Skeleton -->
+        <div v-if="recentlyAddedLoading" class="space-y-4">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div
+              class="aspect-video rounded-2xl bg-zinc-800/50 animate-pulse"
+            />
+            <div class="grid grid-cols-2 gap-4">
+              <div
+                v-for="i in 2"
+                :key="i"
+                class="aspect-[2/3] rounded-xl bg-zinc-800/50 animate-pulse"
+              />
+            </div>
+          </div>
+          <div class="grid grid-cols-6 gap-3.5">
+            <div
+              v-for="i in 12"
+              :key="i"
+              class="aspect-[2/3] rounded-xl bg-zinc-800/50 animate-pulse"
+            />
+          </div>
         </div>
-        <div v-else class="grid grid-cols-7 gap-3.5">
-          <GamePanel
-            v-for="game in recentlyAdded.slice(0, 21)"
-            :key="game.id"
-            :game="game"
-            :href="`/store/${game.id}`"
-          />
+
+        <div v-else-if="recentlyAdded.length > 0" class="space-y-6">
+          <!-- Hero row: newest game large + 2 medium cards -->
+          <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <!-- Newest game — hero banner card -->
+            <NuxtLink
+              :href="`/store/${recentlyAdded[0].id}`"
+              class="lg:col-span-3 relative rounded-2xl overflow-hidden group aspect-video block ring-1 ring-white/5 hover:ring-blue-500/30 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10"
+            >
+              <img
+                :src="useObject(recentlyAdded[0].mBannerObjectId)"
+                :alt="recentlyAdded[0].mName"
+                class="size-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
+              />
+              <div
+                class="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-950/30 to-transparent"
+              />
+              <div class="absolute top-3 left-3">
+                <span
+                  class="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-300 ring-1 ring-blue-500/30 backdrop-blur-sm"
+                >
+                  Just Added
+                </span>
+              </div>
+              <div class="absolute bottom-0 left-0 right-0 p-5">
+                <h3 class="text-2xl font-bold text-white leading-tight">
+                  {{ recentlyAdded[0].mName }}
+                </h3>
+                <p class="text-zinc-300 text-sm mt-1 line-clamp-2 max-w-md">
+                  {{ recentlyAdded[0].mShortDescription }}
+                </p>
+              </div>
+            </NuxtLink>
+
+            <!-- Next 2 games — tall cover cards -->
+            <div class="lg:col-span-2 grid grid-cols-2 gap-4">
+              <NuxtLink
+                v-for="game in recentlyAdded.slice(1, 3)"
+                :key="game.id"
+                :href="`/store/${game.id}`"
+                class="relative rounded-xl overflow-hidden group aspect-[2/3] block ring-1 ring-white/5 hover:ring-blue-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-0.5"
+              >
+                <img
+                  :src="useObject(game.mCoverObjectId)"
+                  :alt="game.mName"
+                  class="size-full object-cover transition-transform duration-[400ms] group-hover:scale-110"
+                />
+                <div
+                  class="absolute inset-0 bg-gradient-to-t from-zinc-950/80 via-transparent to-transparent"
+                />
+                <div class="absolute top-2 left-2">
+                  <span
+                    class="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-300/80 ring-1 ring-blue-500/20 backdrop-blur-sm"
+                  >
+                    New
+                  </span>
+                </div>
+                <div class="absolute bottom-0 left-0 right-0 p-2.5">
+                  <p
+                    class="text-xs font-semibold text-white leading-tight line-clamp-2"
+                  >
+                    {{ game.mName }}
+                  </p>
+                </div>
+              </NuxtLink>
+            </div>
+          </div>
+
+          <!-- Rest of the recently added games -->
+          <div
+            v-if="recentlyAdded.length > 3"
+            class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3.5"
+          >
+            <GamePanel
+              v-for="game in recentlyAdded.slice(3, 21)"
+              :key="game.id"
+              :game="game"
+              :href="`/store/${game.id}`"
+            />
+          </div>
         </div>
       </section>
 

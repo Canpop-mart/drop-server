@@ -938,9 +938,13 @@
     "view": {
       "allTags": "All",
       "filters": {
+        "library": "Library",
         "platform": "Platform",
         "tags": "Tags"
       },
+      "next": "Next",
+      "pageInfo": "Showing {start} to {end} of {total} games",
+      "previous": "Previous",
       "search": "Search",
       "sort": "Sort",
       "sorts": {

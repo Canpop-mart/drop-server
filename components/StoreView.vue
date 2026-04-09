@@ -1,15 +1,3 @@
-<i18n>
-{
-  "en-us": {
-    "↓": "↓",
-    "↑": "↑",
-    "previous": "Previous",
-    "next": "Next",
-    "pageInfo": "Showing {start} to {end} of {total} games"
-  }
-}
-</i18n>
-
 <template>
   <div>
     <div>
@@ -372,14 +360,14 @@
                     class="relative inline-flex items-center rounded-md px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed"
                     @click="goToPage(currentPage - 1)"
                   >
-                    {{ $t("previous") }}
+                    {{ $t("store.view.previous") }}
                   </button>
                   <button
                     :disabled="currentPage >= totalPages"
                     class="relative ml-3 inline-flex items-center rounded-md px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed"
                     @click="goToPage(currentPage + 1)"
                   >
-                    {{ $t("next") }}
+                    {{ $t("store.view.next") }}
                   </button>
                 </div>
                 <div
@@ -387,7 +375,7 @@
                 >
                   <p class="text-sm text-zinc-400">
                     {{
-                      $t("pageInfo", {
+                      $t("store.view.pageInfo", {
                         start: pageStart,
                         end: pageEnd,
                         total: totalCount,
@@ -490,8 +478,10 @@ const props = defineProps<{
   };
 }>();
 
-const tags =
-  await $dropFetch<Array<SerializeObject<GameTagModel>>>("/api/v1/store/tags");
+const [tags, storeLibraries] = await Promise.all([
+  $dropFetch<Array<SerializeObject<GameTagModel>>>("/api/v1/store/tags"),
+  $dropFetch<Array<{ id: string; name: string }>>("/api/v1/store/libraries"),
+]);
 
 const sorts = computed<Array<StoreSortOption>>(() => {
   const base: Array<StoreSortOption> = [
@@ -509,6 +499,16 @@ const currentSort = ref(sorts.value[0].param);
 const sortOrder = ref<"asc" | "desc">("desc");
 
 const options: Array<StoreFilterOption> = [
+  ...(storeLibraries.length > 1
+    ? [
+        {
+          name: t("store.view.filters.library"),
+          param: "library",
+          multiple: true,
+          options: storeLibraries.map((l) => ({ name: l.name, param: l.id })),
+        },
+      ]
+    : []),
   ...(tags.length > 0
     ? [
         {
@@ -564,7 +564,7 @@ const filterQuery = computed(() => {
   return parts;
 });
 
-const ITEMS_PER_PAGE = 50;
+const ITEMS_PER_PAGE = 55;
 const games = ref<Array<SerializeObject<GameModel>>>();
 const loading = ref(false);
 const totalCount = ref(0);

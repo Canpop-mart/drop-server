@@ -95,6 +95,18 @@ export default defineEventHandler(async (h3) => {
         },
       });
     }
+
+    // Library filters: library.<libraryId>
+    const libraryFilters = [...filterSet]
+      .filter((f) => f.startsWith("library."))
+      .map((f) => f.replace("library.", ""));
+    if (libraryFilters.length > 0) {
+      rawFilters.push({
+        where: {
+          libraryId: { in: libraryFilters },
+        },
+      });
+    }
   }
 
   if (query.query) {

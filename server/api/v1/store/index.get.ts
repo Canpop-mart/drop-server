@@ -17,6 +17,7 @@ const StoreRead = type({
 
   tags: "string?",
   platform: "string?",
+  library: "string?",
 
   company: "string?",
   companyActions: "string = 'published,developed'",
@@ -83,6 +84,12 @@ export default defineEventHandler(async (h3) => {
             },
           },
         ],
+      } satisfies Prisma.GameWhereInput)
+    : undefined;
+
+  const libraryFilter = options.library
+    ? ({
+        libraryId: { in: options.library.split(",") },
       } satisfies Prisma.GameWhereInput)
     : undefined;
 
@@ -196,6 +203,7 @@ export default defineEventHandler(async (h3) => {
       ...tagFilter,
       ...platformFilter,
       ...companyFilter,
+      ...libraryFilter,
       type: GameType.Game,
     };
 
@@ -215,7 +223,7 @@ export default defineEventHandler(async (h3) => {
     const [games, count] = await prisma.$transaction([
       prisma.game.findMany({
         skip: options.skip,
-        take: Math.min(options.take, 50),
+        take: Math.min(options.take, 55),
         where: searchFilter,
         orderBy:
           effectiveSort === "name"
@@ -236,6 +244,7 @@ export default defineEventHandler(async (h3) => {
     ...tagFilter,
     ...platformFilter,
     ...companyFilter,
+    ...libraryFilter,
     type: GameType.Game,
   };
 
@@ -257,7 +266,7 @@ export default defineEventHandler(async (h3) => {
   const [games, count] = await prisma.$transaction([
     prisma.game.findMany({
       skip: options.skip,
-      take: Math.min(options.take, 50),
+      take: Math.min(options.take, 55),
       where: finalFilter,
       orderBy: sort,
     }),
