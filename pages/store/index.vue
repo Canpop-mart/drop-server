@@ -144,7 +144,7 @@
           <!-- Hero row: newest game large + 2 medium cards, matched height -->
           <div
             class="grid grid-cols-1 lg:grid-cols-5 gap-4"
-            style="--hero-h: 420px"
+            style="--hero-h: 520px"
           >
             <!-- Newest game — hero banner card -->
             <NuxtLink

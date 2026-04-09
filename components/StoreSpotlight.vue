@@ -40,11 +40,11 @@
     </div>
   </div>
 
-  <!-- Remaining games (4th onward): horizontal row -->
+  <!-- Remaining games (4th onward): horizontal row with consistent sizing -->
   <div
     v-if="items.length > 3"
     class="grid gap-3.5"
-    :style="`grid-template-columns: repeat(${Math.min(items.length - 3, 7)}, minmax(0, 1fr))`"
+    :style="`grid-template-columns: repeat(${Math.max(Math.min(items.length - 3, 7), 5)}, minmax(0, 1fr))`"
   >
     <GamePanel
       v-for="game in items.slice(3)"
