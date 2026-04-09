@@ -11,6 +11,7 @@ import type {
 import type { TaskRunContext } from "../tasks";
 import * as jdenticon from "jdenticon";
 import { load } from "cheerio";
+import { getSteamGridDBApiKey, sgdbGetBestLogoUrl } from "./steamgriddb";
 
 /**
  * Note: The Steam API is largely undocumented.
@@ -420,6 +421,29 @@ export class SteamProvider implements MetadataProvider {
     context?.logger.info(
       `Review processing complete: ${reviews.length} rating sources found`,
     );
+
+    // Fetch logo from SteamGridDB if available
+    let logoId = "";
+    const apiKey = getSteamGridDBApiKey();
+    if (apiKey) {
+      context?.logger.info("Attempting to fetch logo from SteamGridDB...");
+      const logoUrl = await sgdbGetBestLogoUrl(apiKey, id, currentGame.name);
+      if (logoUrl) {
+        try {
+          logoId = createObject(logoUrl);
+          context?.logger.info(`Successfully fetched logo from SteamGridDB`);
+        } catch (e) {
+          context?.logger.warn(`Failed to fetch logo from SteamGridDB: ${e}`);
+        }
+      } else {
+        context?.logger.info(`No logo found on SteamGridDB`);
+      }
+    } else {
+      context?.logger.info(
+        `STEAMGRIDDB_API_KEY not configured, skipping logo fetch`,
+      );
+    }
+
     context?.progress(100);
 
     context?.logger.info("Steam metadata fetch completed successfully!");
@@ -437,6 +461,7 @@ export class SteamProvider implements MetadataProvider {
       icon,
       bannerId: banner,
       coverId: cover,
+      logoId,
       images,
       screenshots,
     } as GameMetadata;

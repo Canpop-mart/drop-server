@@ -29,8 +29,16 @@
           </NuxtLink>
         </div>
 
-        <!-- Game title -->
+        <!-- Game title / logo -->
+        <template v-if="game.mLogoObjectId">
+          <img
+            :src="useObject(game.mLogoObjectId)"
+            class="max-h-32 sm:max-h-40 w-auto object-contain drop-shadow-lg"
+            :alt="game.mName"
+          />
+        </template>
         <h1
+          v-else
           class="text-3xl sm:text-5xl text-zinc-100 font-bold font-display drop-shadow-lg"
         >
           {{ game.mName }}

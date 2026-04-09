@@ -278,6 +278,7 @@ export class MetadataHandler {
             mIconObjectId: metadata.icon,
             mBannerObjectId: metadata.bannerId,
             mCoverObjectId: metadata.coverId,
+            mLogoObjectId: metadata.logoId,
             mImageLibraryObjectIds: metadata.images,
             // Auto-populate carousel with gameplay screenshots only (no
             // banners, covers, or promotional artwork)

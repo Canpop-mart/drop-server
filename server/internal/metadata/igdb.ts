@@ -513,6 +513,7 @@ export class IGDBProvider implements MetadataProvider {
       icon,
       bannerId: banner,
       coverId: coverID,
+      logoId: "",
       images,
       screenshots,
     };

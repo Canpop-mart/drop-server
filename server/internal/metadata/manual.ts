@@ -39,6 +39,7 @@ export class ManualMetadataProvider implements MetadataProvider {
       icon: iconId,
       coverId: iconId,
       bannerId: iconId,
+      logoId: "",
       images: [iconId],
       screenshots: [],
     };
