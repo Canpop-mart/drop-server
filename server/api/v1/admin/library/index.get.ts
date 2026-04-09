@@ -96,6 +96,22 @@ export default defineEventHandler(async (h3) => {
       });
     }
 
+    // Achievement filters
+    if (filterSet.has("achievements.has")) {
+      rawFilters.push({
+        where: {
+          achievements: { some: {} },
+        },
+      });
+    }
+    if (filterSet.has("achievements.none")) {
+      rawFilters.push({
+        where: {
+          achievements: { none: {} },
+        },
+      });
+    }
+
     // Library filters: library.<libraryId>
     const libraryFilters = [...filterSet]
       .filter((f) => f.startsWith("library."))

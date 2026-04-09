@@ -22,7 +22,13 @@ import type { ImportVersion } from "~/server/api/v1/admin/import/version/index.p
 import { GameType, type Platform } from "~/prisma/client/enums";
 import { castManifest } from "./manifest/utils";
 import { Shescape } from "shescape";
-import type { Prisma } from "~/prisma/client/client";
+import type {
+  Prisma,
+  Game,
+  Library,
+  GameVersion,
+  UnimportedGameVersion,
+} from "~/prisma/client/client";
 
 /** Regex to detect multi-disc folder names like "Game (Disc 1)" or "Game (Disc 2) (Rev 1)" */
 const DISC_REGEX = /^(.+?)\s*\(Disc\s+(\d+)\)(.*)$/i;
@@ -336,34 +342,87 @@ class LibraryManager {
 
   async fetchGamesWithStatus(
     where: Partial<Omit<Prisma.GameFindManyArgs, "include">>,
-  ) {
+  ): Promise<
+    Array<{
+      game: Game & {
+        library: Library;
+        versions: GameVersion[];
+        unimportedGameVersions: UnimportedGameVersion[];
+      };
+      status:
+        | {
+            noVersions: boolean;
+            unimportedVersions: UnimportedVersionInformation[];
+          }
+        | "offline";
+    }>
+  > {
+    // Fetch games without relations to avoid Prisma lateral join performance issue
     const games = await prisma.game.findMany({
       ...where,
-      include: {
-        library: true,
-        versions: true,
-        unimportedGameVersions: true,
-      },
     });
 
+    if (games.length === 0) return [];
+
+    const gameIds = games.map((g) => g.id);
+    const libraryIds = [
+      ...new Set(games.map((g) => g.libraryId).filter(Boolean)),
+    ] as string[];
+
+    // Fetch relations separately using IN clauses
+    const [libraries, versions, unimportedGameVersions] = await Promise.all([
+      prisma.library.findMany({ where: { id: { in: libraryIds } } }),
+      prisma.gameVersion.findMany({ where: { gameId: { in: gameIds } } }),
+      prisma.unimportedGameVersion.findMany({
+        where: { gameId: { in: gameIds } },
+      }),
+    ]);
+
+    // Index by ID/gameId for fast lookup
+    const libraryMap = new Map(libraries.map((l) => [l.id, l]));
+    const versionMap = new Map<string, typeof versions>();
+    for (const v of versions) {
+      const arr = versionMap.get(v.gameId) ?? [];
+      arr.push(v);
+      versionMap.set(v.gameId, arr);
+    }
+    const unimportedMap = new Map<string, typeof unimportedGameVersions>();
+    for (const u of unimportedGameVersions) {
+      const arr = unimportedMap.get(u.gameId) ?? [];
+      arr.push(u);
+      unimportedMap.set(u.gameId, arr);
+    }
+
+    // Stitch together and compute status
     return await Promise.all(
       games.map(async (e) => {
+        const gameVersions = versionMap.get(e.id) ?? [];
+        const gameUnimported = unimportedMap.get(e.id) ?? [];
+        const library = libraryMap.get(e.libraryId)!;
+
+        const gameWithRelations = {
+          ...e,
+          library,
+          versions: gameVersions,
+          unimportedGameVersions: gameUnimported,
+        };
+
         const unimportedVersions = await this.fetchUnimportedGameVersions(
           e.libraryId ?? "",
           e.libraryPath,
           {
             gameId: e.id,
-            versions: e.versions
+            versions: gameVersions
               .map((v) => v.versionPath)
               .filter((v) => v !== null),
-            depotVersions: e.unimportedGameVersions,
+            depotVersions: gameUnimported,
           },
         );
         return {
-          game: e,
+          game: gameWithRelations,
           status: unimportedVersions
             ? {
-                noVersions: e.versions.length == 0,
+                noVersions: gameVersions.length == 0,
                 unimportedVersions: unimportedVersions,
               }
             : ("offline" as const),

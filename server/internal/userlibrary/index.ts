@@ -2,6 +2,7 @@
 Handles managing collections
 */
 
+import type { CollectionEntry, Game } from "~/prisma/client/client";
 import cacheHandler from "../cache";
 import prisma from "../db/database";
 
@@ -49,36 +50,91 @@ class UserLibraryManager {
     const userLibraryId = await this.fetchUserLibrary(userId);
     const userLibrary = await prisma.collection.findUnique({
       where: { id: userLibraryId },
-      include: { entries: { include: { game: true } } },
     });
     if (!userLibrary) throw new Error("Failed to load user library");
-    return userLibrary;
+
+    return await this.attachEntries(userLibrary);
   }
 
   // Will not return the default library
   async fetchCollection(collectionId: string) {
-    return await prisma.collection.findUnique({
+    const collection = await prisma.collection.findUnique({
       where: { id: collectionId, isDefault: false },
-      include: { entries: { include: { game: true } } },
     });
+    if (!collection) return null;
+
+    return await this.attachEntries(collection);
   }
 
   async fetchCollections(userId: string) {
     await this.fetchUserLibrary(userId); // Ensures user library exists, doesn't have much performance impact due to caching
-    return await prisma.collection.findMany({
+    const collections = await prisma.collection.findMany({
       where: { userId, isDefault: false },
-      include: {
-        entries: {
-          include: {
-            game: true,
-          },
-        },
-      },
     });
+
+    if (collections.length === 0) return [];
+
+    const collectionIds = collections.map((c) => c.id);
+
+    // Batch-fetch all entries for all collections
+    const entries = await prisma.collectionEntry.findMany({
+      where: { collectionId: { in: collectionIds } },
+    });
+
+    // Batch-fetch all referenced games
+    const gameIds = [...new Set(entries.map((e) => e.gameId))];
+    const games =
+      gameIds.length > 0
+        ? await prisma.game.findMany({ where: { id: { in: gameIds } } })
+        : [];
+    const gameMap = new Map(games.map((g) => [g.id, g]));
+
+    // Stitch together
+    const entriesByCollection = new Map<
+      string,
+      Array<(typeof entries)[number] & { game: (typeof games)[number] }>
+    >();
+    for (const entry of entries) {
+      const game = gameMap.get(entry.gameId);
+      if (!game) continue;
+      const arr = entriesByCollection.get(entry.collectionId) ?? [];
+      arr.push({ ...entry, game });
+      entriesByCollection.set(entry.collectionId, arr);
+    }
+
+    return collections.map((c) => ({
+      ...c,
+      entries: entriesByCollection.get(c.id) ?? [],
+    }));
+  }
+
+  /**
+   * Attaches entries with games to a single collection, avoiding lateral joins.
+   */
+  private async attachEntries<T extends { id: string }>(
+    collection: T,
+  ): Promise<T & { entries: (CollectionEntry & { game: Game })[] }> {
+    const entries = await prisma.collectionEntry.findMany({
+      where: { collectionId: collection.id },
+    });
+
+    const gameIds = entries.map((e) => e.gameId);
+    const games =
+      gameIds.length > 0
+        ? await prisma.game.findMany({ where: { id: { in: gameIds } } })
+        : [];
+    const gameMap = new Map(games.map((g) => [g.id, g]));
+
+    return {
+      ...collection,
+      entries: entries
+        .filter((e) => gameMap.has(e.gameId))
+        .map((e) => ({ ...e, game: gameMap.get(e.gameId)! })),
+    };
   }
 
   async collectionAdd(gameId: string, collectionId: string, userId: string) {
-    return await prisma.collectionEntry.upsert({
+    const entry = await prisma.collectionEntry.upsert({
       where: {
         collectionId_gameId: {
           collectionId,
@@ -93,10 +149,9 @@ class UserLibraryManager {
         gameId,
       },
       update: {},
-      include: {
-        game: true,
-      },
     });
+    const game = await prisma.game.findUnique({ where: { id: gameId } });
+    return { ...entry, game: game! };
   }
 
   async collectionRemove(gameId: string, collectionId: string, userId: string) {
@@ -114,19 +169,17 @@ class UserLibraryManager {
   }
 
   async collectionCreate(name: string, userId: string) {
-    return await prisma.collection.create({
+    const collection = await prisma.collection.create({
       data: {
         name,
         userId: userId,
       },
-      include: {
-        entries: {
-          include: {
-            game: true,
-          },
-        },
-      },
     });
+    // New collection always has empty entries
+    return {
+      ...collection,
+      entries: [] as (CollectionEntry & { game: Game })[],
+    };
   }
 
   async deleteCollection(collectionId: string) {

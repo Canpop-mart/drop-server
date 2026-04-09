@@ -704,6 +704,15 @@ const filterScaffold = computed(() => {
     },
   };
 
+  scaffold.achievements = {
+    title: "Achievements",
+    value: "achievements",
+    values: [
+      { value: "has", label: "Has Achievements" },
+      { value: "none", label: "No Achievements" },
+    ],
+  };
+
   if (libraries.length > 1) {
     scaffold.library = {
       title: "Library",
