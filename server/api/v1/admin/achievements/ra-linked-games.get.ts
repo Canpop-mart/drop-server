@@ -1,9 +1,8 @@
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
-import { ExternalAccountProvider } from "~/prisma/client/enums";
 
 /**
- * Returns list of game IDs that have a RetroAchievements external link.
+ * Returns list of game IDs that have ANY external link (Goldberg, RetroAchievements, etc.).
  * Used for filtering "unlinked games" on the admin achievements page.
  */
 export default defineEventHandler(async (h3) => {
@@ -11,8 +10,8 @@ export default defineEventHandler(async (h3) => {
   if (!allowed) throw createError({ statusCode: 403 });
 
   const links = await prisma.gameExternalLink.findMany({
-    where: { provider: ExternalAccountProvider.RetroAchievements },
     select: { gameId: true },
+    distinct: ["gameId"],
   });
 
   return links.map((l) => l.gameId);

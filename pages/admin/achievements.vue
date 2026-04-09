@@ -9,46 +9,6 @@
       </p>
     </div>
 
-    <!-- Bulk Auto-Link Button -->
-    <div class="flex gap-3">
-      <button
-        class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors flex items-center gap-2"
-        :disabled="bulkScanning"
-        @click="bulkAutoLink"
-      >
-        <SparklesIcon v-if="!bulkScanning" class="size-4" />
-        <svg
-          v-else
-          class="size-4 animate-spin"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          <circle
-            class="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            stroke-width="4"
-          />
-          <path
-            class="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-          />
-        </svg>
-        {{ bulkScanning ? "Auto-Linking..." : "Auto-Link All Unlinked Games" }}
-      </button>
-      <div
-        v-if="bulkScanResult"
-        class="flex items-center gap-2 px-3 py-2 bg-green-900/30 rounded-md"
-      >
-        <CheckIcon class="size-4 text-green-400" />
-        <span class="text-sm text-green-300">{{ bulkScanResult }}</span>
-      </div>
-    </div>
-
     <!-- Game selector with search and filter -->
     <div class="space-y-3 max-w-md">
       <div class="flex items-center justify-between">
@@ -347,7 +307,7 @@
 </template>
 
 <script setup lang="ts">
-import { TrophyIcon, SparklesIcon, CheckIcon } from "@heroicons/vue/24/solid";
+import { TrophyIcon } from "@heroicons/vue/24/solid";
 
 definePageMeta({ layout: "admin" });
 
@@ -391,8 +351,8 @@ const games = (await $dropFetch("/api/v1/admin/game").catch(
   () => [],
 )) as GameData[];
 
-// Load games that have RA links
-const raLinkedGameIds = (await $dropFetch(
+// Load games that have any external link (Goldberg, RA, etc.)
+const linkedGameIds = (await $dropFetch(
   "/api/v1/admin/achievements/ra-linked-games",
 ).catch(() => [])) as string[];
 
@@ -413,9 +373,6 @@ const raSearchResults = ref<RASearchResult[]>([]);
 const raSearching = ref(false);
 const linkingRA = ref(false);
 
-const bulkScanning = ref(false);
-const bulkScanResult = ref("");
-
 // Computed
 const filteredGames = computed(() => {
   let filtered = games;
@@ -428,10 +385,10 @@ const filteredGames = computed(() => {
 
   // Filter by unlinked status
   if (showOnlyUnlinked.value) {
-    filtered = filtered.filter((g) => !raLinkedGameIds.includes(g.id));
+    filtered = filtered.filter((g) => !linkedGameIds.includes(g.id));
   }
 
-  return filtered.slice(0, 20); // Max 20 visible
+  return filtered;
 });
 
 const selectedGame = computed(() =>
@@ -568,7 +525,7 @@ async function linkAndScanRA(raGameId: number) {
     const updated = await $dropFetch(
       "/api/v1/admin/achievements/ra-linked-games",
     ).catch(() => []);
-    raLinkedGameIds.splice(0, raLinkedGameIds.length, ...updated);
+    linkedGameIds.splice(0, linkedGameIds.length, ...updated);
     await refreshData(selectedGameId.value);
     raSearchResults.value = [];
   } catch (err: unknown) {
@@ -579,41 +536,6 @@ async function linkAndScanRA(raGameId: number) {
     alert(`Failed to link: ${msg}`);
   } finally {
     linkingRA.value = false;
-  }
-}
-
-async function bulkAutoLink() {
-  bulkScanning.value = true;
-  bulkScanResult.value = "";
-  try {
-    const result = (await $dropFetch(
-      "/api/v1/admin/achievements/scan-retroachievements",
-      { method: "POST" },
-    )) as { matched: number; totalAchievements: number };
-
-    // Refresh the RA linked games list
-    const updated = await $dropFetch(
-      "/api/v1/admin/achievements/ra-linked-games",
-    ).catch(() => []);
-    raLinkedGameIds.splice(0, raLinkedGameIds.length, ...updated);
-
-    // Refresh current game data if one is selected
-    if (selectedGameId.value) {
-      await refreshData(selectedGameId.value);
-    }
-
-    bulkScanResult.value = `Matched ${result.matched} games, found ${result.totalAchievements} achievements`;
-    setTimeout(() => {
-      bulkScanResult.value = "";
-    }, 5000);
-  } catch (err: unknown) {
-    const msg =
-      err && typeof err === "object" && "statusMessage" in err
-        ? String((err as { statusMessage: string }).statusMessage)
-        : String(err);
-    alert(`Bulk auto-link failed: ${msg}`);
-  } finally {
-    bulkScanning.value = false;
   }
 }
 </script>
