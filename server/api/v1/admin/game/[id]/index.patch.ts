@@ -14,6 +14,7 @@ const GameUpdate = type({
   mIconObjectId: "string?",
   mBannerObjectId: "string?",
   mCoverObjectId: "string?",
+  mLogoObjectId: "string?",
   featured: "boolean?",
 }).configure(throwingArktype);
 

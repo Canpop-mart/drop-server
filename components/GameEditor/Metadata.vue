@@ -258,6 +258,14 @@
                   {{ $t("library.admin.game.setCover") }}
                 </button>
                 <button
+                  v-if="image !== game.mLogoObjectId"
+                  type="button"
+                  class="inline-flex items-center gap-x-1.5 rounded-md bg-blue-600 px-1.5 py-0.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-blue-500/25 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                  @click="() => updateLogoImage(image)"
+                >
+                  {{ $t("library.admin.game.setLogo") }}
+                </button>
+                <button
                   type="button"
                   class="inline-flex items-center gap-x-1.5 rounded-md bg-red-600 px-1.5 py-0.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500 transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-red-500/25 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
                   @click="() => deleteImage(image)"
@@ -268,7 +276,8 @@
               <div
                 v-if="
                   image === game.mBannerObjectId ||
-                  image === game.mCoverObjectId
+                  image === game.mCoverObjectId ||
+                  image === game.mLogoObjectId
                 "
                 class="absolute bottom-0 left-0 flex flex-row gap-x-1 p-1"
               >
@@ -282,6 +291,10 @@
                       [
                         $t('library.admin.game.currentCover'),
                         image === game.mCoverObjectId,
+                      ],
+                      [
+                        $t('library.admin.game.currentLogo'),
+                        image === game.mLogoObjectId,
                       ],
                     ] as const
                   ).filter((e) => e[1])"
@@ -886,6 +899,34 @@ async function updateCoverImage(id: string) {
       {
         title: t("errors.game.cover.title"),
         description: t("errors.game.cover.description", [
+          (e as H3Error)?.statusMessage ?? t("errors.unknown"),
+        ]),
+        buttonText: t("common.close"),
+      },
+      (e, c) => c(),
+    );
+  }
+}
+
+async function updateLogoImage(id: string) {
+  try {
+    if (game.value.mLogoObjectId == id) return;
+    const { mLogoObjectId } = await $dropFetch(`/api/v1/admin/game/:id`, {
+      method: "PATCH",
+      params: {
+        id: game.value.id,
+      },
+      body: {
+        mLogoObjectId: id,
+      } satisfies PatchGameBody,
+    });
+    game.value.mLogoObjectId = mLogoObjectId;
+  } catch (e) {
+    createModal(
+      ModalType.Notification,
+      {
+        title: t("errors.game.logo.title"),
+        description: t("errors.game.logo.description", [
           (e as H3Error)?.statusMessage ?? t("errors.unknown"),
         ]),
         buttonText: t("common.close"),

@@ -366,6 +366,10 @@
         "description": "Drop failed to update the game description: {0}",
         "title": "Failed to update game description"
       },
+      "logo": {
+        "description": "Drop failed to update the logo image: {0}",
+        "title": "Failed to update the logo image"
+      },
       "metadata": {
         "description": "Drop failed to update the game's metadata: {0}",
         "title": "Failed to update metadata"
@@ -501,6 +505,7 @@
         "addImageCarousel": "Add from image library",
         "currentBanner": "banner",
         "currentCover": "cover",
+        "currentLogo": "logo",
         "deleteImage": "Delete image",
         "editGameDescription": "Game Description",
         "editGameName": "Game Name",
@@ -512,7 +517,8 @@
         "imageLibraryDescription": "Please note all images uploaded are accessible to all users through browser dev-tools.",
         "removeImageCarousel": "Remove image",
         "setBanner": "Set as banner",
-        "setCover": "Set as cover"
+        "setCover": "Set as cover",
+        "setLogo": "Set as logo"
       },
       "gameLibrary": "Game Library",
       "gameSelector": {
