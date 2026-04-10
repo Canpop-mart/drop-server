@@ -20,6 +20,15 @@ logs
 .fleet
 .idea
 
+# IDE settings (may contain credentials)
+.vscode/
+
+# Binary documents (planning docs, reports)
+*.docx
+*.doc
+*.xlsx
+*.pptx
+
 # Local env files
 .env
 .env.*
