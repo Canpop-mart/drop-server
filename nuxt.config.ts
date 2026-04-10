@@ -264,7 +264,7 @@ export default defineNuxtConfig({
       strictTransportSecurity: false,
     },
     rateLimiter: {
-      tokensPerInterval: 150,
+      tokensPerInterval: 1000,
       interval: 60000, // 1 minute
       headers: true,
     },
