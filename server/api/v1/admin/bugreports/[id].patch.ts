@@ -36,7 +36,10 @@ export default defineEventHandler(async (h3) => {
   ).at(0);
 
   if (!updated) {
-    throw createError({ statusCode: 404, statusMessage: "Bug report not found" });
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Bug report not found",
+    });
   }
 
   return updated;

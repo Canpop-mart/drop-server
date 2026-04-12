@@ -181,7 +181,10 @@
                     </UserHeaderWidget>
                   </li>
                   <li v-if="user" class="w-full">
-                    <UserHeaderWidget class="w-full" @click="bugReportOpen = true">
+                    <UserHeaderWidget
+                      class="w-full"
+                      @click="bugReportOpen = true"
+                    >
                       <BugAntIcon class="h-5" />
                     </UserHeaderWidget>
                   </li>

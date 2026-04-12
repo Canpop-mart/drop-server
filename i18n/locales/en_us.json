@@ -232,41 +232,41 @@
     "username": "Username"
   },
   "bugReport": {
-    "title": "Report a Bug",
-    "subtitle": "Describe what went wrong. System info is collected automatically.",
+    "admin": {
+      "empty": "No bug reports yet.",
+      "filterAll": "All",
+      "hasScreenshot": "Screenshot",
+      "inProgress": "in progress",
+      "logs": "Client Logs",
+      "notes": "Admin Notes",
+      "notesPlaceholder": "Add notes about this bug report...",
+      "open": "open",
+      "reportedBy": "Reported by",
+      "status": "Status",
+      "subtitle": "Review and manage bug reports from users.",
+      "systemInfo": "System Info",
+      "title": "Bug Reports",
+      "update": "Update"
+    },
     "form": {
-      "title": "What happened?",
-      "titlePlaceholder": "e.g. Game crashes when launching Mario Kart",
+      "autoCollectHint": "System info (browser, OS, screen size) is attached automatically.",
       "description": "Steps to reproduce",
       "descriptionPlaceholder": "Describe what you were doing when the bug occurred...",
       "screenshot": "Screenshot (optional)",
       "screenshotHint": "Click to attach a screenshot",
-      "autoCollectHint": "System info (browser, OS, screen size) is attached automatically.",
-      "submit": "Submit Bug Report"
+      "submit": "Submit Bug Report",
+      "title": "What happened?",
+      "titlePlaceholder": "e.g. Game crashes when launching Mario Kart"
     },
-    "success": "Bug report submitted! An admin will review it shortly.",
     "status": {
-      "Open": "Open",
+      "Closed": "Closed",
       "InProgress": "In Progress",
-      "Resolved": "Resolved",
-      "Closed": "Closed"
+      "Open": "Open",
+      "Resolved": "Resolved"
     },
-    "admin": {
-      "title": "Bug Reports",
-      "subtitle": "Review and manage bug reports from users.",
-      "empty": "No bug reports yet.",
-      "open": "open",
-      "inProgress": "in progress",
-      "filterAll": "All",
-      "hasScreenshot": "Screenshot",
-      "reportedBy": "Reported by",
-      "systemInfo": "System Info",
-      "logs": "Client Logs",
-      "status": "Status",
-      "notes": "Admin Notes",
-      "notesPlaceholder": "Add notes about this bug report...",
-      "update": "Update"
-    }
+    "subtitle": "Describe what went wrong. System info is collected automatically.",
+    "success": "Bug report submitted! An admin will review it shortly.",
+    "title": "Report a Bug"
   },
   "cancel": "Cancel",
   "chars": {

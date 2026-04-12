@@ -45,7 +45,10 @@ export default defineEventHandler(async (h3) => {
         await pull();
       }
     } else {
-      throw createError({ statusCode: 400, statusMessage: "Invalid form data" });
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Invalid form data",
+      });
     }
   } else {
     // JSON body (no screenshot)

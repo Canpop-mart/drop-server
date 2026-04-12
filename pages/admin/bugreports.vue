@@ -111,10 +111,7 @@
 
     <!-- Detail modal -->
     <TransitionRoot as="template" :show="!!selectedReport">
-      <Dialog
-        class="relative z-50"
-        @close="selectedReport = null"
-      >
+      <Dialog class="relative z-50" @close="selectedReport = null">
         <TransitionChild
           as="template"
           enter="ease-out duration-200"
@@ -219,13 +216,12 @@
                   </h4>
                   <pre
                     class="bg-zinc-800 rounded-lg p-3 text-xs font-mono text-zinc-400 max-h-48 overflow-auto whitespace-pre-wrap"
-                  >{{ selectedReport.logs }}</pre>
+                    >{{ selectedReport.logs }}</pre
+                  >
                 </div>
 
                 <!-- Admin controls -->
-                <div
-                  class="border-t border-zinc-800 pt-4 mt-4 space-y-3"
-                >
+                <div class="border-t border-zinc-800 pt-4 mt-4 space-y-3">
                   <div>
                     <label class="block text-sm font-medium text-zinc-300 mb-1">
                       {{ $t("bugReport.admin.status") }}
@@ -392,8 +388,9 @@ async function updateReport() {
   if (!selectedReport.value) return;
   updating.value = true;
   try {
-    await $dropFetch(`/api/v1/admin/bugreports/${selectedReport.value.id}`, {
+    await $dropFetch("/api/v1/admin/bugreports/:id", {
       method: "PATCH",
+      params: { id: selectedReport.value.id },
       body: {
         status: editStatus.value,
         adminNotes: editNotes.value,

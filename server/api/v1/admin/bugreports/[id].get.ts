@@ -13,11 +13,16 @@ export default defineEventHandler(async (h3) => {
   });
 
   if (!report) {
-    throw createError({ statusCode: 404, statusMessage: "Bug report not found" });
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Bug report not found",
+    });
   }
 
   // Fetch reporter and assignee
-  const userIds = [report.reporterId, report.assigneeId].filter(Boolean) as string[];
+  const userIds = [report.reporterId, report.assigneeId].filter(
+    Boolean,
+  ) as string[];
   const users = await prisma.user.findMany({
     where: { id: { in: userIds } },
     select: {

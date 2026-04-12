@@ -38,9 +38,7 @@
               <div class="space-y-4">
                 <!-- Title -->
                 <div>
-                  <label
-                    class="block text-sm font-medium text-zinc-300 mb-1"
-                  >
+                  <label class="block text-sm font-medium text-zinc-300 mb-1">
                     {{ $t("bugReport.form.title") }}
                     <span class="text-red-400">*</span>
                   </label>
@@ -55,9 +53,7 @@
 
                 <!-- Description -->
                 <div>
-                  <label
-                    class="block text-sm font-medium text-zinc-300 mb-1"
-                  >
+                  <label class="block text-sm font-medium text-zinc-300 mb-1">
                     {{ $t("bugReport.form.description") }}
                   </label>
                   <textarea
@@ -87,8 +83,14 @@
                       :src="screenshotPreview"
                       class="mx-auto max-h-32 rounded-md"
                     />
-                    <span class="mt-1 block text-xs text-zinc-500 group-hover:text-zinc-400">
-                      {{ screenshotFile ? screenshotFile.name : $t("bugReport.form.screenshotHint") }}
+                    <span
+                      class="mt-1 block text-xs text-zinc-500 group-hover:text-zinc-400"
+                    >
+                      {{
+                        screenshotFile
+                          ? screenshotFile.name
+                          : $t("bugReport.form.screenshotHint")
+                      }}
                     </span>
                   </label>
                   <input
@@ -101,8 +103,12 @@
                 </div>
 
                 <!-- Auto-collected info hint -->
-                <div class="rounded-md bg-zinc-800/50 px-3 py-2 text-xs text-zinc-500">
-                  <InformationCircleIcon class="inline h-3.5 w-3.5 mr-1 -mt-0.5" />
+                <div
+                  class="rounded-md bg-zinc-800/50 px-3 py-2 text-xs text-zinc-500"
+                >
+                  <InformationCircleIcon
+                    class="inline h-3.5 w-3.5 mr-1 -mt-0.5"
+                  />
                   {{ $t("bugReport.form.autoCollectHint") }}
                 </div>
               </div>
@@ -114,7 +120,9 @@
 
               <!-- Success -->
               <div v-if="submitted" class="mt-3 rounded-md bg-green-600/10 p-3">
-                <p class="text-sm text-green-400">{{ $t("bugReport.success") }}</p>
+                <p class="text-sm text-green-400">
+                  {{ $t("bugReport.success") }}
+                </p>
               </div>
 
               <div class="flex justify-end gap-2 mt-6">
@@ -244,18 +252,11 @@ async function submitReport() {
       screenshotPreview.value = null;
       submitted.value = false;
     }, 1500);
-  } catch (error: any) {
-    submitError.value = error.statusMessage ?? t("errors.unknown");
+  } catch (error: unknown) {
+    const err = error as { statusMessage?: string };
+    submitError.value = err.statusMessage ?? t("errors.unknown");
   } finally {
     submitting.value = false;
   }
 }
-
-// Reset when modal opens
-watch(open, (val) => {
-  if (val) {
-    submitError.value = undefined;
-    submitted.value = false;
-  }
-});
 </script>
