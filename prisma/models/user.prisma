@@ -36,6 +36,9 @@ model User {
     leaderboardEntries LeaderboardEntry[]
     requestVotes     RequestVote[]
     externalAccounts UserExternalAccount[]
+
+    bugReports         BugReport[] @relation(name: "bugReportsCreated")
+    assignedBugReports BugReport[] @relation(name: "bugReportsAssigned")
 }
 
 model FavoriteGame {

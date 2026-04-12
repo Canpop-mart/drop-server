@@ -166,6 +166,7 @@ import {
   RectangleStackIcon,
   DocumentIcon,
   TrophyIcon,
+  BugAntIcon,
 } from "@heroicons/vue/24/outline";
 import type { NavigationItem } from "~/composables/types";
 import { useCurrentNavigationIndex } from "~/composables/current-page-engine";
@@ -211,6 +212,12 @@ const navigation: Array<NavigationItem & { icon: Component }> = [
     route: "/admin/achievements",
     prefix: "/admin/achievements",
     icon: TrophyIcon,
+  },
+  {
+    label: $t("header.admin.bugReports"),
+    route: "/admin/bugreports",
+    prefix: "/admin/bugreports",
+    icon: BugAntIcon,
   },
   {
     label: $t("header.admin.settings.title"),

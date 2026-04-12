@@ -1,0 +1,38 @@
+enum BugReportStatus {
+  Open
+  InProgress
+  Resolved
+  Closed
+}
+
+model BugReport {
+  id          String          @id @default(uuid())
+  title       String
+  description String          @default("")
+
+  // Auto-collected system info (JSON blob)
+  systemInfo  Json?
+
+  // Optional screenshot (object store)
+  screenshotObjectId String?
+
+  // Optional log excerpt
+  logs        String?
+
+  status      BugReportStatus @default(Open)
+  adminNotes  String?
+
+  reporterId  String
+  reporter    User            @relation(fields: [reporterId], references: [id], onDelete: Cascade, name: "bugReportsCreated")
+
+  assigneeId  String?
+  assignee    User?           @relation(fields: [assigneeId], references: [id], onDelete: SetNull, name: "bugReportsAssigned")
+
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  resolvedAt  DateTime?
+
+  @@index([status])
+  @@index([reporterId])
+  @@index([createdAt])
+}

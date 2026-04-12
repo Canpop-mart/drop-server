@@ -231,6 +231,43 @@
     "signout": "Signout",
     "username": "Username"
   },
+  "bugReport": {
+    "title": "Report a Bug",
+    "subtitle": "Describe what went wrong. System info is collected automatically.",
+    "form": {
+      "title": "What happened?",
+      "titlePlaceholder": "e.g. Game crashes when launching Mario Kart",
+      "description": "Steps to reproduce",
+      "descriptionPlaceholder": "Describe what you were doing when the bug occurred...",
+      "screenshot": "Screenshot (optional)",
+      "screenshotHint": "Click to attach a screenshot",
+      "autoCollectHint": "System info (browser, OS, screen size) is attached automatically.",
+      "submit": "Submit Bug Report"
+    },
+    "success": "Bug report submitted! An admin will review it shortly.",
+    "status": {
+      "Open": "Open",
+      "InProgress": "In Progress",
+      "Resolved": "Resolved",
+      "Closed": "Closed"
+    },
+    "admin": {
+      "title": "Bug Reports",
+      "subtitle": "Review and manage bug reports from users.",
+      "empty": "No bug reports yet.",
+      "open": "open",
+      "inProgress": "in progress",
+      "filterAll": "All",
+      "hasScreenshot": "Screenshot",
+      "reportedBy": "Reported by",
+      "systemInfo": "System Info",
+      "logs": "Client Logs",
+      "status": "Status",
+      "notes": "Admin Notes",
+      "notesPlaceholder": "Add notes about this bug report...",
+      "update": "Update"
+    }
+  },
   "cancel": "Cancel",
   "chars": {
     "arrow": "→",
@@ -450,6 +487,7 @@
     "admin": {
       "achievements": "Achievements",
       "admin": "Admin",
+      "bugReports": "Bugs",
       "home": "Home",
       "library": "Library",
       "metadata": "Meta",

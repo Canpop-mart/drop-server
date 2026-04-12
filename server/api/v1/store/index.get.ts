@@ -22,7 +22,7 @@ const StoreRead = type({
   company: "string?",
   companyActions: "string = 'published,developed'",
 
-  sort: "'default' | 'newest' | 'recent' | 'name' | 'relevance' = 'default'",
+  sort: "'default' | 'newest' | 'recent' | 'name' | 'relevance' | 'random' = 'default'",
   order: "'asc' | 'desc' = 'desc'",
 });
 
@@ -247,6 +247,23 @@ export default defineEventHandler(async (h3) => {
     ...libraryFilter,
     type: GameType.Game,
   };
+
+  // Random sort uses raw SQL since Prisma doesn't support ORDER BY RANDOM()
+  if (options.sort === "random") {
+    const take = Math.min(options.take, 55);
+    const games = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "Game"
+      WHERE type = 'Game'
+      ORDER BY RANDOM()
+      LIMIT ${take}
+    `;
+    const gameIds = games.map((g) => g.id);
+    const fullGames = await prisma.game.findMany({
+      where: { id: { in: gameIds } },
+    });
+    const count = await prisma.game.count({ where: finalFilter });
+    return { results: await attachRelations(fullGames), count };
+  }
 
   const sort: Prisma.GameOrderByWithRelationInput = {};
   switch (options.sort) {

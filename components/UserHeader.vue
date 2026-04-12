@@ -28,6 +28,12 @@
           </UserHeaderWidget>
         </li>
 
+        <li v-if="user">
+          <UserHeaderWidget @click="bugReportOpen = true">
+            <BugAntIcon class="h-5" />
+          </UserHeaderWidget>
+        </li>
+
         <li>
           <Menu as="div" class="relative inline-block">
             <MenuButton>
@@ -174,8 +180,10 @@
                       <BellIcon class="h-5" />
                     </UserHeaderWidget>
                   </li>
-                  <li class="w-full">
-                    <UserHeaderWidget class="w-full" />
+                  <li v-if="user" class="w-full">
+                    <UserHeaderWidget class="w-full" @click="bugReportOpen = true">
+                      <BugAntIcon class="h-5" />
+                    </UserHeaderWidget>
                   </li>
                 </div>
               </nav>
@@ -185,10 +193,12 @@
       </div>
     </Dialog>
   </TransitionRoot>
+
+  <ModalBugReport v-model="bugReportOpen" />
 </template>
 
 <script setup lang="ts">
-import { BellIcon, UserGroupIcon } from "@heroicons/vue/16/solid";
+import { BellIcon, UserGroupIcon, BugAntIcon } from "@heroicons/vue/16/solid";
 import {
   Dialog,
   DialogPanel,
@@ -205,6 +215,8 @@ import { XMarkIcon } from "@heroicons/vue/24/solid";
 const router = useRouter();
 const { t } = useI18n();
 
+const user = useUser();
+const bugReportOpen = ref(false);
 const homepageURL = "/store";
 const navigation: Ref<Array<NavigationItem>> = computed(() => [
   {
