@@ -41,20 +41,55 @@ export default defineEventHandler(async (h3) => {
   }
 
   const gameIds = trending.map((t) => t.gameId);
-  const games = await prisma.game.findMany({
-    where: { id: { in: gameIds } },
-    select: {
-      id: true,
-      mName: true,
-      mIconObjectId: true,
-      mCoverObjectId: true,
-      mBannerObjectId: true,
-      mShortDescription: true,
-      mReleased: true,
-      tags: { select: { id: true, name: true } },
-      developers: { select: { id: true, mName: true } },
-    },
-  });
+  const [games, versionLaunches] = await Promise.all([
+    prisma.game.findMany({
+      where: { id: { in: gameIds } },
+      select: {
+        id: true,
+        mName: true,
+        mIconObjectId: true,
+        mCoverObjectId: true,
+        mBannerObjectId: true,
+        mShortDescription: true,
+        mReleased: true,
+        tags: { select: { id: true, name: true } },
+        developers: { select: { id: true, mName: true } },
+      },
+    }),
+    // Emulator detection for ROM badges
+    prisma.gameVersion.findMany({
+      where: { gameId: { in: gameIds } },
+      select: {
+        gameId: true,
+        versionIndex: true,
+        launches: {
+          select: {
+            emulatorId: true,
+            emulatorSuggestions: true,
+            platform: true,
+          },
+        },
+      },
+      orderBy: { versionIndex: "desc" as const },
+    }),
+  ]);
+
+  // Build emulation lookup from latest version's first launch config
+  const launchByGame = new Map<
+    string,
+    { isEmulated: boolean; platform: string }
+  >();
+  for (const v of versionLaunches) {
+    if (!launchByGame.has(v.gameId) && v.launches.length > 0) {
+      const firstLaunch = v.launches[0];
+      launchByGame.set(v.gameId, {
+        isEmulated:
+          firstLaunch.emulatorId != null ||
+          firstLaunch.emulatorSuggestions.length > 0,
+        platform: firstLaunch.platform,
+      });
+    }
+  }
 
   // Preserve trending order
   const gameMap = new Map(games.map((g) => [g.id, g]));
@@ -65,9 +100,12 @@ export default defineEventHandler(async (h3) => {
       .map((id) => {
         const game = gameMap.get(id);
         if (!game) return null;
+        const launch = launchByGame.get(id);
         return {
           ...game,
           recentPlayers: trendingMap.get(id) ?? 0,
+          isEmulated: launch?.isEmulated ?? false,
+          launchPlatform: launch?.platform ?? null,
         };
       })
       .filter((g) => g !== null),

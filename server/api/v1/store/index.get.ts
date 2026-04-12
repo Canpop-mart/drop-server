@@ -138,6 +138,8 @@ export default defineEventHandler(async (h3) => {
     (T & {
       tags: { id: string; name: string }[];
       versions: { displayName: string | null; versionIndex: number }[];
+      isEmulated: boolean;
+      launchPlatform: string | null;
     })[]
   > {
     if (games.length === 0) return [];
@@ -152,10 +154,21 @@ export default defineEventHandler(async (h3) => {
         JOIN "GameTag" t ON t.id = j."B"
         WHERE j."A" = ANY(${gameIds}::text[])
       `,
-      // All versions ordered desc — we pick the latest per game in JS
+      // All versions with their launch configs — we pick the latest per game in JS
       prisma.gameVersion.findMany({
         where: { gameId: { in: gameIds } },
-        select: { gameId: true, displayName: true, versionIndex: true },
+        select: {
+          gameId: true,
+          displayName: true,
+          versionIndex: true,
+          launches: {
+            select: {
+              emulatorId: true,
+              emulatorSuggestions: true,
+              platform: true,
+            },
+          },
+        },
         orderBy: { versionIndex: "desc" as const },
       }),
     ]);
@@ -172,11 +185,26 @@ export default defineEventHandler(async (h3) => {
       string,
       { displayName: string | null; versionIndex: number }
     >();
+    // Also extract emulation info from the latest version's launches
+    const launchByGame = new Map<
+      string,
+      { isEmulated: boolean; platform: string }
+    >();
     for (const v of allVersions) {
       if (!latestVersionByGame.has(v.gameId)) {
         latestVersionByGame.set(v.gameId, {
           displayName: v.displayName,
           versionIndex: v.versionIndex,
+        });
+      }
+      // First launch config from the latest version determines emulation status
+      if (!launchByGame.has(v.gameId) && v.launches.length > 0) {
+        const firstLaunch = v.launches[0];
+        launchByGame.set(v.gameId, {
+          isEmulated:
+            firstLaunch.emulatorId != null ||
+            firstLaunch.emulatorSuggestions.length > 0,
+          platform: firstLaunch.platform,
         });
       }
     }
@@ -187,6 +215,8 @@ export default defineEventHandler(async (h3) => {
       versions: latestVersionByGame.has(g.id)
         ? [latestVersionByGame.get(g.id)!]
         : [],
+      isEmulated: launchByGame.get(g.id)?.isEmulated ?? false,
+      launchPlatform: launchByGame.get(g.id)?.platform ?? null,
     }));
   }
 
