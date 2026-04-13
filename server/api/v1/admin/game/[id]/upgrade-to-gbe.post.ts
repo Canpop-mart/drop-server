@@ -7,6 +7,7 @@ import {
   hasCachedDlls,
   upgradeSseToGbe,
 } from "~/server/internal/gbe";
+import { logger } from "~/server/internal/logging";
 
 /**
  * POST /api/v1/admin/game/:id/upgrade-to-gbe
@@ -52,20 +53,25 @@ export default defineEventHandler(async (h3) => {
 
   // Ensure GBE DLLs are available
   if (!hasCachedDlls("win64") && !hasCachedDlls("win32")) {
-    console.log("[GBE] No cached DLLs, downloading...");
+    logger.info("[GBE] No cached DLLs, downloading...");
     await downloadGbeDlls();
   }
 
   // Simple logger that collects messages
   const logs: string[] = [];
-  const logger = {
+  const localLogger = {
     info: (msg: string) => {
-      console.log(`[GBE] ${msg}`);
+      logger.info(`[GBE] ${msg}`);
       logs.push(msg);
     },
   };
 
-  const result = await upgradeSseToGbe(versionDir, gameId, detection, logger);
+  const result = await upgradeSseToGbe(
+    versionDir,
+    gameId,
+    detection,
+    localLogger,
+  );
 
   return {
     success: result.success,

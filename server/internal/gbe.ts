@@ -12,6 +12,7 @@ import fs, { createWriteStream } from "fs";
 import path from "path";
 import { pipeline } from "stream/promises";
 import { systemConfig } from "./config/sys-conf";
+import { logger } from "~/server/internal/logging";
 
 const GBE_REPO = "Detanup01/gbe_fork";
 const GBE_CACHE_DIR = "gbe-cache";
@@ -218,24 +219,30 @@ async function extractArchiveDlls(
   archivePath: string,
   fileName: string,
 ): Promise<void> {
-  const { execSync } = await import("child_process");
+  const { execFileSync } = await import("child_process");
   const tmpDir = archivePath + "_extracted";
   fs.mkdirSync(tmpDir, { recursive: true });
 
   try {
     const lower = fileName.toLowerCase();
     if (lower.endsWith(".zip")) {
-      execSync(`unzip -o "${archivePath}" -d "${tmpDir}"`, { stdio: "pipe" });
+      execFileSync("unzip", ["-o", archivePath, "-d", tmpDir], {
+        stdio: "pipe",
+      });
     } else if (lower.endsWith(".7z")) {
       // p7zip-full is installed in the Docker image
-      execSync(`7z x -y -o"${tmpDir}" "${archivePath}"`, { stdio: "pipe" });
+      execFileSync("7z", ["x", "-y", `-o${tmpDir}`, archivePath], {
+        stdio: "pipe",
+      });
     } else if (lower.endsWith(".tar.gz")) {
-      execSync(`tar xzf "${archivePath}" -C "${tmpDir}"`, { stdio: "pipe" });
+      execFileSync("tar", ["xzf", archivePath, "-C", tmpDir], {
+        stdio: "pipe",
+      });
     } else {
       throw new Error(`Unsupported archive format: ${fileName}`);
     }
 
-    console.log(`[GBE] Extracted ${fileName}, scanning for DLLs...`);
+    logger.info(`[GBE] Extracted ${fileName}, scanning for DLLs...`);
     findAndCacheDlls(tmpDir);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });

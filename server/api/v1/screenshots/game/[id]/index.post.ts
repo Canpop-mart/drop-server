@@ -2,6 +2,7 @@
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
 import screenshotManager from "~/server/internal/screenshots";
+import { logger } from "~/server/internal/logging";
 
 // TODO: make defineClientEventHandler instead?
 // only clients will be upload screenshots yea??
@@ -26,7 +27,7 @@ export default defineEventHandler(async (h3) => {
   try {
     await screenshotManager.upload(userId, gameId, h3.node.req);
   } catch (err) {
-    console.error(`[SCREENSHOT] Upload failed for game ${gameId}:`, err);
+    logger.error(`[SCREENSHOT] Upload failed for game ${gameId}:`, err);
     throw createError({
       statusCode: 500,
       statusMessage: "Screenshot upload failed",

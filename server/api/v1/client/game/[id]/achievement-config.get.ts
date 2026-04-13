@@ -1,5 +1,6 @@
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
+import { logger } from "~/server/internal/logging";
 
 // Lower number = higher priority when deduplicating cross-provider achievements
 const PROVIDER_PRIORITY: Record<string, number> = {
@@ -63,7 +64,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     externalLinks,
   };
 
-  console.log(
+  logger.info(
     `[ACH] Config served: game=${gameId} user=${user.id} total=${result.achievements.length} unlocked=${result.achievements.filter((a) => a.unlocked).length} goldbergLinks=${externalLinks.filter((l) => l.provider === "Goldberg").length}`,
   );
 
