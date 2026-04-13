@@ -3,6 +3,7 @@ import { defineClientEventHandler } from "~/server/internal/clients/event-handle
 import prisma from "~/server/internal/db/database";
 import type { ExternalAccountProvider } from "~/prisma/client/enums";
 import notificationSystem from "~/server/internal/notifications";
+import { logger } from "~/server/internal/logging";
 
 const AchievementReport = type({
   achievements: type({
@@ -22,14 +23,14 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const rawBody = await readBody(h3);
   const body = AchievementReport(rawBody);
   if (body instanceof ArkErrors) {
-    console.warn(
+    logger.warn(
       `[ACH] Report validation failed for game ${gameId}:`,
       body.summary,
     );
     throw createError({ statusCode: 400, statusMessage: body.summary });
   }
 
-  console.log(
+  logger.info(
     `[ACH] Report received: game=${gameId} user=${user.id} count=${body.achievements.length}`,
   );
 
@@ -78,7 +79,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
       `${report.provider}:${report.externalId}`,
     );
     if (!achievement) {
-      console.warn(
+      logger.warn(
         `[ACH] Achievement NOT FOUND in DB: gameId=${gameId} externalId=${report.externalId}`,
       );
       continue;
@@ -122,11 +123,11 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
         acls: ["user:store:read"],
       })
       .catch((err) => {
-        console.warn(`[ACH] Failed to push notification: ${err}`);
+        logger.warn(`[ACH] Failed to push notification: ${err}`);
       });
   }
 
-  console.log(
+  logger.info(
     `[ACH] Report complete: game=${gameId} recorded=${recorded} newlyUnlocked=${newlyUnlocked.length}`,
   );
 

@@ -32,6 +32,15 @@ class SystemConfig {
       oidcRequireHttps.toLocaleLowerCase() === "false"
         ? false
         : true;
+
+    // Validate EXTERNAL_URL in production
+    if (process.env.NODE_ENV === "production" && !process.env.EXTERNAL_URL) {
+      throw new Error(
+        "EXTERNAL_URL environment variable is required in production. Set it to your server's public URL (e.g. https://drop.example.com).",
+      );
+    }
+
+    console.log(`[CONFIG] External URL: ${this.externalUrl}`);
   }
 
   getLibraryFolder() {
