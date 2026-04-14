@@ -24,7 +24,9 @@
           type="button"
           :disabled="refreshing"
           :class="[
-            refreshing ? 'bg-amber-800/50 cursor-wait' : 'bg-amber-600 hover:bg-amber-500',
+            refreshing
+              ? 'bg-amber-800/50 cursor-wait'
+              : 'bg-amber-600 hover:bg-amber-500',
             'inline-flex w-fit items-center gap-x-2 rounded-md px-3 py-1 text-sm font-semibold font-display text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 transition-all duration-200 hover:scale-105 active:scale-95',
           ]"
           @click="refreshVersions"
@@ -840,13 +842,10 @@ async function refreshVersions() {
 
   refreshing.value = true;
   try {
-    const result = await $dropFetch(
-      "/api/v1/admin/game/:id/versions/refresh",
-      {
-        method: "POST",
-        params: { id: game.value.id },
-      },
-    );
+    const result = await $dropFetch("/api/v1/admin/game/:id/versions/refresh", {
+      method: "POST",
+      params: { id: game.value.id },
+    });
     // Reload the game data after a short delay to let the task start
     window.alert(
       `Version refresh started (task: ${result.taskId}). The page will reload to show updated versions.`,

@@ -261,12 +261,7 @@ export default defineNuxtConfig({
           "https://*.steamstatic.com",
           "https://media.retroachievements.org",
         ],
-        "script-src": [
-          "'self'",
-          "https:",
-          "'unsafe-inline'",
-          "'unsafe-eval'",
-        ],
+        "script-src": ["'self'", "https:", "'unsafe-inline'", "'unsafe-eval'"],
       },
       strictTransportSecurity: false,
     },

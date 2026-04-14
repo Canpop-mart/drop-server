@@ -63,25 +63,22 @@ export default defineEventHandler(async (h3) => {
         return;
       }
 
-      logger.info(
-        `Found ${discoveredVersions.length} version(s) to import`,
-      );
+      logger.info(`Found ${discoveredVersions.length} version(s) to import`);
       progress(20);
 
       // Step 3: Re-import each discovered version
       for (let i = 0; i < discoveredVersions.length; i++) {
         const version = discoveredVersions[i];
-        const preload =
-          await libraryManager.fetchUnimportedVersionInformation(gameId, {
+        const preload = await libraryManager.fetchUnimportedVersionInformation(
+          gameId,
+          {
             type: version.type,
             identifier: version.identifier,
-            name: version.name,
-          });
+          },
+        );
 
         if (!preload || preload.length === 0) {
-          logger.warn(
-            `No preload info for ${version.name} — skipping`,
-          );
+          logger.warn(`No preload info for ${version.name} — skipping`);
           continue;
         }
 
