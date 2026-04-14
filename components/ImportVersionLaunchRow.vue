@@ -216,6 +216,119 @@
         class="mt-2"
       />
     </div>
+    <!-- Disc paths for multi-disc games -->
+    <div
+      v-if="props.type && props.type === 'Game' && props.allowEmulator"
+      class="mt-3"
+    >
+      <button
+        type="button"
+        class="text-sm font-medium leading-6 text-zinc-400 hover:text-zinc-200 transition flex items-center gap-1"
+        @click="showDiscPaths = !showDiscPaths"
+      >
+        <ChevronUpDownIcon class="size-4" />
+        Multi-disc ({{ (launchConfiguration.discPaths ?? []).length }} disc{{
+          (launchConfiguration.discPaths ?? []).length === 1 ? "" : "s"
+        }})
+      </button>
+      <div v-if="showDiscPaths" class="mt-2 space-y-2">
+        <p class="text-xs text-zinc-500">
+          For multi-disc games, add the path to each disc image relative to the
+          game's install directory. At launch, Drop generates a .m3u playlist so
+          RetroArch can swap discs in-game.
+        </p>
+        <div
+          v-for="(disc, discIdx) in launchConfiguration.discPaths ?? []"
+          :key="discIdx"
+          class="flex items-center gap-2"
+        >
+          <span class="text-xs text-zinc-500 font-mono w-6 text-right shrink-0"
+            >{{ discIdx + 1 }}.</span
+          >
+          <div
+            class="flex-1 flex rounded-md shadow-sm bg-zinc-950 ring-1 ring-inset ring-zinc-800 focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-600"
+          >
+            <Combobox
+              as="div"
+              :model-value="disc"
+              nullable
+              class="w-full"
+              @update:model-value="(v: any) => updateDiscPath(discIdx, v)"
+            >
+              <div class="relative">
+                <ComboboxInput
+                  class="block flex-1 border-0 py-1 pl-2 w-full bg-transparent text-zinc-100 placeholder:text-zinc-500 focus:ring-0 text-sm"
+                  placeholder="path/to/disc.cue"
+                  :model-value="disc"
+                  @change="discPathQueries[discIdx] = $event.target.value"
+                  @blur="discPathQueries[discIdx] = ''"
+                />
+                <ComboboxButton
+                  v-if="discFilteredGuesses(discIdx).length > 0"
+                  class="absolute inset-y-0 right-0 flex items-center rounded-r-md px-2 focus:outline-none"
+                >
+                  <ChevronUpDownIcon
+                    class="size-4 text-gray-400"
+                    aria-hidden="true"
+                  />
+                </ComboboxButton>
+                <ComboboxOptions
+                  class="absolute z-10 mt-1 max-h-40 w-full overflow-auto rounded-md bg-zinc-900 py-1 text-sm shadow-lg ring-1 ring-white/5 focus:outline-none"
+                >
+                  <ComboboxOption
+                    v-for="(guess, gIdx) in discFilteredGuesses(discIdx)"
+                    :key="gIdx"
+                    v-slot="{ active }"
+                    :value="guess.filename"
+                  >
+                    <li
+                      :class="[
+                        'relative cursor-default select-none py-1.5 pl-3 pr-9',
+                        active ? 'bg-blue-600 text-white' : 'text-zinc-100',
+                      ]"
+                    >
+                      {{ guess.filename }}
+                    </li>
+                  </ComboboxOption>
+                  <ComboboxOption
+                    v-if="
+                      discPathQueries[discIdx] &&
+                      discPathQueries[discIdx] !== disc
+                    "
+                    v-slot="{ active }"
+                    :value="discPathQueries[discIdx]"
+                  >
+                    <li
+                      :class="[
+                        'relative cursor-default select-none py-1.5 pl-3 pr-9',
+                        active ? 'bg-blue-600 text-white' : 'text-zinc-100',
+                      ]"
+                    >
+                      {{ discPathQueries[discIdx] }}
+                    </li>
+                  </ComboboxOption>
+                </ComboboxOptions>
+              </div>
+            </Combobox>
+          </div>
+          <button
+            type="button"
+            class="p-1 text-zinc-500 hover:text-red-400 transition"
+            @click="removeDiscPath(discIdx)"
+          >
+            <TrashIcon class="size-4" />
+          </button>
+        </div>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 transition"
+          @click="addDiscPath"
+        >
+          <PlusIcon class="size-4" />
+          Add disc
+        </button>
+      </div>
+    </div>
     <ModalSelectLaunch
       v-model="selectLaunchOpen"
       class="-mt-2"
@@ -233,7 +346,11 @@ import {
   ComboboxOption,
   ComboboxOptions,
 } from "@headlessui/vue";
-import { CheckIcon, ChevronUpDownIcon } from "@heroicons/vue/20/solid";
+import {
+  CheckIcon,
+  ChevronUpDownIcon,
+  PlusIcon,
+} from "@heroicons/vue/20/solid";
 import { InformationCircleIcon, TrashIcon } from "@heroicons/vue/24/outline";
 import type { EmulatorLaunchObject } from "~/composables/frontend";
 import type { GameType, Platform } from "~/prisma/client/enums";
@@ -354,5 +471,38 @@ function updateLaunchCommand(
       applyGuess(autosetGuess);
     }
   }
+}
+
+// ── Multi-disc paths ──────────────────────────────────────────────────
+const showDiscPaths = ref(
+  (launchConfiguration.value.discPaths ?? []).length > 0,
+);
+const discPathQueries = ref<Record<number, string>>({});
+
+function addDiscPath() {
+  if (!launchConfiguration.value.discPaths) {
+    launchConfiguration.value.discPaths = [];
+  }
+  launchConfiguration.value.discPaths.push("");
+}
+
+function removeDiscPath(idx: number) {
+  launchConfiguration.value.discPaths?.splice(idx, 1);
+}
+
+function updateDiscPath(idx: number, value: string | VersionGuess | null) {
+  if (!launchConfiguration.value.discPaths) return;
+  if (typeof value === "object" && value !== null && "filename" in value) {
+    launchConfiguration.value.discPaths[idx] = (value as VersionGuess).filename;
+  } else {
+    launchConfiguration.value.discPaths[idx] = (value as string) ?? "";
+  }
+}
+
+function discFilteredGuesses(discIdx: number) {
+  const query = (discPathQueries.value[discIdx] ?? "").toLowerCase();
+  return (props.versionGuesses ?? []).filter((g) =>
+    g.filename.toLowerCase().includes(query),
+  );
 }
 </script>
