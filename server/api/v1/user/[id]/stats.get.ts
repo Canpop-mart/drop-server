@@ -21,18 +21,10 @@ export default defineEventHandler(async (h3) => {
   if (!user)
     throw createError({ statusCode: 404, statusMessage: "User not found." });
 
-  // Total playtime
-  const playtimeRecords = await prisma.playtime.findMany({
+  // Games played count (read early, recompute playtime after orphan cleanup)
+  const gamesPlayed = await prisma.playtime.count({
     where: { userId: user.id },
-    select: { seconds: true },
   });
-  const totalPlaytimeSeconds = playtimeRecords.reduce(
-    (sum, p) => sum + p.seconds,
-    0,
-  );
-
-  // Games played count
-  const gamesPlayed = playtimeRecords.length;
 
   // Achievements unlocked
   const achievementsUnlocked = await prisma.userAchievement.count({
@@ -118,6 +110,16 @@ export default defineEventHandler(async (h3) => {
       update: { seconds: totalSeconds },
     });
   }
+
+  // Read total playtime AFTER orphan cleanup so the values are fresh
+  const playtimeRecords = await prisma.playtime.findMany({
+    where: { userId: user.id },
+    select: { seconds: true },
+  });
+  const totalPlaytimeSeconds = playtimeRecords.reduce(
+    (sum, p) => sum + p.seconds,
+    0,
+  );
 
   return {
     totalPlaytimeSeconds,
