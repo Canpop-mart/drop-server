@@ -3,6 +3,7 @@ model Collection {
     name String
 
     isDefault Boolean @default(false)
+    isPublic  Boolean @default(false)
     userId    String
     user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
