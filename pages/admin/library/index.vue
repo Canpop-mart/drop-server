@@ -767,6 +767,12 @@ const filterScaffold = computed(() => {
     ],
   };
 
+  scaffold.status = {
+    title: "Status",
+    value: "status",
+    values: [{ value: "outdated", label: "Outdated" }],
+  };
+
   if (libraries.length > 1) {
     scaffold.library = {
       title: "Library",
