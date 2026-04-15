@@ -69,10 +69,20 @@ export default defineEventHandler(async (h3) => {
   const affectedGameIds = new Set<string>();
 
   for (const orphan of orphanedSessions) {
-    // Prefer lastHeartbeatAt (more accurate) over now (assumes game ran the whole time)
-    const endedAt = orphan.lastHeartbeatAt
-      ? new Date(orphan.lastHeartbeatAt)
-      : new Date();
+    // Close the orphan with a sensible endedAt:
+    // - With heartbeat: last heartbeat + 10 min grace (client heartbeats every ~5 min)
+    // - Without heartbeat: startedAt + 5 min cap (game likely crashed immediately)
+    let endedAt: Date;
+    if (orphan.lastHeartbeatAt) {
+      endedAt = new Date(
+        new Date(orphan.lastHeartbeatAt).getTime() + 10 * 60 * 1000,
+      );
+    } else {
+      endedAt = new Date(new Date(orphan.startedAt).getTime() + 5 * 60 * 1000);
+    }
+    const now = new Date();
+    if (endedAt > now) endedAt = now;
+
     const durationSeconds = Math.floor(
       (endedAt.getTime() - new Date(orphan.startedAt).getTime()) / 1000,
     );
