@@ -6,12 +6,21 @@ import { mergeAndSumSessions } from "~/server/internal/playtime/merge-sessions";
 
 const StopBody = type({
   sessionId: "string",
+  /** Client-measured process duration — more accurate than server timestamps */
+  "clientDurationSecs?": "number",
 }).configure(throwingArktype);
 
 /**
  * Stop a playtime session.
  * Finalizes the PlaySession record (sets endedAt + durationSeconds)
  * and upserts the cumulative Playtime record for the game/user pair.
+ *
+ * When `clientDurationSecs` is provided, the server trusts the client's
+ * measured process runtime instead of computing it from timestamps.
+ * This is more accurate because:
+ *   - The client measures actual process wall-clock time
+ *   - Server timestamps drift when the NAS sleeps between start/stop
+ *   - Network delays in the stop request inflate server-side duration
  */
 export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const body = await readDropValidatedBody(h3, StopBody);
@@ -37,17 +46,27 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
       statusMessage: "Session already ended.",
     });
 
-  const now = new Date();
-  const durationSeconds = Math.max(
-    Math.floor((now.getTime() - session.startedAt.getTime()) / 1000),
+  // Prefer client-measured duration when available — it's the actual process
+  // runtime measured locally. Fall back to server-side timestamp math.
+  const serverDuration = Math.max(
+    Math.floor((Date.now() - session.startedAt.getTime()) / 1000),
     0,
+  );
+  const durationSeconds =
+    body.clientDurationSecs != null
+      ? Math.max(body.clientDurationSecs, 0)
+      : serverDuration;
+
+  // Compute endedAt from startedAt + duration (not now()) for consistency
+  const endedAt = new Date(
+    session.startedAt.getTime() + durationSeconds * 1000,
   );
 
   // Finalize the session
   const updated = await prisma.playSession.updateMany({
     where: { id: session.id, userId: user.id },
     data: {
-      endedAt: now,
+      endedAt,
       durationSeconds,
     },
   });
