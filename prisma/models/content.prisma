@@ -60,6 +60,7 @@ model Game {
   tags        GameTag[]
   playtime      Playtime[]
   playSessions  PlaySession[]
+  cloudSaves    CloudSave[]
 
   developers             Company[]               @relation(name: "developers")
   publishers             Company[]               @relation(name: "publishers")

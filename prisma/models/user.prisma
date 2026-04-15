@@ -39,6 +39,8 @@ model User {
 
     bugReports         BugReport[] @relation(name: "bugReportsCreated")
     assignedBugReports BugReport[] @relation(name: "bugReportsAssigned")
+
+    cloudSaves CloudSave[]
 }
 
 model FavoriteGame {

@@ -1,0 +1,33 @@
+/// Cloud save storage — allows users to sync save files across devices.
+/// Each entry represents a single save file (battery save or save state)
+/// uploaded from a client. The actual file data is stored as a binary blob.
+model CloudSave {
+    id String @id @default(uuid())
+
+    gameId String
+    game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+    userId String
+    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    /// Original filename (e.g. "Game Name.srm" or "Game Name.state1")
+    filename String
+
+    /// "save" for battery saves, "state" for save states
+    saveType String
+
+    /// File size in bytes
+    size Int
+
+    /// The actual save data (binary blob)
+    data Bytes
+
+    /// Client-reported modification time of the original file
+    clientModifiedAt DateTime
+
+    uploadedAt DateTime @default(now()) @db.Timestamptz(6)
+    updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+    @@unique([gameId, userId, filename])
+    @@index([gameId, userId])
+}
