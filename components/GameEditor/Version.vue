@@ -19,6 +19,20 @@
         >
           {{ $t("library.admin.version.purgeAll") }}
         </button>
+        <button
+          v-if="game.versions.length > 0"
+          type="button"
+          :disabled="refreshing"
+          :class="[
+            refreshing
+              ? 'bg-amber-800/50 cursor-wait'
+              : 'bg-amber-600 hover:bg-amber-500',
+            'inline-flex w-fit items-center gap-x-2 rounded-md px-3 py-1 text-sm font-semibold font-display text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 transition-all duration-200 hover:scale-105 active:scale-95',
+          ]"
+          @click="refreshVersions"
+        >
+          {{ refreshing ? "Refreshing..." : "Refresh Versions" }}
+        </button>
         <NuxtLink
           :href="canImport ? `/admin/library/${game.id}/import` : ''"
           type="button"
@@ -486,6 +500,7 @@ const props = defineProps<{ unimportedVersions: string[] }>();
 const { t } = useI18n();
 
 const hasDeleted = ref(false);
+const refreshing = ref(false);
 
 const canImport = computed(
   () => hasDeleted.value || props.unimportedVersions.length > 0,
@@ -816,6 +831,40 @@ async function purgeAllVersions() {
       },
       (e, c) => c(),
     );
+  }
+}
+
+async function refreshVersions() {
+  const confirmed = window.confirm(
+    `Refresh all versions for this game? This will purge existing versions and re-import them from the library source.`,
+  );
+  if (!confirmed) return;
+
+  refreshing.value = true;
+  try {
+    const result = await $dropFetch("/api/v1/admin/game/:id/versions/refresh", {
+      method: "POST",
+      params: { id: game.value.id },
+    });
+    // Reload the game data after a short delay to let the task start
+    window.alert(
+      `Version refresh started (task: ${result.taskId}). The page will reload to show updated versions.`,
+    );
+    // Reload the page to pick up the new versions once the task completes
+    window.location.reload();
+  } catch (e) {
+    createModal(
+      ModalType.Notification,
+      {
+        title: "Failed to refresh versions",
+        description:
+          (e as H3Error)?.statusMessage ?? "An unknown error occurred",
+        buttonText: t("common.close"),
+      },
+      (e, c) => c(),
+    );
+  } finally {
+    refreshing.value = false;
   }
 }
 

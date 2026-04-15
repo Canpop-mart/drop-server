@@ -112,6 +112,15 @@ export default defineEventHandler(async (h3) => {
       });
     }
 
+    // Status filters
+    if (filterSet.has("status.outdated")) {
+      rawFilters.push({
+        where: {
+          updateAvailable: true,
+        },
+      });
+    }
+
     // Library filters: library.<libraryId>
     const libraryFilters = [...filterSet]
       .filter((f) => f.startsWith("library."))

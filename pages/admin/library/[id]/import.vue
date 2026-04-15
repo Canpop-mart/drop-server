@@ -429,10 +429,18 @@ async function startImport() {
     });
     router.push(`/admin/task/${taskId.taskId}`);
   } catch (error) {
+    console.error("[IMPORT] Version import failed:", error);
     if (error instanceof FetchError) {
-      importError.value = error.data?.message ?? t("errors.unknown");
+      importError.value =
+        error.data?.message ??
+        error.data?.statusMessage ??
+        error.statusMessage ??
+        error.message ??
+        t("errors.unknown");
+    } else if (error instanceof Error) {
+      importError.value = error.message || error.toString();
     } else {
-      importError.value = (error as string)?.toString();
+      importError.value = String(error);
     }
   } finally {
     importLoading.value = false;

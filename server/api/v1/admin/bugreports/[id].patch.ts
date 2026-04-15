@@ -4,9 +4,9 @@ import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
 
 const UpdateBugReport = type({
-  status: "'Open' | 'InProgress' | 'Resolved' | 'Closed' | undefined",
-  adminNotes: "string | undefined",
-  assigneeId: "string | null | undefined",
+  "status?": "'Open' | 'InProgress' | 'Resolved' | 'Closed'",
+  "adminNotes?": "string",
+  "assigneeId?": "string | null",
 }).configure(throwingArktype);
 
 export default defineEventHandler(async (h3) => {

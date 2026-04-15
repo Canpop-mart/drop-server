@@ -980,7 +980,7 @@
     },
     "tags": "Tags",
     "title": "Store",
-    "updateAvailable": "Update Available",
+    "updateAvailable": "Outdated",
     "view": {
       "allTags": "All",
       "filters": {

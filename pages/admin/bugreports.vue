@@ -249,6 +249,10 @@
                   </div>
                 </div>
 
+                <p v-if="updateError" class="mt-3 text-sm text-red-400">
+                  {{ updateError }}
+                </p>
+
                 <div class="flex justify-end gap-2 mt-4">
                   <button
                     class="px-4 py-2 rounded-md text-sm text-zinc-300 hover:text-zinc-100"
@@ -384,9 +388,12 @@ watch(selectedReport, (r) => {
   }
 });
 
+const updateError = ref("");
+
 async function updateReport() {
   if (!selectedReport.value) return;
   updating.value = true;
+  updateError.value = "";
   try {
     await $dropFetch("/api/v1/admin/bugreports/:id", {
       method: "PATCH",
@@ -395,10 +402,16 @@ async function updateReport() {
         status: editStatus.value,
         adminNotes: editNotes.value,
       },
+      failTitle: "Failed to update bug report",
     });
     // Refresh
     await fetchReports();
     selectedReport.value = null;
+  } catch (e: unknown) {
+    console.error("[ADMIN:BUGREPORTS] Update failed:", e);
+    const err = e as Error & { data?: { message?: string } };
+    const msg = err?.data?.message || err?.message || "Unknown error";
+    updateError.value = `Failed to update: ${msg}`;
   } finally {
     updating.value = false;
   }

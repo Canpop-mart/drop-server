@@ -21,6 +21,8 @@ import { setupGoldberg } from "~/server/internal/goldberg";
 import type { ImportVersion } from "~/server/api/v1/admin/import/version/index.post";
 import { GameType, type Platform } from "~/prisma/client/enums";
 import { castManifest } from "./manifest/utils";
+import { dropletInterface } from "../services/torrential/droplet-interface";
+import fs from "fs";
 import { Shescape } from "shescape";
 import type {
   Prisma,
@@ -676,9 +678,22 @@ class LibraryManager {
 
     const game = await prisma.game.findUnique({
       where: { id: gameId },
-      select: { mName: true, libraryId: true, libraryPath: true, type: true },
+      select: {
+        mName: true,
+        libraryId: true,
+        libraryPath: true,
+        type: true,
+        discFolders: true,
+      },
     });
     if (!game || !game.libraryId) return undefined;
+
+    // For multi-disc games, libraryPath is an abstract base name that doesn't
+    // exist on disk. The actual directories are in discFolders[].
+    const isMultiDisc = game.discFolders && game.discFolders.length > 1;
+    const effectiveLibraryPath = isMultiDisc
+      ? game.discFolders![0]
+      : game.libraryPath;
 
     if (game.type === GameType.Dependency && !metadata.onlySetup)
       throw createError({
@@ -716,7 +731,7 @@ class LibraryManager {
             // manifest and downloaded by clients.
             try {
               const versionDir = library.resolveVersionDir(
-                game.libraryPath,
+                effectiveLibraryPath,
                 versionPath,
               );
               if (versionDir) {
@@ -735,20 +750,71 @@ class LibraryManager {
             // First, create the manifest via droplet.
             // This takes up 90% of our progress, so we wrap it in a *0.9
 
-            manifest = await library.generateDropletManifest(
-              game.libraryPath,
-              versionPath,
-              (value) => {
-                progress(value * 0.9);
-              },
-              (value) => {
-                logger.info(value);
-              },
-            );
-            fileList = await library.versionReaddir(
-              game.libraryPath,
-              versionPath,
-            );
+            if (isMultiDisc) {
+              // Multi-disc: create a persistent directory with symlinks to each
+              // disc folder. This directory is kept permanently so that the
+              // download/serve system (torrential) can resolve the path when
+              // clients request the version. The game's libraryPath is updated
+              // to point here.
+              const baseDir = library.resolveVersionDir(
+                game.discFolders![0],
+                versionPath,
+              );
+              if (!baseDir)
+                throw new Error(
+                  `Could not resolve disc folder: ${game.discFolders![0]}`,
+                );
+              const libraryBase = path.dirname(baseDir);
+              const multiDiscDirName = `.drop-multidisc-${gameId}`;
+              const multiDiscDir = path.join(libraryBase, multiDiscDirName);
+
+              logger.info(
+                `Multi-disc game with ${game.discFolders!.length} disc(s), staging at ${multiDiscDir}`,
+              );
+              fs.mkdirSync(multiDiscDir, { recursive: true });
+
+              // Create symlinks for each disc folder inside the combined dir
+              for (const folder of game.discFolders!) {
+                const src = path.join(libraryBase, folder);
+                const dest = path.join(multiDiscDir, folder);
+                if (!fs.existsSync(dest) && fs.existsSync(src)) {
+                  fs.symlinkSync(src, dest, "junction");
+                  logger.info(`Linked disc folder: ${folder}`);
+                }
+              }
+
+              // Generate a single manifest from the combined dir
+              manifest = await dropletInterface.generateDropletManifest(
+                multiDiscDir,
+                (value) => progress(value * 0.9),
+                (value) => logger.info(value),
+              );
+              fileList = await dropletInterface.listFiles(multiDiscDir);
+
+              // Update the game's libraryPath so torrential can find the files
+              await prisma.game.updateMany({
+                where: { id: gameId },
+                data: { libraryPath: multiDiscDirName },
+              });
+              logger.info(
+                `Updated libraryPath to ${multiDiscDirName} for multi-disc serving`,
+              );
+            } else {
+              manifest = await library.generateDropletManifest(
+                effectiveLibraryPath,
+                versionPath,
+                (value) => {
+                  progress(value * 0.9);
+                },
+                (value) => {
+                  logger.info(value);
+                },
+              );
+              fileList = await library.versionReaddir(
+                effectiveLibraryPath,
+                versionPath,
+              );
+            }
             logger.info("Created manifest successfully!");
           } else if (version.type === "depot" && unimportedVersion) {
             manifest = castManifest(unimportedVersion.manifest);
