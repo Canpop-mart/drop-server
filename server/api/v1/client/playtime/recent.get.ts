@@ -2,7 +2,7 @@ import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
 
 /**
- * Get the 8 most recently played games for the authenticated user.
+ * Get the most recently played games for the authenticated user.
  * Returns one entry per game (the most recent session for each game).
  *
  * Uses Bearer token auth (ACL "read") so this works from the desktop
@@ -23,7 +23,7 @@ export default defineEventHandler(async (h3) => {
     orderBy: {
       startedAt: "desc",
     },
-    take: 8,
+    take: 20,
     include: {
       game: {
         select: {
