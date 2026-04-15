@@ -7,7 +7,7 @@ export default defineEventHandler(async (h3) => {
 
   // Fetch ALL enabled users first — the Players tab should show everyone
   const users = await prisma.user.findMany({
-    where: { enabled: true },
+    where: { enabled: true, username: { not: "system" } },
     select: {
       id: true,
       username: true,

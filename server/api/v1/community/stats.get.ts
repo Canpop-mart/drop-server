@@ -17,7 +17,9 @@ export default defineEventHandler(async (h3) => {
     totalLeaderboardEntries,
   ] = await Promise.all([
     prisma.game.count({ where: { type: "Game" } }),
-    prisma.user.count({ where: { enabled: true } }),
+    prisma.user.count({
+      where: { enabled: true, username: { not: "system" } },
+    }),
     prisma.playSession.count(),
     prisma.userAchievement.count(),
     prisma.playtime.count(),
