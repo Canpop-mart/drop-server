@@ -20,6 +20,8 @@ export default defineEventHandler(async (h3) => {
       filename: true,
       saveType: true,
       size: true,
+      dataHash: true,
+      uploadedFrom: true,
       clientModifiedAt: true,
       uploadedAt: true,
     },

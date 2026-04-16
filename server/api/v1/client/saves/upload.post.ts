@@ -1,16 +1,26 @@
+import { createHash } from "node:crypto";
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
 
 /**
  * Upload a save file to cloud storage.
- * Body: { gameId, filename, saveType, data (base64), clientModifiedAt (ISO string) }
+ * Body: { gameId, filename, saveType, data (base64), clientModifiedAt (ISO string),
+ *         dataHash? (MD5 — computed server-side if omitted), uploadedFrom? (machine name) }
  */
 export default defineEventHandler(async (h3) => {
   const userId = await aclManager.getUserIdACL(h3, ["read"]);
   if (!userId) throw createError({ statusCode: 403 });
 
   const body = await readBody(h3);
-  const { gameId, filename, saveType, data, clientModifiedAt } = body;
+  const {
+    gameId,
+    filename,
+    saveType,
+    data,
+    clientModifiedAt,
+    dataHash,
+    uploadedFrom,
+  } = body;
 
   if (!gameId || !filename || !saveType || !data) {
     throw createError({
@@ -19,10 +29,10 @@ export default defineEventHandler(async (h3) => {
     });
   }
 
-  if (saveType !== "save" && saveType !== "state") {
+  if (saveType !== "save" && saveType !== "state" && saveType !== "pc") {
     throw createError({
       statusCode: 400,
-      statusMessage: "saveType must be 'save' or 'state'",
+      statusMessage: "saveType must be 'save', 'state', or 'pc'",
     });
   }
 
@@ -35,6 +45,9 @@ export default defineEventHandler(async (h3) => {
     });
   }
 
+  // Compute MD5 server-side if client didn't provide it
+  const hash = dataHash || createHash("md5").update(buffer).digest("hex");
+
   const result = await prisma.cloudSave.upsert({
     where: {
       gameId_userId_filename: { gameId, userId, filename },
@@ -46,12 +59,16 @@ export default defineEventHandler(async (h3) => {
       saveType,
       size: buffer.length,
       data: buffer,
+      dataHash: hash,
+      uploadedFrom: uploadedFrom || "",
       clientModifiedAt: new Date(clientModifiedAt || Date.now()),
     },
     update: {
       data: buffer,
       size: buffer.length,
       saveType,
+      dataHash: hash,
+      uploadedFrom: uploadedFrom || "",
       clientModifiedAt: new Date(clientModifiedAt || Date.now()),
     },
   });
@@ -60,6 +77,7 @@ export default defineEventHandler(async (h3) => {
     id: result.id,
     filename: result.filename,
     size: result.size,
+    dataHash: hash,
     uploadedAt: result.uploadedAt,
   };
 });

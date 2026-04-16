@@ -13,7 +13,7 @@ model CloudSave {
     /// Original filename (e.g. "Game Name.srm" or "Game Name.state1")
     filename String
 
-    /// "save" for battery saves, "state" for save states
+    /// "save" for battery saves, "state" for save states, "pc" for PC game saves
     saveType String
 
     /// File size in bytes
@@ -21,6 +21,15 @@ model CloudSave {
 
     /// The actual save data (binary blob)
     data Bytes
+
+    /// MD5 hash of the save data — used for conflict detection across machines.
+    /// Two clients can compare hashes without downloading the full blob.
+    dataHash String @default("")
+
+    /// Human-readable identifier of the machine that last uploaded this save
+    /// (e.g. hostname). Shown in the conflict resolution UI so the user knows
+    /// which machine each version came from.
+    uploadedFrom String @default("")
 
     /// Client-reported modification time of the original file
     clientModifiedAt DateTime
