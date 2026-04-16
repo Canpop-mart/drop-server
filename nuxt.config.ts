@@ -96,6 +96,23 @@ export default defineNuxtConfig({
   routeRules: {
     "/api/**": { cors: true },
 
+    // Save uploads use JSON with base64-encoded data (~33% overhead),
+    // so they need a higher body limit than the default 10MB.
+    "/api/v1/client/saves/upload": {
+      security: {
+        requestSizeLimiter: {
+          maxRequestSizeInBytes: 75 * 1024 * 1024, // 75MB (50MB file + base64 overhead)
+        },
+      },
+    },
+    "/api/v1/client/saves/bulk-upload": {
+      security: {
+        requestSizeLimiter: {
+          maxRequestSizeInBytes: 200 * 1024 * 1024, // 200MB (multiple saves)
+        },
+      },
+    },
+
     // redirect old OIDC callback route
     "/auth/callback/oidc": {
       redirect: "/api/v1/auth/oidc/callback",
