@@ -55,6 +55,15 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     where: { gameId },
   });
 
+  // Include cached RA hashes so the client can verify ROMs without a separate call
+  const raHashes = await prisma.gameExternalHash.findMany({
+    where: { gameId },
+    select: { hash: true, label: true, patchUrl: true },
+  });
+
+  // Get RA console ID from the link (if available)
+  const raLink = externalLinks.find((l) => l.provider === "RetroAchievements");
+
   const result = {
     achievements: dedupedEntries.map(({ best, allIds }) => ({
       ...best,
@@ -62,6 +71,8 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
       unlocked: allIds.some((id) => unlockedSet.has(id)),
     })),
     externalLinks,
+    raHashes,
+    raConsoleId: raLink?.consoleId ?? null,
   };
 
   logger.info(

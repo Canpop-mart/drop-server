@@ -10,8 +10,27 @@ model GameExternalLink {
     game           Game                    @relation(fields: [gameId], references: [id], onDelete: Cascade)
     provider       ExternalAccountProvider
     externalGameId String
+    /// RA console ID (e.g. 21 = PS2, 2 = N64). Populated when linking.
+    consoleId      Int?
 
     @@unique([gameId, provider])
+    @@index([gameId])
+}
+
+/// Cached RetroAchievements hash entries for a game.
+/// Periodically refreshed from the RA API so the client can verify
+/// ROM integrity without hitting the RA API directly.
+model GameExternalHash {
+    id         String                  @id @default(uuid())
+    gameId     String
+    game       Game                    @relation(fields: [gameId], references: [id], onDelete: Cascade)
+    provider   ExternalAccountProvider
+    hash       String                  // MD5 hash of the recognised ROM
+    label      String                  @default("") // e.g. "Psychonauts (USA) (v1.0)"
+    patchUrl   String                  @default("") // URL to compatibility patch (if any)
+    cachedAt   DateTime                @default(now())
+
+    @@unique([gameId, provider, hash])
     @@index([gameId])
 }
 

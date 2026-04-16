@@ -47,7 +47,8 @@ export default defineEventHandler(async (h3) => {
     });
   }
 
-  // Create or update the game external link
+  // Create or update the game external link (including consoleId for hash verification)
+  const consoleId = gameInfo.ConsoleID ?? null;
   const link = await prisma.gameExternalLink.upsert({
     where: {
       gameId_provider: {
@@ -59,11 +60,53 @@ export default defineEventHandler(async (h3) => {
       gameId,
       provider: ExternalAccountProvider.RetroAchievements,
       externalGameId: String(body.raGameId),
+      consoleId,
     },
     update: {
       externalGameId: String(body.raGameId),
+      consoleId,
     },
   });
+
+  // Pre-fetch and cache game hashes for ROM verification
+  try {
+    const hashes = await raClient.getGameHashes(body.raGameId);
+    // Clear old hashes for this game
+    await prisma.gameExternalHash.deleteMany({
+      where: { gameId, provider: ExternalAccountProvider.RetroAchievements },
+    });
+    // Insert fresh hashes
+    for (const h of hashes) {
+      await prisma.gameExternalHash.upsert({
+        where: {
+          gameId_provider_hash: {
+            gameId,
+            provider: ExternalAccountProvider.RetroAchievements,
+            hash: h.MD5,
+          },
+        },
+        create: {
+          gameId,
+          provider: ExternalAccountProvider.RetroAchievements,
+          hash: h.MD5,
+          label: h.Name ?? "",
+          patchUrl: h.PatchUrl ?? "",
+        },
+        update: {
+          label: h.Name ?? "",
+          patchUrl: h.PatchUrl ?? "",
+          cachedAt: new Date(),
+        },
+      });
+    }
+    logger.info(
+      `Cached ${hashes.length} RA hashes for game ${gameId} (RA ${body.raGameId})`,
+    );
+  } catch (e) {
+    logger.warn(
+      `Failed to cache RA hashes for game ${gameId}: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 
   // Upsert achievement definitions
   let achievementCount = 0;

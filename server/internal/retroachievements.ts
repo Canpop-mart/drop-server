@@ -14,6 +14,8 @@ export interface RAGameSearchResult {
 export interface RAGameInfo {
   ID: number;
   Title: string;
+  ConsoleID: number;
+  ConsoleName: string;
   ImageIcon: string;
   ImageTitle: string;
   Achievements: Record<
@@ -53,6 +55,17 @@ export interface RAUserProgress {
   >;
   NumAwardedToUser: number;
   NumAwardedToUserHardcore: number;
+}
+
+export interface RAGameHashResult {
+  MD5: string;
+  Name: string;
+  Labels: string[];
+  PatchUrl: string | null;
+}
+
+export interface RAGameHashesResponse {
+  Results: RAGameHashResult[];
 }
 
 export interface RARecentAchievement {
@@ -296,6 +309,25 @@ export class RetroAchievementsClient {
    */
   async getGameInfo(raGameId: number): Promise<RAGameInfo | null> {
     return this.getGameAchievements(raGameId);
+  }
+
+  /**
+   * Get the supported game file hashes for a game.
+   * Returns the list of known ROM hashes that RetroAchievements recognises.
+   */
+  async getGameHashes(raGameId: number): Promise<RAGameHashResult[]> {
+    try {
+      const result = await this.makeRequest<RAGameHashesResponse>(
+        "API_GetGameHashes.php",
+        { i: raGameId },
+      );
+      return result.Results ?? [];
+    } catch (error) {
+      logger.warn(
+        `RA getGameHashes failed for game ${raGameId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return [];
+    }
   }
 
   /**

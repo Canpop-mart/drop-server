@@ -69,6 +69,7 @@ model Game {
   favoritedBy            FavoriteGame[]
   achievements           Achievement[]
   externalLinks          GameExternalLink[]
+  externalHashes         GameExternalHash[]
   leaderboards           Leaderboard[]
   showcases              ProfileShowcase[]
 
