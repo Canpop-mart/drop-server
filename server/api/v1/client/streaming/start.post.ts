@@ -4,10 +4,10 @@ import { defineClientEventHandler } from "~/server/internal/clients/event-handle
 import prisma from "~/server/internal/db/database";
 
 const StartBody = type({
-  gameId: "string | undefined",
-  sunshinePort: "number | undefined",
-  hostLocalIp: "string | undefined",
-  hostExternalIp: "string | undefined",
+  "gameId?": "string",
+  "sunshinePort?": "number",
+  "hostLocalIp?": "string",
+  "hostExternalIp?": "string",
 }).configure(throwingArktype);
 
 /**

@@ -5,7 +5,7 @@ import prisma from "~/server/internal/db/database";
 
 const HeartbeatBody = type({
   sessionId: "string",
-  status: "'Starting' | 'Ready' | 'Streaming' | undefined",
+  "status?": "'Starting' | 'Ready' | 'Streaming'",
 }).configure(throwingArktype);
 
 /**

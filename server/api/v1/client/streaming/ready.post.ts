@@ -5,7 +5,7 @@ import prisma from "~/server/internal/db/database";
 
 const ReadyBody = type({
   sessionId: "string",
-  pairingPin: "string | undefined",
+  "pairingPin?": "string",
 }).configure(throwingArktype);
 
 /**
