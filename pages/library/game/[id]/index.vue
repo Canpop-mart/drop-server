@@ -67,6 +67,8 @@
             <ArrowUpRightIcon class="-mr-0.5 h-5 w-5" aria-hidden="true" />
           </NuxtLink>
         </div>
+        <!-- Streaming availability indicator -->
+        <StreamAvailableBadge :game-id="game.id" />
       </div>
 
       <!-- Stat bar -->

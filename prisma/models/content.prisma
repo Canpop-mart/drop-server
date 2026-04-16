@@ -72,6 +72,7 @@ model Game {
   externalHashes         GameExternalHash[]
   leaderboards           Leaderboard[]
   showcases              ProfileShowcase[]
+  streamingSessions      StreamingSession[]
 
   @@unique([metadataSource, metadataId], name: "metadataKey")
   @@unique([libraryId, libraryPath], name: "libraryKey")

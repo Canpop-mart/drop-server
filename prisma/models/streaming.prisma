@@ -1,0 +1,51 @@
+/// Streaming session — tracks an active or recent Sunshine streaming session.
+/// The host client registers a session when it starts Sunshine, and remote
+/// clients use the server as a rendezvous to discover the host's connection
+/// details and pair with Sunshine.
+model StreamingSession {
+    id String @id @default(uuid())
+
+    /// The user who owns this streaming session
+    userId String
+    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    /// The client machine hosting the stream (running Sunshine)
+    hostClientId String
+    hostClient   Client @relation(fields: [hostClientId], references: [id], onDelete: Cascade)
+
+    /// Optional: the game being streamed (null = desktop stream)
+    gameId String?
+    game   Game?  @relation(fields: [gameId], references: [id], onDelete: SetNull)
+
+    /// Current state of the session
+    status StreamingStatus @default(Starting)
+
+    /// Sunshine web UI port on the host (default 47990)
+    sunshinePort Int @default(47990)
+
+    /// Host's local IP address for LAN connections
+    hostLocalIp String?
+
+    /// Host's external IP / hostname for remote connections
+    hostExternalIp String?
+
+    /// Sunshine PIN needed for initial Moonlight pairing (temporary, cleared after pair)
+    pairingPin String?
+
+    createdAt DateTime @default(now()) @db.Timestamptz(6)
+    updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+    /// Last heartbeat from the host client — used to detect stale sessions
+    lastHeartbeat DateTime @default(now()) @db.Timestamptz(6)
+
+    @@index([userId])
+    @@index([hostClientId])
+    @@index([status])
+}
+
+enum StreamingStatus {
+    Starting
+    Ready
+    Streaming
+    Stopped
+}

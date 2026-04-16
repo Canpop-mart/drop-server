@@ -17,4 +17,5 @@ model Client {
   lastConnected DateTime
 
   tokens APIToken[]
+  streamingSessions StreamingSession[]
 }
