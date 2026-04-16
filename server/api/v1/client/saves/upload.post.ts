@@ -1,15 +1,17 @@
-import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
+import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
 
 /**
  * Upload a save file to cloud storage.
  * Body: { gameId, filename, saveType, data (base64), clientModifiedAt (ISO string) }
  */
-export default defineClientEventHandler(async (h3, { fetchUser }) => {
-  const user = await fetchUser();
-  const body = await readBody(h3);
+export default defineEventHandler(async (h3) => {
+  const userId = await aclManager.getUserIdACL(h3, ["read"]);
+  if (!userId) throw createError({ statusCode: 403 });
 
+  const body = await readBody(h3);
   const { gameId, filename, saveType, data, clientModifiedAt } = body;
+
   if (!gameId || !filename || !saveType || !data) {
     throw createError({
       statusCode: 400,
@@ -24,10 +26,8 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     });
   }
 
-  // Decode base64 data
   const buffer = Buffer.from(data, "base64");
 
-  // Max 50MB per save file
   if (buffer.length > 50 * 1024 * 1024) {
     throw createError({
       statusCode: 413,
@@ -37,15 +37,11 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
 
   const result = await prisma.cloudSave.upsert({
     where: {
-      gameId_userId_filename: {
-        gameId,
-        userId: user.id,
-        filename,
-      },
+      gameId_userId_filename: { gameId, userId, filename },
     },
     create: {
       gameId,
-      userId: user.id,
+      userId,
       filename,
       saveType,
       size: buffer.length,
