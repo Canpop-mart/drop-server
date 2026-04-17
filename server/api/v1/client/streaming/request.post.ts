@@ -5,6 +5,7 @@ import prisma from "~/server/internal/db/database";
 
 const RequestBody = type({
   gameId: "string",
+  "targetClientId?": "string",
 }).configure(throwingArktype);
 
 /**
@@ -33,12 +34,25 @@ export default defineClientEventHandler(async (h3, { clientId, fetchUser }) => {
     data: { status: "Stopped" },
   });
 
+  // If targeting a specific device, verify it belongs to this user
+  if (body.targetClientId) {
+    const target = await prisma.client.findFirst({
+      where: { id: body.targetClientId, userId: user.id },
+    });
+    if (!target)
+      throw createError({
+        statusCode: 404,
+        statusMessage: "Target device not found.",
+      });
+  }
+
   // Create a new session in "Requested" state
-  // hostClientId is set to the requester for now — the accepting host will update it
+  // If a target is specified, hostClientId is set to that device so only it picks up the request.
+  // Otherwise, hostClientId is set to the requester as a placeholder — any host can accept.
   const session = await prisma.streamingSession.create({
     data: {
       userId: user.id,
-      hostClientId: clientId,
+      hostClientId: body.targetClientId ?? clientId,
       requestingClientId: clientId,
       gameId: body.gameId,
       status: "Requested",

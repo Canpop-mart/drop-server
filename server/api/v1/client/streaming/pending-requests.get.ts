@@ -23,11 +23,14 @@ export default defineClientEventHandler(
       data: { status: "Stopped" },
     });
 
-    // Find pending requests from OTHER clients for this user
+    // Find pending requests targeted at this device.
+    // When a stream is requested with a targetClientId, hostClientId is set to the target.
+    // Only show requests where this device is the intended host.
     const requests = await prisma.streamingSession.findMany({
       where: {
         userId: user.id,
         status: "Requested",
+        hostClientId: clientId,
         requestingClientId: { not: clientId },
       },
       include: {
