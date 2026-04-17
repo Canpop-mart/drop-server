@@ -29,7 +29,7 @@ export default defineClientEventHandler(async (h3, { clientId, fetchUser }) => {
     data: {
       hostClientId: clientId,
       status: "Starting",
-      sunshinePort: body.sunshinePort ?? 47990,
+      sunshinePort: body.sunshinePort ?? 47989,
       hostLocalIp: body.hostLocalIp ?? null,
       pairingPin: body.pairingPin ?? null,
       lastHeartbeat: new Date(),

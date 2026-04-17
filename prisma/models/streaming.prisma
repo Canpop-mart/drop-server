@@ -24,8 +24,8 @@ model StreamingSession {
     /// Current state of the session
     status StreamingStatus @default(Starting)
 
-    /// Sunshine web UI port on the host (default 47990)
-    sunshinePort Int @default(47990)
+    /// Sunshine GameStream protocol port on the host (default 47989)
+    sunshinePort Int @default(47989)
 
     /// Host's local IP address for LAN connections
     hostLocalIp String?

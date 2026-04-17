@@ -24,11 +24,18 @@ export default defineClientEventHandler(async (h3, { clientId }) => {
   }
 
   const result = await prisma.streamingSession.updateMany({
-    where: { id: body.sessionId, hostClientId: clientId },
+    where: {
+      id: body.sessionId,
+      hostClientId: clientId,
+      status: { not: "Stopped" },
+    },
     data,
   });
   if (result.count === 0)
-    throw createError({ statusCode: 404, statusMessage: "Session not found." });
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Session not found or already stopped.",
+    });
 
   return { ok: true };
 });

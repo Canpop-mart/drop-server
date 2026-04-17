@@ -44,7 +44,7 @@ export default defineClientEventHandler(async (h3, { clientId, fetchUser }) => {
       userId: user.id,
       hostClientId: clientId,
       gameId: body.gameId ?? null,
-      sunshinePort: body.sunshinePort ?? 47990,
+      sunshinePort: body.sunshinePort ?? 47989,
       hostLocalIp: body.hostLocalIp ?? null,
       hostExternalIp: body.hostExternalIp ?? null,
       status: "Starting",
