@@ -73,6 +73,7 @@ model Game {
   leaderboards           Leaderboard[]
   showcases              ProfileShowcase[]
   streamingSessions      StreamingSession[]
+  clientInstalls         ClientInstalledGame[]
 
   @@unique([metadataSource, metadataId], name: "metadataKey")
   @@unique([libraryId, libraryPath], name: "libraryKey")
