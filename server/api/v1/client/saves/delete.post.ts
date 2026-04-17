@@ -1,13 +1,13 @@
-import aclManager from "~/server/internal/acls";
+import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
 
 /**
  * Delete a cloud save.
  * Body: { id }
  */
-export default defineEventHandler(async (h3) => {
-  const userId = await aclManager.getUserIdACL(h3, ["read"]);
-  if (!userId) throw createError({ statusCode: 403 });
+export default defineClientEventHandler(async (h3, { fetchUser }) => {
+  const user = await fetchUser();
+  const userId = user.id;
 
   const body = await readBody(h3);
   const { id } = body;

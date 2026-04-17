@@ -1,4 +1,4 @@
-import aclManager from "~/server/internal/acls";
+import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
 
 /**
@@ -6,9 +6,9 @@ import prisma from "~/server/internal/db/database";
  * Query: ?id=xxx (cloud save ID)
  * Returns the raw binary data as base64.
  */
-export default defineEventHandler(async (h3) => {
-  const userId = await aclManager.getUserIdACL(h3, ["read"]);
-  if (!userId) throw createError({ statusCode: 403 });
+export default defineClientEventHandler(async (h3, { fetchUser }) => {
+  const user = await fetchUser();
+  const userId = user.id;
 
   const id = getQuery(h3).id as string;
   if (!id) throw createError({ statusCode: 400, statusMessage: "id required" });
