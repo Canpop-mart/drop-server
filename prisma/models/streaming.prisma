@@ -17,6 +17,10 @@ model StreamingSession {
     gameId String?
     game   Game?  @relation(fields: [gameId], references: [id], onDelete: SetNull)
 
+    /// The client that requested the stream (for push-based flow)
+    requestingClientId String?
+    requestingClient   Client? @relation("StreamingSessionRequester", fields: [requestingClientId], references: [id], onDelete: SetNull)
+
     /// Current state of the session
     status StreamingStatus @default(Starting)
 
@@ -44,6 +48,7 @@ model StreamingSession {
 }
 
 enum StreamingStatus {
+    Requested
     Starting
     Ready
     Streaming

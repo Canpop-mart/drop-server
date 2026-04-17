@@ -24,7 +24,7 @@ export default defineClientEventHandler(async (_h3, { fetchUser }) => {
   const sessions = await prisma.streamingSession.findMany({
     where: {
       userId: user.id,
-      status: { in: ["Starting", "Ready", "Streaming"] },
+      status: { in: ["Requested", "Starting", "Ready", "Streaming"] },
     },
     include: {
       hostClient: {

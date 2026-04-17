@@ -18,4 +18,5 @@ model Client {
 
   tokens APIToken[]
   streamingSessions StreamingSession[]
+  requestedStreams  StreamingSession[] @relation("StreamingSessionRequester")
 }
