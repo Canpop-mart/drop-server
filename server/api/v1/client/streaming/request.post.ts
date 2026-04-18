@@ -6,6 +6,8 @@ import prisma from "~/server/internal/db/database";
 const RequestBody = type({
   gameId: "string",
   "targetClientId?": "string",
+  /** JSON-serialized game config from the requesting client (widescreen, quality, etc.) */
+  "gameConfig?": "string",
 }).configure(throwingArktype);
 
 /**
@@ -56,6 +58,7 @@ export default defineClientEventHandler(async (h3, { clientId, fetchUser }) => {
       requestingClientId: clientId,
       gameId: body.gameId,
       status: "Requested",
+      gameConfig: body.gameConfig ?? null,
     },
   });
 

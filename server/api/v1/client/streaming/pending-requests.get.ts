@@ -50,6 +50,7 @@ export default defineClientEventHandler(
       game: r.game,
       requestingClient: r.requestingClient,
       createdAt: r.createdAt.toISOString(),
+      gameConfig: r.gameConfig ?? undefined,
     }));
   },
 );

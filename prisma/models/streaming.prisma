@@ -36,6 +36,11 @@ model StreamingSession {
     /// Sunshine PIN needed for initial Moonlight pairing (temporary, cleared after pair)
     pairingPin String?
 
+    /// JSON-serialized game configuration from the requesting client.
+    /// The host applies this as an override so the Deck's widescreen/quality
+    /// settings take effect during streaming.
+    gameConfig String?
+
     createdAt DateTime @default(now()) @db.Timestamptz(6)
     updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
