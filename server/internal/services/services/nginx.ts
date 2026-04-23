@@ -1,7 +1,7 @@
 import { spawn } from "child_process";
 import { Service } from "..";
-import { systemConfig } from "../../config/sys-conf";
 import path from "path";
+import os from "os";
 import fs from "fs";
 
 export const NGINX_SERVICE = new Service(
@@ -10,7 +10,11 @@ export const NGINX_SERVICE = new Service(
     const nginxConfig = path.resolve(
       process.env.NGINX_CONFIG ?? "./build/nginx.conf",
     );
-    const nginxPrefix = path.join(systemConfig.getDataFolder(), "nginx");
+    // Keep nginx state (pid, temp dirs) off the bind-mounted data volume —
+    // ownership on a host bind-mount doesn't always match the container's
+    // runtime uid, which leaves nginx unable to write into `/data/nginx`.
+    // tmpdir is always writable by the running user and ephemeral by design.
+    const nginxPrefix = path.join(os.tmpdir(), "drop-nginx");
     fs.mkdirSync(nginxPrefix, { recursive: true });
 
     return spawn("nginx", ["-c", nginxConfig, "-p", nginxPrefix]);
