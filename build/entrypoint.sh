@@ -24,10 +24,20 @@ if [ "$(id -u node)" != "$PUID" ] || [ "$(id -g node)" != "$PGID" ]; then
     usermod -o -u "$PUID" node
 fi
 
-# Runtime-writable paths. /library is intentionally shallow (`-R` omitted) —
-# recursive chown on a multi-TB game library is a non-starter, and Drop only
-# needs to create/modify content, not take ownership of existing files.
+# Runtime-writable paths. /data and /library are intentionally shallow (no `-R`)
+# for two reasons:
+#   1. /library is typically multi-TB of game files — recursive chown is a
+#      non-starter.
+#   2. /data routinely contains bind-mounted subtrees owned by OTHER uids
+#      (postgres data at uid 70, user caches, etc.). Recursing into /data
+#      sweeps those up and breaks the sibling services. Drop creates its own
+#      subdirs (gbe-cache, objects, certs) fresh — those inherit node:node
+#      via the process uid, no chown needed.
+#
+# Deployers who need to hand existing /data subdirs to the matched uid should
+# chown the specific subtree on the host, NOT mount a mixed-ownership tree
+# at /data.
 chown node:node /data /library 2>/dev/null || true
-chown -R node:node /app /data 2>/dev/null || true
+chown -R node:node /app 2>/dev/null || true
 
 exec gosu node sh /app/startup/launch.sh
