@@ -103,9 +103,12 @@ if (!article.value)
     fatal: true,
   });
 
-// Render markdown content
+// Render markdown content. News articles are admin-authored but still
+// untrusted from the browser's POV (any compromised admin account would
+// otherwise become a stored-XSS vector), so we run DOMPurify over the
+// micromark output before v-html. See composables/sanitize.ts.
 const renderedContent = computed(() => {
-  return micromark(article.value?.content ?? "");
+  return sanitizeHtml(micromark(article.value?.content ?? ""));
 });
 
 const formatDate = (date: string) => {

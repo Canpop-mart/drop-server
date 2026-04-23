@@ -657,7 +657,9 @@ if (!game) {
   throw createError({ statusCode: 404, message: t("library.notFound") });
 }
 
-const descriptionHTML = micromark(game.mDescription ?? "");
+// Author-controlled Markdown → sanitized HTML. micromark's output can contain
+// raw HTML, so we run it through DOMPurify before v-html (see composables/sanitize.ts).
+const descriptionHTML = sanitizeHtml(micromark(game.mDescription ?? ""));
 const averageRating = Math.round((rating._avg.mReviewRating ?? 0) * 5);
 const ratingArray = Array(5)
   .fill(null)

@@ -30,6 +30,16 @@ import { getSteamGridDBApiKey, sgdbGetBestLogoUrl } from "./steamgriddb";
  * Alternatively, we could use the link on a game's store page, but this redirects often to the publisher.
  */
 
+// 20s per-request cap with a single retry. Steam's store/api/community
+// endpoints are mostly-reliable but occasionally hang under load or return
+// transient 5xxs. Without a timeout an unresponsive endpoint would stall the
+// metadata scrape pipeline indefinitely.
+const STEAM_FETCH_OPTS = {
+  timeout: 20_000,
+  retry: 1,
+  retryDelay: 1_000,
+} as const;
+
 interface SteamItem {
   appid: string;
 }
@@ -191,6 +201,7 @@ export class SteamProvider implements MetadataProvider {
   async search(query: string): Promise<GameMetadataSearchResult[]> {
     const response = await $fetch<SteamSearchStub[]>(
       `https://steamcommunity.com/actions/SearchApps/${query}`,
+      STEAM_FETCH_OPTS,
     );
 
     if (!response || response.length === 0) {
@@ -288,7 +299,10 @@ export class SteamProvider implements MetadataProvider {
 
     const [tags, storePage] = await Promise.all([
       this._getTagNames(currentGame.tagids || []),
-      $fetch<string>(`https://store.steampowered.com/app/${id}/`),
+      $fetch<string>(
+        `https://store.steampowered.com/app/${id}/`,
+        STEAM_FETCH_OPTS,
+      ),
     ]);
 
     context?.logger.info(
@@ -493,7 +507,7 @@ export class SteamProvider implements MetadataProvider {
     });
 
     const url = `https://store.steampowered.com/developer/${encodeURIComponent(query)}/?${searchParams.toString()}`;
-    const response = await $fetch<string>(url);
+    const response = await $fetch<string>(url, STEAM_FETCH_OPTS);
 
     if (!response) {
       return undefined;
@@ -688,6 +702,7 @@ export class SteamProvider implements MetadataProvider {
 
     const request = await $fetch<SteamAppDetailsPackage>(
       `https://api.steampowered.com/IStoreBrowseService/GetItems/v1/?${searchParams.toString()}`,
+      STEAM_FETCH_OPTS,
     );
 
     const result = [];
@@ -795,6 +810,7 @@ export class SteamProvider implements MetadataProvider {
 
     const request = await $fetch<SteamTagsPackage>(
       `https://api.steampowered.com/IStoreService/GetTagList/v1/?${searchParams.toString()}`,
+      STEAM_FETCH_OPTS,
     );
 
     if (!request.response?.tags) return [];
@@ -828,6 +844,7 @@ export class SteamProvider implements MetadataProvider {
 
     const request = await $fetch<SteamWebAppDetailsPackage>(
       `https://store.steampowered.com/api/appdetails?${searchParams.toString()}`,
+      STEAM_FETCH_OPTS,
     );
 
     const appData = request[appid]?.data;

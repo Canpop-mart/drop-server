@@ -1,59 +1,57 @@
 import { createHash } from "node:crypto";
+import { type } from "arktype";
+import sanitizeFilename from "sanitize-filename";
+import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
+
+const MAX_SAVES_PER_REQUEST = 50;
+const MAX_SAVE_BYTES = 50 * 1024 * 1024; // 50MB
+const MAX_UPLOADED_FROM_LEN = 128;
+const MAX_FILENAME_LEN = 255;
+
+// Note: unlike bulk-download (which takes saveIds), bulk-upload accepts a list
+// of save BODIES. We arktype-validate the structure upfront so we never run
+// the loop on malformed input; per-save content checks (size, base64 decode)
+// still happen inline because those errors should become per-save `errors[]`
+// entries rather than a whole-batch 400.
+const BulkUploadBody = type({
+  gameId: "string.uuid",
+  "uploadedFrom?": `string <= ${MAX_UPLOADED_FROM_LEN}`,
+  saves: type({
+    filename: `0 < string <= ${MAX_FILENAME_LEN}`,
+    saveType: "'save' | 'state' | 'pc'",
+    data: "string", // base64-encoded; size validated after decode
+    clientModifiedAt: "string",
+    "dataHash?": "string",
+  })
+    .array()
+    .moreThanLength(0)
+    .atMostLength(MAX_SAVES_PER_REQUEST),
+}).configure(throwingArktype);
 
 /**
  * POST /api/v1/client/saves/bulk-upload
  *
  * Upload multiple save files in a single request.
  * Used during post-exit sync to push all changed saves at once.
- *
- * Body: {
- *   gameId: string,
- *   uploadedFrom: string,   // machine hostname for conflict UI
- *   saves: [{
- *     filename: string,
- *     saveType: string,      // "save" | "state" | "pc"
- *     data: string,          // base64
- *     clientModifiedAt: string,  // ISO timestamp
- *     dataHash?: string      // MD5 — computed server-side if omitted
- *   }]
- * }
- *
- * Response: {
- *   results: [{
- *     filename: string,
- *     id: string,
- *     size: number,
- *     dataHash: string,
- *     uploadedAt: string
- *   }],
- *   errors: [{
- *     filename: string,
- *     error: string
- *   }]
- * }
  */
 export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const user = await fetchUser();
   const userId = user.id;
 
-  const body = await readBody(h3);
+  const body = await readDropValidatedBody(h3, BulkUploadBody);
   const { gameId, uploadedFrom, saves } = body;
 
-  if (!gameId || !Array.isArray(saves) || saves.length === 0) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "gameId and saves[] are required",
-    });
-  }
-
-  if (saves.length > 50) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "Maximum 50 saves per bulk upload",
-    });
-  }
+  // Verify the game exists and the user has playtime against it (or at least
+  // that the game is a real game, not an arbitrary UUID). The FK on cloudSave
+  // would catch this too, but we want a clean 404 instead of a DB error.
+  const game = await prisma.game.findUnique({
+    where: { id: gameId },
+    select: { id: true },
+  });
+  if (!game)
+    throw createError({ statusCode: 404, statusMessage: "Game not found." });
 
   const results: Array<{
     filename: string;
@@ -67,32 +65,51 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
 
   for (const save of saves) {
     try {
-      const { filename, saveType, data, clientModifiedAt, dataHash } = save;
+      const { saveType, data, clientModifiedAt, dataHash } = save;
 
-      if (!filename || !saveType || !data) {
+      // Defense-in-depth: even though the filename is stored as an opaque DB
+      // key (never used as a filesystem path), pass it through sanitize-filename
+      // to strip path separators and control characters — if any downstream
+      // code ever decides to use it as a filename, it won't be a traversal vector.
+      const filename = sanitizeFilename(save.filename);
+      if (!filename) {
         errors.push({
-          filename: filename || "(unknown)",
-          error: "filename, saveType, and data are required",
-        });
-        continue;
-      }
-
-      if (saveType !== "save" && saveType !== "state" && saveType !== "pc") {
-        errors.push({
-          filename,
-          error: "saveType must be 'save', 'state', or 'pc'",
+          filename: save.filename,
+          error: "Filename reduced to empty after sanitization",
         });
         continue;
       }
 
       const buffer = Buffer.from(data, "base64");
 
-      if (buffer.length > 50 * 1024 * 1024) {
-        errors.push({ filename, error: "File too large (max 50MB)" });
+      if (buffer.length === 0) {
+        errors.push({ filename, error: "Decoded save is empty" });
+        continue;
+      }
+
+      if (buffer.length > MAX_SAVE_BYTES) {
+        errors.push({
+          filename,
+          error: `File too large (max ${MAX_SAVE_BYTES / (1024 * 1024)}MB)`,
+        });
         continue;
       }
 
       const hash = dataHash || createHash("md5").update(buffer).digest("hex");
+
+      // Parse client-supplied timestamp with sanity bounds. Reject future
+      // timestamps (> 5min clock skew tolerance) and reset-to-now anything
+      // older than year 2000. Invalid/missing falls back to server's now.
+      const parsedClientModified = new Date(clientModifiedAt);
+      const now = Date.now();
+      const maxAllowed = now + 5 * 60 * 1000;
+      const minAllowed = new Date("2000-01-01T00:00:00Z").getTime();
+      const clientModifiedAtSafe =
+        isNaN(parsedClientModified.getTime()) ||
+        parsedClientModified.getTime() > maxAllowed ||
+        parsedClientModified.getTime() < minAllowed
+          ? new Date(now)
+          : parsedClientModified;
 
       const result = await prisma.cloudSave.upsert({
         where: {
@@ -107,7 +124,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
           data: buffer,
           dataHash: hash,
           uploadedFrom: uploadedFrom || "",
-          clientModifiedAt: new Date(clientModifiedAt || Date.now()),
+          clientModifiedAt: clientModifiedAtSafe,
         },
         update: {
           data: buffer,
@@ -115,7 +132,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
           saveType,
           dataHash: hash,
           uploadedFrom: uploadedFrom || "",
-          clientModifiedAt: new Date(clientModifiedAt || Date.now()),
+          clientModifiedAt: clientModifiedAtSafe,
         },
       });
 

@@ -780,8 +780,12 @@ function coreMetadataUpdate_wrapper() {
     });
 }
 
+// Admin editor preview of game description Markdown. The preview is
+// v-html'd so it must match the sanitized form the runtime store page
+// will actually render — pipe micromark output through DOMPurify. See
+// composables/sanitize.ts.
 const descriptionHTML = computed(() =>
-  micromark(game.value?.mDescription ?? ""),
+  sanitizeHtml(micromark(game.value?.mDescription ?? "")),
 );
 const descriptionEditor = ref<HTMLTextAreaElement | undefined>();
 // 0 is not loading

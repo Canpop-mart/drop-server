@@ -72,9 +72,11 @@ export function defineClientEventHandler<T>(handler: EventHandlerFunction<T>) {
         where: { id: clientId },
       });
       if (!client)
-        throw new Error(
-          "client util fetch client broke - this should NOT happen",
-        );
+        throw createError({
+          statusCode: 401,
+          statusMessage:
+            "Client record not found for authenticated clientId. The client may have been deleted or unpaired.",
+        });
       return client;
     }
 
@@ -87,9 +89,11 @@ export function defineClientEventHandler<T>(handler: EventHandlerFunction<T>) {
       });
 
       if (!client)
-        throw new Error(
-          "client util fetch client broke - this should NOT happen",
-        );
+        throw createError({
+          statusCode: 401,
+          statusMessage:
+            "Client record not found for authenticated clientId. The client may have been deleted or unpaired.",
+        });
 
       return client.user;
     }

@@ -149,8 +149,11 @@ const toggleTag = (tag: string) => {
 };
 
 const formatExcerpt = (excerpt: string) => {
-  // Convert markdown to HTML, micromark is safe
-  return micromark(excerpt);
+  // micromark itself is safe against *malicious Markdown*, but it passes raw
+  // embedded HTML straight through. So a news article containing `<script>…`
+  // would execute here. Pipe through DOMPurify before v-html — see
+  // composables/sanitize.ts for the policy.
+  return sanitizeHtml(micromark(excerpt));
 };
 
 const filteredArticles = computed(() => {

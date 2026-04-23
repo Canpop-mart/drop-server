@@ -4,10 +4,16 @@ import { defineClientEventHandler } from "~/server/internal/clients/event-handle
 import prisma from "~/server/internal/db/database";
 import { mergeAndSumSessions } from "~/server/internal/playtime/merge-sessions";
 
+// Upper bound on a single play session's client-reported duration: 48 hours.
+// Any legitimate play session should be well under this. Client bugs (clock skew,
+// overflow, negative-to-unsigned cast) or deliberate tampering would push values
+// beyond this threshold — we clamp instead of trusting.
+const MAX_SESSION_DURATION_SECS = 48 * 60 * 60;
+
 const StopBody = type({
   sessionId: "string",
   /** Client-measured process duration — more accurate than server timestamps */
-  "clientDurationSecs?": "number",
+  "clientDurationSecs?": "number >= 0",
 }).configure(throwingArktype);
 
 /**
@@ -52,10 +58,21 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     Math.floor((Date.now() - session.startedAt.getTime()) / 1000),
     0,
   );
-  const durationSeconds =
+  const rawDuration =
     body.clientDurationSecs != null
       ? Math.max(body.clientDurationSecs, 0)
       : serverDuration;
+  // Sanity-clamp: no single session can exceed 48h, and no session can report more
+  // wall-clock time than has actually elapsed since it started. The elapsed bound
+  // closes the main inflation vector — a client can't claim 47h of play for a
+  // session that started 2min ago. +30s tolerance for network round-trip jitter.
+  const elapsedSinceStart =
+    Math.floor((Date.now() - session.startedAt.getTime()) / 1000) + 30;
+  const durationSeconds = Math.min(
+    rawDuration,
+    MAX_SESSION_DURATION_SECS,
+    Math.max(elapsedSinceStart, 0),
+  );
 
   // Compute endedAt from startedAt + duration (not now()) for consistency
   const endedAt = new Date(

@@ -85,4 +85,18 @@ ENV NGINX_CONFIG="/nginx.conf"
 # NGINX's port
 ENV PORT=4000
 
+# Drop root. The `node:lts-slim` base image ships a `node` user (uid 1000, gid 1000)
+# that exists for exactly this purpose. We chown the app tree so Prisma can write
+# its engine binaries / query-engine cache at runtime, and hand ownership of the
+# data + library mount points so bind-mounted volumes stay writable without
+# needing `--user root` overrides on deploy.
+#   * /app is rw (Prisma & Nuxt runtime cache)
+#   * /data is rw (application writes — sessions, uploads, logs)
+#   * /library is ro in most deployments but we chown it anyway so the rare
+#     "writable library" case (admin imports via copy) works without escalation.
+# Port 4000 is unprivileged; we do not need CAP_NET_BIND_SERVICE.
+RUN mkdir -p /data /library \
+    && chown -R node:node /app /data /library
+USER node
+
 CMD ["sh", "/app/startup/launch.sh"]

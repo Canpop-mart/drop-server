@@ -5,12 +5,23 @@ import type { ExternalAccountProvider } from "~/prisma/client/enums";
 import notificationSystem from "~/server/internal/notifications";
 import { logger } from "~/server/internal/logging";
 
+// Sanity bounds on client-reported achievement unlocks. A single report batch
+// can't exceed 500 unlocks (a single player legitimately unlocking 500
+// achievements in a single report is implausible even for completion dumps —
+// the client should chunk if it has more). We also reject unlockedAt dates
+// that are in the future or absurdly far in the past.
+const MAX_ACHIEVEMENTS_PER_REPORT = 500;
+const ALLOWED_CLOCK_SKEW_SECS = 5 * 60; // 5 min for client clock drift
+const OLDEST_PLAUSIBLE_UNLOCK = new Date("2000-01-01T00:00:00Z");
+
 const AchievementReport = type({
   achievements: type({
     externalId: "string",
     provider: "'Goldberg' | 'RetroAchievements'",
     unlockedAt: "string",
-  }).array(),
+  })
+    .array()
+    .atMostLength(MAX_ACHIEVEMENTS_PER_REPORT),
 });
 
 export default defineClientEventHandler(async (h3, { fetchUser }) => {
@@ -87,6 +98,21 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
 
     const wasAlreadyUnlocked = alreadyUnlockedIds.has(achievement.id);
 
+    // Validate the reported unlock timestamp. Client-supplied dates are clamped
+    // to [OLDEST_PLAUSIBLE_UNLOCK, now + ALLOWED_CLOCK_SKEW]. Out-of-range values
+    // are coerced to "now" rather than rejected — we already validated the
+    // unlock against the achievement definition, so the unlock itself is
+    // legitimate; we just don't trust the reported time.
+    const parsedUnlockedAt = new Date(report.unlockedAt);
+    const nowMs = Date.now();
+    const maxAllowedMs = nowMs + ALLOWED_CLOCK_SKEW_SECS * 1000;
+    const unlockedAt =
+      isNaN(parsedUnlockedAt.getTime()) ||
+      parsedUnlockedAt.getTime() > maxAllowedMs ||
+      parsedUnlockedAt < OLDEST_PLAUSIBLE_UNLOCK
+        ? new Date(nowMs)
+        : parsedUnlockedAt;
+
     await prisma.userAchievement.upsert({
       where: {
         userId_achievementId: {
@@ -97,7 +123,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
       create: {
         userId: user.id,
         achievementId: achievement.id,
-        unlockedAt: new Date(report.unlockedAt),
+        unlockedAt,
       },
       update: {},
     });

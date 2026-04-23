@@ -107,7 +107,16 @@ export class PCGamingWikiProvider implements MetadataProvider {
   ) {
     const finalURL = `https://www.pcgamingwiki.com/w/api.php?${query.toString()}`;
 
-    const response = await $fetch<T>(finalURL, options);
+    // 20s hard cap on third-party MediaWiki requests. Without this an un-
+    // responsive upstream would stall the whole scraping pipeline — admins
+    // queueing metadata imports behind it would time out at the HTTP layer
+    // before seeing any useful error.
+    const response = await $fetch<T>(finalURL, {
+      timeout: 20_000,
+      retry: 1,
+      retryDelay: 1_000,
+      ...options,
+    });
 
     return response;
   }

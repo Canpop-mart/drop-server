@@ -244,9 +244,11 @@ const isValidArticle = computed(
 );
 
 const markdownPreview = computed(() => {
-  // TODO: maybe?? add https://github.com/cure53/DOMPurify
-  // micromark says its safe, but this is straight html we are injecting
-  return micromark(newArticle.value.content);
+  // Admin composing a news article — micromark's "safe by default" claim only
+  // covers malicious Markdown; raw HTML in the source passes straight through
+  // to v-html. Pipe through DOMPurify so the preview matches what the
+  // sanitized article will actually render. See composables/sanitize.ts.
+  return sanitizeHtml(micromark(newArticle.value.content));
 });
 
 const file = ref<FileList | undefined>();

@@ -151,6 +151,12 @@ class ACLManager {
       },
     });
     if (!token) return undefined;
+    // Reject expired tokens. Null expiresAt = never expires; set = valid until.
+    // We enforce in JS rather than in the `where` clause so that we can surface
+    // a clean "expired" outcome if we ever want to log/metric separately from
+    // "not found".
+    if (token.expiresAt && token.expiresAt.getTime() < Date.now())
+      return undefined;
     if (!token.userId)
       throw new Error(
         "No userId on user or client token - is something broken?",
@@ -216,6 +222,8 @@ class ACLManager {
       where: { token: authorizationToken },
     });
     if (!token) return false;
+    // Reject expired tokens — same rule as getUserIdACL above.
+    if (token.expiresAt && token.expiresAt.getTime() < Date.now()) return false;
     if (token.mode != APITokenMode.System) return false;
 
     // If empty, we just want to check we are an admin *at all*, not specific ACLs
@@ -262,6 +270,9 @@ class ACLManager {
         where: { token: authorizationToken },
       });
       if (!token) return undefined;
+      // Reject expired tokens — same rule as the other token checks above.
+      if (token.expiresAt && token.expiresAt.getTime() < Date.now())
+        return undefined;
       return token.acls as GlobalACL[];
     }
 

@@ -5,28 +5,34 @@ import {
   detectEmulator,
   downloadGbeDlls,
   hasCachedDlls,
+  hasSteamDrmMarker,
   upgradeSseToGbe,
+  upgradeSteamDrmToGbe,
 } from "../../gbe";
 
 /**
- * Batch task: scans all games for SmartSteamEmu installations and replaces
- * them with GBE (Goldberg fork) for proper achievement support.
+ * Batch task: scans all games and upgrades them to GBE (Goldberg fork)
+ * for proper achievement support. Covers two cases:
  *
- * Steps:
- * 1. Ensures GBE DLLs are downloaded and cached
- * 2. Scans every game for SSE (steam_emu.ini next to Steam API DLL)
- * 3. For each SSE game: backs up, replaces DLL, converts config
+ *   1. SmartSteamEmu games (identified by steam_emu.ini next to the DLL)
+ *   2. Real Steam DRM games (identified by steamclient64.dll /
+ *      gameoverlayrenderer64.dll anywhere under the version directory,
+ *      plus a Steam AppID from the game's metadata)
  *
- * Safe to run multiple times — already-upgraded games are skipped.
+ * For each matching game the server writes steam_settings/ adjacent to
+ * the Steam API DLL. The DLL swap itself is performed client-side at
+ * launch time so existing manifest checksums stay valid.
+ *
+ * Safe to run multiple times — already-configured games are skipped.
  */
 export const upgradeAllToGbe = defineDropTask({
   buildId: () => `upgrade:all-to-gbe:${new Date().toISOString()}`,
-  name: "Upgrade All SSE Games to GBE",
+  name: "Upgrade All Games to GBE (SSE + Steam DRM)",
   acls: ["system:maintenance:read"],
   taskGroup: "upgrade:all-to-gbe",
 
   async run({ progress, logger }) {
-    logger.info("Starting batch SSE → GBE upgrade");
+    logger.info("Starting batch upgrade to GBE (SSE + Steam DRM)");
 
     // ── Step 1: Ensure GBE DLLs are cached ────────────────────────────────
     progress(5);
@@ -65,76 +71,135 @@ export const upgradeAllToGbe = defineDropTask({
       return;
     }
 
-    logger.info(`Scanning ${games.length} game(s) for SSE installations`);
+    logger.info(`Scanning ${games.length} game(s) for SSE and Steam DRM`);
+
+    const fs = await import("fs");
 
     let scanned = 0;
     let sseFound = 0;
-    let upgraded = 0;
-    let skipped = 0;
-    let failed = 0;
+    let sseUpgraded = 0;
+    let sseSkipped = 0;
+    let sseFailed = 0;
+    let drmFound = 0;
+    let drmUpgraded = 0;
+    let drmSkipped = 0;
+    let drmNoAppId = 0;
+    let drmFailed = 0;
 
     for (const game of games) {
       scanned++;
+      const reportProgress = () =>
+        progress(10 + Math.round((scanned / games.length) * 85));
 
       const versionDir = await resolveGameVersionDir(game.id);
       if (!versionDir) {
-        progress(10 + Math.round((scanned / games.length) * 85));
+        reportProgress();
         continue;
       }
 
       const detection = detectEmulator(versionDir);
-      if (!detection || detection.type !== "sse") {
-        // Not SSE — skip (already Goldberg or no emulator)
-        if (detection?.type === "goldberg") {
-          logger.info(`${game.mName} — already using Goldberg, skipping`);
-        }
-        progress(10 + Math.round((scanned / games.length) * 85));
+
+      if (detection?.type === "goldberg") {
+        logger.info(`${game.mName} — already using Goldberg, skipping`);
+        reportProgress();
         continue;
       }
 
-      sseFound++;
-      logger.info(
-        `${game.mName} — SSE detected (AppID: ${detection.sseConfig?.appId ?? "unknown"})`,
-      );
-
-      // Check if already upgraded (backup file exists)
-      const { dllDir, dllName } = detection;
-      const backupPath = `${dllDir}/${dllName}.sse_backup`;
-      const fs = await import("fs");
-      if (fs.existsSync(backupPath)) {
+      // ── SSE path ────────────────────────────────────────────────────────
+      if (detection?.type === "sse") {
+        sseFound++;
         logger.info(
-          `${game.mName} — backup already exists, skipping (already upgraded?)`,
+          `${game.mName} — SSE detected (AppID: ${detection.sseConfig?.appId ?? "unknown"})`,
         );
-        skipped++;
-        progress(10 + Math.round((scanned / games.length) * 85));
+
+        const { dllDir, dllName } = detection;
+        const backupPath = `${dllDir}/${dllName}.sse_backup`;
+        if (fs.existsSync(backupPath)) {
+          logger.info(
+            `${game.mName} — SSE backup already exists, skipping (already upgraded?)`,
+          );
+          sseSkipped++;
+          reportProgress();
+          continue;
+        }
+
+        const result = await upgradeSseToGbe(
+          versionDir,
+          game.id,
+          detection,
+          logger,
+        );
+        if (result.success) {
+          logger.info(`${game.mName} — ${result.message}`);
+          sseUpgraded++;
+        } else {
+          logger.info(`${game.mName} — FAILED: ${result.message}`);
+          sseFailed++;
+        }
+
+        reportProgress();
+        await new Promise((r) => setTimeout(r, 300));
         continue;
       }
 
-      // Upgrade
-      const result = await upgradeSseToGbe(
-        versionDir,
-        game.id,
-        detection,
-        logger,
-      );
+      // ── Steam DRM path ──────────────────────────────────────────────────
+      // Triggered when steamclient64.dll / gameoverlayrenderer64.dll is
+      // present alongside a bundled steam_api64.dll (legitimate Steam DRM,
+      // not SSE). AppID comes from the game's Steam metadata.
+      if (hasSteamDrmMarker(versionDir)) {
+        drmFound++;
 
-      if (result.success) {
-        logger.info(`${game.mName} — ${result.message}`);
-        upgraded++;
-      } else {
-        logger.info(`${game.mName} — FAILED: ${result.message}`);
-        failed++;
+        const meta = await prisma.game.findUnique({
+          where: { id: game.id },
+          select: { metadataSource: true, metadataId: true },
+        });
+        const steamAppId =
+          meta?.metadataSource === "Steam" ? meta.metadataId : null;
+
+        if (!steamAppId) {
+          logger.info(
+            `${game.mName} — Steam DRM detected but no Steam AppID in metadata, skipping`,
+          );
+          drmNoAppId++;
+          reportProgress();
+          continue;
+        }
+
+        logger.info(
+          `${game.mName} — Steam DRM detected (AppID: ${steamAppId})`,
+        );
+
+        const result = await upgradeSteamDrmToGbe(
+          versionDir,
+          game.id,
+          steamAppId,
+          logger,
+        );
+        if (result.success) {
+          if (result.message.includes("already")) {
+            drmSkipped++;
+          } else {
+            drmUpgraded++;
+          }
+          logger.info(`${game.mName} — ${result.message}`);
+        } else {
+          logger.info(`${game.mName} — FAILED: ${result.message}`);
+          drmFailed++;
+        }
+
+        reportProgress();
+        await new Promise((r) => setTimeout(r, 300));
+        continue;
       }
 
-      progress(10 + Math.round((scanned / games.length) * 85));
-
-      // Small delay between games to avoid hammering the filesystem
-      await new Promise((r) => setTimeout(r, 300));
+      // No emulator, no Steam DRM — skip silently
+      reportProgress();
     }
 
     logger.info(
-      `Done — scanned ${scanned}, found ${sseFound} SSE game(s): ` +
-        `${upgraded} upgraded, ${skipped} already done, ${failed} failed`,
+      `Done — scanned ${scanned}. ` +
+        `SSE: found ${sseFound}, upgraded ${sseUpgraded}, already done ${sseSkipped}, failed ${sseFailed}. ` +
+        `Steam DRM: found ${drmFound}, upgraded ${drmUpgraded}, already done ${drmSkipped}, skipped (no AppID) ${drmNoAppId}, failed ${drmFailed}.`,
     );
     progress(100);
   },

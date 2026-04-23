@@ -6,6 +6,7 @@ import sessionHandler from "~/server/internal/session";
 import authManager, {
   checkHashArgon2,
   checkHashBcrypt,
+  createHashArgon2,
 } from "~/server/internal/auth";
 import { logger } from "~/server/internal/logging";
 
@@ -83,7 +84,39 @@ export default defineEventHandler<{
         message: t("errors.auth.invalidUserOrPass"),
       });
 
-    // TODO: send user to forgot password screen or something to force them to change their password to new system
+    // Transparently migrate v1 (bcrypt) → v2 (argon2id). We have the plaintext
+    // password in memory from the request, so we rehash with the newer algorithm
+    // and persist the upgrade. If the migration write fails we still let the user
+    // in (they successfully proved their password); we just try again next signin.
+    try {
+      const argon2Hash = await createHashArgon2(body.password);
+      const res = await prisma.linkedAuthMec.updateMany({
+        where: {
+          userId: authMek.userId,
+          mec: AuthMec.Simple,
+        },
+        data: {
+          version: 2,
+          credentials: argon2Hash,
+        },
+      });
+      if (res.count === 0) {
+        logger.warn(
+          `[AUTH] Bcrypt→argon2 migration: no row updated for user ${authMek.userId} (race or deletion); will retry next signin.`,
+        );
+      } else {
+        logger.info(
+          `[AUTH] Migrated user ${authMek.userId} password from bcrypt (v1) to argon2 (v2).`,
+        );
+      }
+    } catch (err) {
+      logger.error(
+        `[AUTH] Bcrypt→argon2 migration failed for user ${authMek.userId}: ${
+          err instanceof Error ? err.message : String(err)
+        }. Signin continues; will retry next time.`,
+      );
+    }
+
     const result = await sessionHandler.signin(h3, authMek.userId, {
       rememberMe: body.rememberMe ?? false,
     });

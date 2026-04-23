@@ -64,15 +64,31 @@ export class SessionHandler {
 
     const expiresAt = this.createExipreAt(rememberMe);
 
-    const token =
-      this.getSessionToken(h3) ?? this.createSessionCookie(h3, expiresAt);
+    // Session fixation protection: if there was a pre-login session token (even an
+    // anonymous one), capture its authentication state before we rotate the cookie.
+    // A fresh token is always issued at sign-in so an attacker who planted a known
+    // session ID (via XSS on an adjacent site, shared browser, or cookie-tossing)
+    // cannot replay it after the user authenticates.
+    const previousToken = this.getSessionToken(h3);
+    const previousSession = previousToken
+      ? await this.sessionProvider.getSession(previousToken)
+      : undefined;
+
+    const token = await this.regenerateSessionToken(h3, expiresAt);
     const defaultSession: Session = {
       expiresAt,
       data,
     };
-    const session =
-      (await this.sessionProvider.getSession(token)) ?? defaultSession;
-    const wasAuthenticated = !!session.authenticated;
+    // Carry over session data (e.g., anti-CSRF nonce, i18n locale) from the pre-login
+    // session, but NOT the `authenticated` field — that must come from this sign-in.
+    const session: Session = previousSession
+      ? {
+          ...previousSession,
+          expiresAt,
+          data: { ...previousSession.data, ...data },
+        }
+      : defaultSession;
+    const wasAuthenticated = !!previousSession?.authenticated;
 
     // set authenticated session data
     session.authenticated = {
@@ -84,6 +100,21 @@ export class SessionHandler {
     if (oidcData) session.oidc = oidcData;
 
     // handle superlevel expiry
+    //
+    // NOTE (audit 2026-04, H3): `superleveledExpiry` is only integrity-
+    // protected by the session store, not by a per-field signature. If
+    // a future change swaps sessionProvider from the current in-memory /
+    // DB-backed implementation to a JWT-style transport where the client
+    // holds session state directly, this timestamp becomes client-editable
+    // and a caller could extend their superlevel window indefinitely.
+    //
+    // Deferred rather than fixed-in-place because the session layer today
+    // (see sessionProvider) is purely server-side: the client only holds
+    // an opaque token. So the attack surface for the foreseeable future is
+    // "an attacker with direct DB write access", at which point all bets
+    // are off. Revisit when migrating to JWT sessions — the fix is to sign
+    // `{ userId, superleveledExpiry }` with the server's session key and
+    // verify in `allowUserSuperlevel`.
     if (
       wasAuthenticated &&
       session.authenticated.level >= session.authenticated.requiredLevel
@@ -262,8 +293,38 @@ export class SessionHandler {
     const token = randomUUID();
     // TODO: we should probably switch to jwts to minimize possibility of someone
     // trying to guess a session id (jwts let us sign + encrypt stuff in a std way)
-    setCookie(h3, dropTokenCookieName, token, { expires: expiresAt });
+    setCookie(h3, dropTokenCookieName, token, {
+      expires: expiresAt,
+      httpOnly: true,
+      // In dev (http://localhost) the `secure` flag would prevent the cookie from being
+      // sent, breaking local testing. In production (NODE_ENV=production) we enforce it.
+      secure: process.env.NODE_ENV === "production",
+      // Lax allows the cookie to ride top-level navigations from other sites (so the user
+      // can click an external link and stay logged in) while still blocking cross-site
+      // CSRF from form POSTs / XHR. Strict would be safer but breaks OIDC callbacks and
+      // any external → internal navigation flow.
+      sameSite: "lax",
+      path: "/",
+    });
     return token;
+  }
+
+  /**
+   * Revoke the current session token and issue a fresh one. Used on login and
+   * privilege-level changes to prevent session fixation — an attacker who planted
+   * a pre-login token cannot hijack the authenticated session because the cookie
+   * is replaced.
+   *
+   * The previous session (if any) is removed from the provider atomically with
+   * the new token being issued. Caller is responsible for re-populating any data
+   * they want to carry over.
+   */
+  async regenerateSessionToken(h3: H3Event, expiresAt: Date): Promise<string> {
+    const previousToken = this.getSessionToken(h3);
+    if (previousToken) {
+      await this.sessionProvider.removeSession(previousToken);
+    }
+    return this.createSessionCookie(h3, expiresAt);
   }
 }
 

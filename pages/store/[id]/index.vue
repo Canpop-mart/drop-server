@@ -371,7 +371,10 @@ const { game, rating, sizes, platforms } = await $dropFetch(
   `/api/v1/games/${gameId}`,
 );
 const isClient = isClientRequest();
-const descriptionHTML = micromark(game.mDescription);
+// Sanitize micromark output before letting v-html render it. See
+// composables/sanitize.ts for the rationale — mDescription is author-controlled
+// Markdown and micromark lets raw HTML pass through.
+const descriptionHTML = sanitizeHtml(micromark(game.mDescription));
 const averageRating = Math.round((rating._avg.mReviewRating ?? 0) * 5);
 const ratingArray = Array(5)
   .fill(null)

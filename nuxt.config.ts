@@ -94,7 +94,9 @@ export default defineNuxtConfig({
   },
 
   routeRules: {
-    "/api/**": { cors: true },
+    // CORS is handled by nuxt-security's corsHandler (see security block below).
+    // The Tauri client uses the server:// custom protocol which bypasses CORS
+    // entirely; CORS only gates browser-based callers.
 
     // Save uploads use JSON with base64-encoded data (~33% overhead),
     // so they need a higher body limit than the default 10MB.
@@ -109,6 +111,61 @@ export default defineNuxtConfig({
       security: {
         requestSizeLimiter: {
           maxRequestSizeInBytes: 200 * 1024 * 1024, // 200MB (multiple saves)
+        },
+      },
+    },
+
+    // Strict rate limits on authentication endpoints — 10 attempts per minute per IP.
+    // This is more than a human will ever hit but tight enough to blunt credential
+    // stuffing and TOTP brute-force. Legitimate users who trigger it can retry after
+    // a minute; the nuxt-security limiter responds with 429 + Retry-After.
+    "/api/v1/auth/signin/**": {
+      security: {
+        rateLimiter: {
+          tokensPerInterval: 10,
+          interval: 60000, // 1 minute
+        },
+      },
+    },
+    "/api/v1/auth/signup/**": {
+      security: {
+        rateLimiter: {
+          tokensPerInterval: 5,
+          interval: 60000,
+        },
+      },
+    },
+    "/api/v1/auth/mfa/**": {
+      security: {
+        rateLimiter: {
+          tokensPerInterval: 10,
+          interval: 60000,
+        },
+      },
+    },
+    "/api/v1/auth/passkey/**": {
+      security: {
+        rateLimiter: {
+          tokensPerInterval: 10,
+          interval: 60000,
+        },
+      },
+    },
+    // Search + metadata scrape: cap at 30/min per IP. High enough for normal browsing,
+    // low enough to prevent scraper-amplification (us hitting Steam/GiantBomb in a loop).
+    "/api/v1/store/search": {
+      security: {
+        rateLimiter: {
+          tokensPerInterval: 30,
+          interval: 60000,
+        },
+      },
+    },
+    "/api/v1/admin/metadata/**": {
+      security: {
+        rateLimiter: {
+          tokensPerInterval: 20,
+          interval: 60000,
         },
       },
     },
@@ -264,10 +321,15 @@ export default defineNuxtConfig({
   },
 
   security: {
+    // Subresource Integrity: disabled because Nuxt injects inline module scripts
+    // that don't have stable hashes. Revisit when SRI support lands in nuxt-security
+    // for module preloads.
     sri: false,
     headers: {
       contentSecurityPolicy: {
-        "upgrade-insecure-requests": false,
+        // In production force every http:// subresource to https://. In dev we
+        // allow http because vite's HMR and localhost metadata scrapes are http.
+        "upgrade-insecure-requests": process.env.NODE_ENV === "production",
 
         "img-src": [
           "'self'",
@@ -278,19 +340,84 @@ export default defineNuxtConfig({
           "https://*.steamstatic.com",
           "https://media.retroachievements.org",
         ],
-        "script-src": ["'self'", "https:", "'unsafe-inline'", "'unsafe-eval'"],
+        // Script sources:
+        //   - 'self' and Nuxt's own inline scripts (Nuxt generates an inline
+        //     bootstrap blob that can't be externalized). In dev, 'unsafe-eval'
+        //     is required for Vite HMR. In production we drop 'unsafe-eval' and
+        //     keep a nonce-compatible baseline.
+        //   - The 'strict-dynamic' keyword would be ideal but requires every
+        //     Nuxt-generated script to carry a matching nonce, which nuxt-security
+        //     can add but requires additional wiring (routeRules). TODO for next
+        //     pass: move to nonce-based CSP with strict-dynamic.
+        "script-src":
+          process.env.NODE_ENV === "production"
+            ? ["'self'", "'unsafe-inline'"]
+            : ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        // Default-deny fetch sources; explicit allow list for what we actually call.
+        "connect-src": [
+          "'self'",
+          "https://api.steampowered.com",
+          "https://store.steampowered.com",
+          "https://steamcommunity.com",
+          "https://www.pcgamingwiki.com",
+          "https://www.giantbomb.com",
+          "https://retroachievements.org",
+          "https://*.retroachievements.org",
+        ],
+        // Block Flash / legacy plugins outright.
+        "object-src": ["'none'"],
+        // Only allow framing from same origin (the Tauri client iframes server://
+        // which resolves to this origin via the custom protocol proxy).
+        "frame-ancestors": ["'self'"],
+        // Prevent <base href> injection from redirecting relative URLs.
+        "base-uri": ["'self'"],
+        // Block form POSTs to other origins.
+        "form-action": ["'self'"],
       },
-      strictTransportSecurity: false,
+      // Enable HSTS in production with a 6-month max-age and preload readiness.
+      // Disabled in dev because localhost is http://.
+      strictTransportSecurity:
+        process.env.NODE_ENV === "production"
+          ? {
+              maxAge: 15552000, // 6 months
+              includeSubdomains: true,
+              preload: false, // flip to true once you're ready to submit to hstspreload.org
+            }
+          : false,
+      // Prevent MIME sniffing.
+      xContentTypeOptions: "nosniff",
+      // Deny framing entirely by header (CSP frame-ancestors above is the modern
+      // equivalent; this header is the legacy fallback).
+      xFrameOptions: "SAMEORIGIN",
+      // Minimise referrer leakage to cross-origin destinations.
+      referrerPolicy: "strict-origin-when-cross-origin",
     },
+    // Global rate limiter — 1000 req/min. Per-endpoint stricter limits are applied
+    // via routeRules below (auth endpoints get much tighter limits).
     rateLimiter: {
       tokensPerInterval: 1000,
       interval: 60000, // 1 minute
       headers: true,
     },
+    // xssValidator off: nuxt-security's xss validator scans request bodies with
+    // a legacy HTML sanitizer that false-positives on Markdown content we legitimately
+    // accept (game descriptions, news articles). Content sanitization is done at
+    // render time with DOMPurify instead (see components that use v-html).
     xssValidator: false,
     requestSizeLimiter: {
       maxRequestSizeInBytes: 10 * 1024 * 1024, // 10MB
       maxUploadFileRequestInBytes: 50 * 1024 * 1024, // 50MB
+    },
+    // Restrict CORS origins in production. In dev, allow all (localhost testing).
+    // The Tauri client uses the server:// protocol which doesn't trigger CORS at
+    // all (requests are proxied natively), so this only affects web-browser clients.
+    corsHandler: {
+      origin:
+        process.env.NODE_ENV === "production"
+          ? (process.env.ALLOWED_ORIGINS?.split(",").map((o) => o.trim()) ?? [])
+          : "*",
+      methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+      credentials: true,
     },
   },
 });

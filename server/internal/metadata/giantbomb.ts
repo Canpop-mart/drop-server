@@ -130,7 +130,15 @@ export class GiantBombProvider implements MetadataProvider {
 
     const finalURL = `https://www.giantbomb.com/api/${resource}/${url}?${queryString}`;
 
-    const response = await $fetch<GiantBombResponseType<T>>(finalURL, options);
+    // 20s hard cap so a hung GiantBomb endpoint doesn't freeze the scraping
+    // pipeline. Retry once on transient failures — GiantBomb has been known
+    // to 502 under spiky load.
+    const response = await $fetch<GiantBombResponseType<T>>(finalURL, {
+      timeout: 20_000,
+      retry: 1,
+      retryDelay: 1_000,
+      ...options,
+    });
     return response;
   }
 

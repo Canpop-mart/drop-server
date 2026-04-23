@@ -18,7 +18,25 @@ export default defineEventHandler(async (h3) => {
       statusMessage: "Cannot delete system user.",
     });
 
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  // Explicit select to prevent leaking sensitive relations (authMecs.credentials,
+  // mfas.credentials, tokens.token) if the User model grows new fields in the future.
+  // Admin tooling only needs the user's profile + admin status; credentials live in
+  // linkedAuthMec / linkedMFAMec and are accessed via their own dedicated endpoints.
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      username: true,
+      displayName: true,
+      email: true,
+      admin: true,
+      enabled: true,
+      profilePictureObjectId: true,
+      bannerObjectId: true,
+      bio: true,
+      profileTheme: true,
+    },
+  });
   if (!user)
     throw createError({ statusCode: 404, statusMessage: "User not found." });
 

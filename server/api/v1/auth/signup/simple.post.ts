@@ -80,8 +80,18 @@ export default defineEventHandler<{
           },
         },
       },
+      // Select only what the caller needs. Previous response returned the full
+      // User record including email, admin status, bannerObjectId, profileTheme
+      // etc. Frontend only needs the userId + displayName to redirect / greet.
       select: {
-        user: true,
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            profilePictureObjectId: true,
+          },
+        },
       },
     }),
     prisma.invitation.deleteMany({ where: { id: user.invitation } }),

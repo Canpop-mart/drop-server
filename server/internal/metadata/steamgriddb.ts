@@ -32,9 +32,20 @@ export function getSteamGridDBApiKey(): string | null {
 
 async function sgdbFetch<T>(path: string, apiKey: string): Promise<T | null> {
   try {
-    const res = await fetch(`${SGDB_BASE}${path}`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
+    // 15s hard cap — SGDB is used at scrape time for cover/logo art and is
+    // called N-times-per-game, so we don't want a hung request to stall a
+    // whole library import.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15_000);
+    let res: Response;
+    try {
+      res = await fetch(`${SGDB_BASE}${path}`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
     if (!res.ok) {
       if (res.status === 404) return null;
       logger.warn(`SteamGridDB API error: ${res.status} for ${path}`);

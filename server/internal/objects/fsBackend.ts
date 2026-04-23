@@ -170,7 +170,11 @@ export class FsObjectBackend extends ObjectBackend {
       return undefined;
     }
     await store.save(id, hashResult);
-    return typeof hashResult;
+    // Previously `return typeof hashResult;` — that returns the literal
+    // string "string" rather than the computed hash, so every caller saw
+    // "string" instead of the actual object hash. Callers downstream would
+    // compare that to expected hashes and always mismatch.
+    return hashResult;
   }
 
   async listAll(): Promise<string[]> {

@@ -219,6 +219,10 @@ export class IGDBProvider implements MetadataProvider {
         Authorization: `Bearer ${this.accessToken}`,
         "content-type": "text/plain",
       },
+      // 20s hard cap per IGDB request. The outer loop retries on 429; this
+      // timeout catches a different failure mode — a hung socket with no
+      // response at all.
+      timeout: 20_000,
     };
     // Retry with exponential backoff on 429 (rate limit)
     const maxRetries = 3;

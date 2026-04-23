@@ -78,6 +78,11 @@ model Game {
   @@unique([metadataSource, metadataId], name: "metadataKey")
   @@unique([libraryId, libraryPath], name: "libraryKey")
   @@index([mName(ops: raw("gist_trgm_ops(siglen=32)"))], type: Gist)
+  // Hot query on landing/home pages: `WHERE featured = true ORDER BY created`.
+  // Without this, every featured-games fetch scans the whole Game table.
+  // (libraryId is already covered by the (libraryId, libraryPath) unique
+  // index — Postgres uses its leading column for equality lookups.)
+  @@index([featured])
 }
 
 model GameTag {
@@ -143,6 +148,14 @@ model GameVersion {
 
   requiredContent  GameVersion[] @relation(name: "requiredContent")
   requiringContent GameVersion[] @relation(name: "requiredContent")
+
+  // PostgreSQL does not auto-index FK columns. Without this, cascade deletes
+  // from Game and every "list versions for this game" query full-scans the
+  // table. The compound (gameId, versionIndex DESC) also covers the
+  // "latest version for this game" lookup used at download time, which is a
+  // hot query on the client sync path.
+  @@index([gameId])
+  @@index([gameId, versionIndex(sort: Desc)])
 }
 
 model SetupConfiguration {

@@ -735,10 +735,32 @@ class LibraryManager {
                 versionPath,
               );
               if (versionDir) {
-                const { autoUpgradeSseIfNeeded } = await import(
-                  "~/server/internal/gbe"
-                );
+                const { autoUpgradeSseIfNeeded, autoUpgradeSteamDrmIfNeeded } =
+                  await import("~/server/internal/gbe");
+
+                // Pass 1: SSE (cracked) games → GBE. DLL swap triggers when
+                // steam_emu.ini is adjacent to the Steam API DLL.
                 await autoUpgradeSseIfNeeded(versionDir, gameId, logger);
+
+                // Pass 2: Legitimate Steam DRM → GBE. Triggers when
+                // steamclient64.dll / gameoverlayrenderer64.dll markers are
+                // present AND we have a Steam AppID from metadata. Skipped
+                // if pass 1 already wrote steam_settings/ next to the DLL.
+                const steamMeta = await prisma.game.findUnique({
+                  where: { id: gameId },
+                  select: { metadataSource: true, metadataId: true },
+                });
+                const steamAppId =
+                  steamMeta?.metadataSource === "Steam"
+                    ? (steamMeta.metadataId ?? undefined)
+                    : undefined;
+                await autoUpgradeSteamDrmIfNeeded(
+                  versionDir,
+                  gameId,
+                  steamAppId,
+                  logger,
+                );
+
                 await setupGoldberg(gameId, versionDir);
               }
             } catch (e) {
@@ -965,6 +987,113 @@ class LibraryManager {
         },
       },
     });
+  }
+
+  /**
+   * Regenerates the droplet manifest + file list for a game's latest
+   * version and persists them. Needed after any server-side mutation of
+   * the on-disk files (e.g. admin-triggered GBE DLL swap) so the depot's
+   * download checksums match what's actually on disk.
+   *
+   * Multi-disc games are currently not supported — the staging symlink
+   * tree would need re-validation; callers should re-import instead.
+   *
+   * Returns true on success, false if the regen was skipped or failed
+   * (check the logger for details).
+   */
+  async regenerateManifestForLatestVersion(
+    gameId: string,
+    taskLogger: { info: (msg: string) => void; warn: (msg: string) => void },
+  ): Promise<boolean> {
+    const game = await prisma.game.findUnique({
+      where: { id: gameId },
+      select: {
+        mName: true,
+        libraryId: true,
+        libraryPath: true,
+        discFolders: true,
+        versions: {
+          orderBy: { versionIndex: "desc" },
+          take: 1,
+          select: { versionId: true, versionPath: true },
+        },
+      },
+    });
+
+    if (!game || !game.libraryId) {
+      taskLogger.warn(
+        `Manifest regen: game ${gameId} not found or has no libraryId`,
+      );
+      return false;
+    }
+
+    if (game.versions.length === 0) {
+      taskLogger.warn(`Manifest regen: ${game.mName} has no versions`);
+      return false;
+    }
+
+    const library = this.libraries.get(game.libraryId);
+    if (!library) {
+      taskLogger.warn(
+        `Manifest regen: library ${game.libraryId} not loaded — server restart may be needed`,
+      );
+      return false;
+    }
+
+    const version = game.versions[0];
+    if (!version.versionPath) {
+      taskLogger.warn(
+        `Manifest regen: latest version of ${game.mName} has no versionPath`,
+      );
+      return false;
+    }
+
+    const isMultiDisc = game.discFolders && game.discFolders.length > 1;
+    if (isMultiDisc) {
+      taskLogger.warn(
+        `Manifest regen: ${game.mName} is multi-disc — not supported, please re-import manually`,
+      );
+      return false;
+    }
+
+    taskLogger.info(
+      `Regenerating manifest for ${game.mName} (version ${version.versionPath})...`,
+    );
+
+    try {
+      const manifest = await library.generateDropletManifest(
+        game.libraryPath,
+        version.versionPath,
+        () => {
+          /* no progress reporting from admin-task context */
+        },
+        (msg) => taskLogger.info(msg),
+      );
+      const fileList = await library.versionReaddir(
+        game.libraryPath,
+        version.versionPath,
+      );
+
+      const res = await prisma.gameVersion.updateMany({
+        where: { versionId: version.versionId },
+        data: {
+          dropletManifest: manifest,
+          fileList,
+        },
+      });
+      if (res.count === 0) {
+        taskLogger.warn(
+          `Manifest regen: version ${version.versionId} was not found at update time`,
+        );
+        return false;
+      }
+
+      taskLogger.info(`Manifest regenerated for ${game.mName}`);
+      return true;
+    } catch (e) {
+      taskLogger.warn(`Manifest regen failed for ${game.mName}: ${e}`);
+      return false;
+    }
   }
 }
 

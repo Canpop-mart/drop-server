@@ -1,5 +1,15 @@
+import { type } from "arktype";
+import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
+
+const BulkDownloadBody = type({
+  // UUIDs; arktype's `uuid` narrowing rejects malformed strings upfront so we
+  // don't run unvalidated input through a Prisma `in:` query.
+  saveIds: "string.uuid[] >= 1",
+}).configure(throwingArktype);
+
+const MAX_SAVES_PER_REQUEST = 50;
 
 /**
  * POST /api/v1/client/saves/bulk-download
@@ -7,7 +17,7 @@ import prisma from "~/server/internal/db/database";
  * Download multiple save files in a single request.
  * Used during pre-launch sync to fetch all cloud saves that need downloading.
  *
- * Body: { saveIds: string[] }
+ * Body: { saveIds: string[] }  // each must be a UUID
  *
  * Response: {
  *   saves: [{
@@ -23,20 +33,13 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const user = await fetchUser();
   const userId = user.id;
 
-  const body = await readBody(h3);
+  const body = await readDropValidatedBody(h3, BulkDownloadBody);
   const { saveIds } = body;
 
-  if (!Array.isArray(saveIds) || saveIds.length === 0) {
+  if (saveIds.length > MAX_SAVES_PER_REQUEST) {
     throw createError({
       statusCode: 400,
-      statusMessage: "saveIds[] is required and must be non-empty",
-    });
-  }
-
-  if (saveIds.length > 50) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "Maximum 50 saves per bulk download",
+      statusMessage: `Maximum ${MAX_SAVES_PER_REQUEST} saves per bulk download`,
     });
   }
 

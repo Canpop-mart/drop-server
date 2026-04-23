@@ -311,8 +311,18 @@ function findAndCacheDlls(dir: string): void {
 /** Files that get backed up before replacement. */
 const BACKUP_SUFFIX = ".sse_backup";
 
+/** Suffix used when backing up a legitimate Steam DLL before the GBE swap. */
+const STEAM_DRM_BACKUP_SUFFIX = ".steam_backup";
+
 /** The DLL filenames we look for (same as client-side). */
 const STEAM_API_DLLS = ["steam_api64.dll", "steam_api.dll", "libsteam_api.so"];
+
+/**
+ * Files whose presence near a game binary strongly signals real Steam DRM.
+ * These are shipped by Steam itself when a game is built with Steam DRM
+ * wrappers, and do not appear in SSE/Goldberg-cracked releases.
+ */
+const STEAM_DRM_MARKERS = ["steamclient64.dll", "gameoverlayrenderer64.dll"];
 
 /**
  * Recursively finds the directory containing a Steam API DLL within a
@@ -361,6 +371,50 @@ function findSteamApiDllRecursive(
   }
 
   return null;
+}
+
+/**
+ * Returns true if `rootDir` (recursively, bounded depth) contains any
+ * file from STEAM_DRM_MARKERS. Used as a cheap signal that a game ships
+ * with real Steam DRM rather than an emulator.
+ */
+export function hasSteamDrmMarker(rootDir: string): boolean {
+  return hasSteamDrmMarkerRecursive(rootDir, 0, 5);
+}
+
+function hasSteamDrmMarkerRecursive(
+  dir: string,
+  depth: number,
+  maxDepth: number,
+): boolean {
+  if (depth > maxDepth) return false;
+
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    if (STEAM_DRM_MARKERS.includes(entry.name.toLowerCase())) return true;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (
+      hasSteamDrmMarkerRecursive(
+        path.join(dir, entry.name),
+        depth + 1,
+        maxDepth,
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /** Detected emulator type for a game directory. */
@@ -482,6 +536,110 @@ export function parseSseIni(iniPath: string): SseConfig | null {
   return { appId, userName, language, dlcs, interfaces };
 }
 
+// ── Auto-upgrade helpers (shared between SSE and Steam-DRM paths) ────────
+
+/**
+ * Options for swapping a Steam API DLL with the GBE equivalent and
+ * writing the `steam_settings/` config directory next to it.
+ */
+interface SwapOptions {
+  dllDir: string;
+  dllName: string;
+  appId: string;
+  backupSuffix: string;
+  /** Optional SSE [Interfaces] block, written as steam_interfaces.txt. */
+  interfaces?: Map<string, string>;
+  /** Optional SSE [DLC] block, written as dlc.txt. */
+  dlcs?: Map<string, string>;
+}
+
+/**
+ * Ensures a cached GBE DLL, backs up the original in place, swaps the DLL,
+ * and writes `steam_settings/{steam_appid.txt, configs.user.ini}` plus any
+ * extras provided by the caller.
+ *
+ * Returns true on success. Logs and returns false on recoverable failures
+ * so callers can decide whether to continue the import.
+ */
+async function swapDllAndWriteSettings(
+  opts: SwapOptions,
+  logger: { info: (msg: string) => void; warn: (msg: string) => void },
+): Promise<boolean> {
+  const arch = DLL_TO_ARCH[opts.dllName.toLowerCase()];
+  if (!arch) {
+    logger.warn(`[GBE] Unknown DLL: ${opts.dllName}, skipping swap`);
+    return false;
+  }
+
+  if (!hasCachedDlls(arch)) {
+    logger.info(`[GBE] No cached GBE DLL for ${arch}, downloading...`);
+    const tag = await downloadGbeDlls();
+    if (!tag || !hasCachedDlls(arch)) {
+      logger.warn(
+        `[GBE] Failed to download GBE DLLs. Run "Download GBE" task manually.`,
+      );
+      return false;
+    }
+    logger.info(`[GBE] Downloaded GBE release ${tag}`);
+  }
+
+  const gbeDllPath = getCachedDllPath(arch)!;
+  const dllPath = path.join(opts.dllDir, opts.dllName);
+  const backupPath = dllPath + opts.backupSuffix;
+
+  if (fs.existsSync(dllPath) && !fs.existsSync(backupPath)) {
+    fs.copyFileSync(dllPath, backupPath);
+    logger.info(
+      `[GBE] Backed up ${opts.dllName} → ${opts.dllName}${opts.backupSuffix}`,
+    );
+  }
+
+  fs.copyFileSync(gbeDllPath, dllPath);
+  logger.info(`[GBE] Replaced ${opts.dllName} with GBE version`);
+
+  const steamSettings = path.join(opts.dllDir, "steam_settings");
+  fs.mkdirSync(steamSettings, { recursive: true });
+
+  fs.writeFileSync(
+    path.join(steamSettings, "steam_appid.txt"),
+    opts.appId,
+    "utf-8",
+  );
+
+  if (opts.interfaces && opts.interfaces.size > 0) {
+    const lines = Array.from(opts.interfaces.values());
+    fs.writeFileSync(
+      path.join(steamSettings, "steam_interfaces.txt"),
+      lines.join("\n") + "\n",
+      "utf-8",
+    );
+    logger.info(
+      `[GBE] Wrote steam_interfaces.txt (${lines.length} interfaces)`,
+    );
+  }
+
+  if (opts.dlcs && opts.dlcs.size > 0) {
+    const dlcLines = Array.from(opts.dlcs.entries())
+      .map(([id, name]) => `${id}=${name}`)
+      .join("\n");
+    fs.writeFileSync(
+      path.join(steamSettings, "dlc.txt"),
+      dlcLines + "\n",
+      "utf-8",
+    );
+    logger.info(`[GBE] Wrote dlc.txt (${opts.dlcs.size} DLCs)`);
+  }
+
+  const configsUserIni = `[user::saves]\nlocal_save_path=./drop-goldberg\n`;
+  fs.writeFileSync(
+    path.join(steamSettings, "configs.user.ini"),
+    configsUserIni,
+    "utf-8",
+  );
+
+  return true;
+}
+
 // ── Auto SSE → GBE at import time ────────────────────────────────────────
 
 /**
@@ -516,84 +674,104 @@ export async function autoUpgradeSseIfNeeded(
     `[GBE] Game ${gameId}: SSE detected (AppID ${detection.sseConfig.appId}), auto-upgrading to GBE`,
   );
 
-  const arch = DLL_TO_ARCH[detection.dllName.toLowerCase()];
-  if (!arch) {
-    logger.warn(`[GBE] Unknown DLL: ${detection.dllName}, skipping upgrade`);
+  const ok = await swapDllAndWriteSettings(
+    {
+      dllDir: detection.dllDir,
+      dllName: detection.dllName,
+      appId: detection.sseConfig.appId,
+      backupSuffix: BACKUP_SUFFIX,
+      interfaces: detection.sseConfig.interfaces,
+      dlcs: detection.sseConfig.dlcs,
+    },
+    logger,
+  );
+
+  if (ok) {
+    logger.info(
+      `[GBE] Auto-upgraded ${gameId} from SSE to GBE (AppID ${detection.sseConfig.appId})`,
+    );
+  }
+}
+
+// ── Auto Steam-DRM → GBE at import time ──────────────────────────────────
+
+/**
+ * Called during version import, BEFORE the manifest is generated.
+ *
+ * For games that ship with **legitimate Steam DRM** (identified by
+ * `steamclient64.dll` / `gameoverlayrenderer64.dll` anywhere under the
+ * version directory), swaps the bundled `steam_api64.dll` for the GBE
+ * equivalent so the game can `SteamAPI_Init()` without a real Steam
+ * client running.
+ *
+ * Skips when:
+ *   - `appId` is not provided (no Steam metadata → nothing to write)
+ *   - No Steam DRM markers are found (game is already DRM-free or
+ *     the SSE path already handled it)
+ *   - `steam_settings/` already exists next to the DLL (another path
+ *     has already configured the emulator)
+ *
+ * The original DLL is preserved as `<dll>.steam_backup` so the
+ * upgrade can be reversed later.
+ */
+export async function autoUpgradeSteamDrmIfNeeded(
+  versionDir: string,
+  gameId: string,
+  appId: string | undefined,
+  logger: { info: (msg: string) => void; warn: (msg: string) => void },
+): Promise<void> {
+  if (!appId) {
+    logger.info(
+      `[GBE] Game ${gameId}: no Steam AppID in metadata, skipping DRM upgrade`,
+    );
     return;
   }
 
-  // Ensure GBE DLLs are cached
-  if (!hasCachedDlls(arch)) {
-    logger.info(`[GBE] No cached GBE DLL for ${arch}, downloading...`);
-    const tag = await downloadGbeDlls();
-    if (!tag || !hasCachedDlls(arch)) {
-      logger.warn(
-        `[GBE] Failed to download GBE DLLs. Run "Download GBE" task manually.`,
-      );
-      return;
-    }
-    logger.info(`[GBE] Downloaded GBE release ${tag}`);
-  }
-
-  const gbeDllPath = getCachedDllPath(arch)!;
-  const { dllDir, dllName, sseConfig } = detection;
-
-  // Back up SSE DLL
-  const dllPath = path.join(dllDir, dllName);
-  const backupPath = dllPath + BACKUP_SUFFIX;
-  if (fs.existsSync(dllPath) && !fs.existsSync(backupPath)) {
-    fs.copyFileSync(dllPath, backupPath);
-    logger.info(`[GBE] Backed up ${dllName} → ${dllName}${BACKUP_SUFFIX}`);
-  }
-
-  // Replace with GBE DLL
-  fs.copyFileSync(gbeDllPath, dllPath);
-  logger.info(`[GBE] Replaced ${dllName} with GBE version`);
-
-  // Create steam_settings/
-  const steamSettings = path.join(dllDir, "steam_settings");
-  fs.mkdirSync(steamSettings, { recursive: true });
-
-  fs.writeFileSync(
-    path.join(steamSettings, "steam_appid.txt"),
-    sseConfig!.appId,
-    "utf-8",
-  );
-
-  if (sseConfig!.interfaces.size > 0) {
-    const lines = Array.from(sseConfig!.interfaces.values());
-    fs.writeFileSync(
-      path.join(steamSettings, "steam_interfaces.txt"),
-      lines.join("\n") + "\n",
-      "utf-8",
-    );
+  if (!hasSteamDrmMarker(versionDir)) {
     logger.info(
-      `[GBE] Wrote steam_interfaces.txt (${lines.length} interfaces)`,
+      `[GBE] Game ${gameId}: no Steam DRM markers present, skipping DRM upgrade`,
     );
+    return;
   }
 
-  if (sseConfig!.dlcs.size > 0) {
-    const dlcLines = Array.from(sseConfig!.dlcs.entries())
-      .map(([id, name]) => `${id}=${name}`)
-      .join("\n");
-    fs.writeFileSync(
-      path.join(steamSettings, "dlc.txt"),
-      dlcLines + "\n",
-      "utf-8",
+  const dllInfo = findSteamApiDll(versionDir);
+  if (!dllInfo) {
+    logger.info(
+      `[GBE] Game ${gameId}: Steam DRM markers found but no steam_api DLL, skipping`,
     );
-    logger.info(`[GBE] Wrote dlc.txt (${sseConfig!.dlcs.size} DLCs)`);
+    return;
   }
 
-  const configsUserIni = `[user::saves]\nlocal_save_path=./drop-goldberg\n`;
-  fs.writeFileSync(
-    path.join(steamSettings, "configs.user.ini"),
-    configsUserIni,
-    "utf-8",
-  );
+  // If steam_settings/ already exists, another code path (e.g. SSE upgrade
+  // or a previous import run) has already configured the emulator — don't
+  // re-swap, that would overwrite a GBE DLL with a second GBE DLL and
+  // invalidate the existing `.sse_backup` / `.steam_backup`.
+  if (fs.existsSync(path.join(dllInfo.dllDir, "steam_settings"))) {
+    logger.info(
+      `[GBE] Game ${gameId}: steam_settings/ already exists adjacent to DLL, skipping DRM upgrade`,
+    );
+    return;
+  }
 
   logger.info(
-    `[GBE] Auto-upgraded ${gameId} from SSE to GBE (AppID ${sseConfig!.appId})`,
+    `[GBE] Game ${gameId}: Steam DRM detected (AppID ${appId}), auto-upgrading to GBE`,
   );
+
+  const ok = await swapDllAndWriteSettings(
+    {
+      dllDir: dllInfo.dllDir,
+      dllName: dllInfo.dllName,
+      appId,
+      backupSuffix: STEAM_DRM_BACKUP_SUFFIX,
+    },
+    logger,
+  );
+
+  if (ok) {
+    logger.info(
+      `[GBE] Auto-upgraded ${gameId} from Steam DRM to GBE (AppID ${appId})`,
+    );
+  }
 }
 
 // ── SSE → GBE conversion (admin-triggered, post-import) ─────────────────
@@ -605,24 +783,24 @@ export interface UpgradeResult {
 }
 
 /**
- * Prepares GBE config for an SSE game **without** replacing the DLL on
- * the server.  The depot serves files directly from the library directory,
- * so swapping the DLL here would break download checksums.
+ * Admin-triggered SSE → GBE upgrade.
  *
- * Instead we:
- * 1. Create `steam_settings/` with converted SSE config (new dir, safe)
- * 2. Place the GBE DLL inside `steam_settings/gbe_dll` so the client can
- *    pick it up after download and do the local swap at launch time
- * 3. Write a `.gbe_upgrade` marker so the client knows to apply the swap
+ * Swaps the bundled SSE `steam_api*.dll` on disk for the cached GBE
+ * equivalent, writes `steam_settings/` next to it (converted from the
+ * SSE `steam_emu.ini`), runs full Goldberg setup so DB records are in
+ * sync, and regenerates the game's droplet manifest + file list so the
+ * depot checksums match the new DLL.
  *
- * The client's `configure_saves_for_game()` handles the actual DLL
- * replacement on the user's machine.
+ * The original DLL is preserved as `<dll>.sse_backup` for reversion.
+ *
+ * Safe to run repeatedly — the shared helper is idempotent w.r.t. the
+ * backup file (it is only written when absent).
  */
 export async function upgradeSseToGbe(
   versionDir: string,
   gameId: string,
   detection: EmulatorDetection,
-  logger: { info: (msg: string) => void },
+  logger: { info: (msg: string) => void; warn: (msg: string) => void },
 ): Promise<UpgradeResult> {
   const { dllDir, dllName, sseConfig } = detection;
 
@@ -634,88 +812,37 @@ export async function upgradeSseToGbe(
     };
   }
 
-  // Determine architecture from DLL name
-  const arch = DLL_TO_ARCH[dllName.toLowerCase()];
-  if (!arch) {
+  const ok = await swapDllAndWriteSettings(
+    {
+      dllDir,
+      dllName,
+      appId: sseConfig.appId,
+      backupSuffix: BACKUP_SUFFIX,
+      interfaces: sseConfig.interfaces,
+      dlcs: sseConfig.dlcs,
+    },
+    logger,
+  );
+
+  if (!ok) {
     return {
       success: false,
-      message: `Unknown DLL: ${dllName}`,
+      message: `Failed to swap ${dllName} with GBE DLL — check server logs`,
       backupCreated: false,
     };
   }
 
-  // Check for cached GBE DLL
-  const gbeDllPath = getCachedDllPath(arch);
-  if (!gbeDllPath) {
-    return {
-      success: false,
-      message: `No cached GBE DLL for ${arch}. Run "Download GBE" task first.`,
-      backupCreated: false,
-    };
-  }
-
-  // ── Step 1: Create steam_settings/ ─────────────────────────────────────
-  // This is a NEW directory that doesn't exist in the original manifest,
-  // so adding it won't affect depot chunk checksums.
-  const steamSettings = path.join(dllDir, "steam_settings");
-  fs.mkdirSync(steamSettings, { recursive: true });
-
-  // steam_appid.txt
-  fs.writeFileSync(
-    path.join(steamSettings, "steam_appid.txt"),
-    sseConfig.appId,
-    "utf-8",
-  );
-  logger.info(`Wrote steam_appid.txt (${sseConfig.appId})`);
-
-  // steam_interfaces.txt — converted from SSE's [Interfaces] section
-  if (sseConfig.interfaces.size > 0) {
-    const interfaceLines = Array.from(sseConfig.interfaces.values());
-    fs.writeFileSync(
-      path.join(steamSettings, "steam_interfaces.txt"),
-      interfaceLines.join("\n") + "\n",
-      "utf-8",
-    );
-    logger.info(
-      `Wrote steam_interfaces.txt (${interfaceLines.length} interfaces)`,
-    );
-  }
-
-  // dlc.txt — converted from SSE's [DLC] section
-  if (sseConfig.dlcs.size > 0) {
-    const dlcLines = Array.from(sseConfig.dlcs.entries())
-      .map(([id, name]) => `${id}=${name}`)
-      .join("\n");
-    fs.writeFileSync(
-      path.join(steamSettings, "dlc.txt"),
-      dlcLines + "\n",
-      "utf-8",
-    );
-    logger.info(`Wrote dlc.txt (${sseConfig.dlcs.size} DLCs)`);
-  }
-
-  // configs.user.ini — local_save_path for portable saves
-  const configsUserIni = `[user::saves]\nlocal_save_path=./drop-goldberg\n`;
-  fs.writeFileSync(
-    path.join(steamSettings, "configs.user.ini"),
-    configsUserIni,
-    "utf-8",
-  );
-  logger.info("Wrote configs.user.ini (local_save_path=./drop-goldberg)");
-
-  // ── Step 4: Write achievements.json from DB ────────────────────────────
-  // Import here to avoid circular deps
+  // ── Achievements + DB sync ──────────────────────────────────────────────
   const { readGoldbergDefinitions, fetchSteamAchievements, setupGoldberg } =
     await import("./goldberg");
 
-  // Check if achievements are already on disk (from a previous server-side setup)
+  const steamSettings = path.join(dllDir, "steam_settings");
   const existingDefs = readGoldbergDefinitions(dllDir);
   if (existingDefs.length > 0) {
     logger.info(
       `achievements.json already exists with ${existingDefs.length} entries`,
     );
   } else {
-    // Try fetching from Steam API
     const steamDefs = await fetchSteamAchievements(sseConfig.appId);
     if (steamDefs.length > 0) {
       fs.writeFileSync(
@@ -731,60 +858,171 @@ export async function upgradeSseToGbe(
     }
   }
 
-  // Run full Goldberg setup to ensure DB records are in sync
-  // Use dllDir as the versionDir since that's where steam_settings/ is now
   try {
     await setupGoldberg(gameId, dllDir);
   } catch (e) {
-    logger.info(`setupGoldberg follow-up failed (non-critical): ${e}`);
+    logger.warn(`setupGoldberg follow-up failed (non-critical): ${e}`);
   }
 
-  // The client will detect this steam_settings/ directory alongside the
-  // SSE config, then call GET /api/v1/client/game/{id}/gbe-upgrade to
-  // download the GBE DLL and swap it locally at launch time.
-  logger.info(
-    `Server-side config ready. Client will download GBE DLL at launch via API.`,
+  // ── Regenerate manifest so checksums match the new DLL ─────────────────
+  const { libraryManager } = await import("./library");
+  const regenOk = await libraryManager.regenerateManifestForLatestVersion(
+    gameId,
+    logger,
   );
+  if (!regenOk) {
+    logger.warn(
+      `Manifest regen did not complete — downloads may fail checksum validation until re-imported`,
+    );
+  }
 
   return {
     success: true,
-    message: `Prepared GBE config for ${dllName} (AppID ${sseConfig.appId}, ${sseConfig.dlcs.size} DLCs, ${sseConfig.interfaces.size} interfaces). Client will download GBE DLL at launch.`,
-    backupCreated: false,
+    message: `Swapped ${dllName} → GBE (AppID ${sseConfig.appId}, ${sseConfig.dlcs.size} DLCs, ${sseConfig.interfaces.size} interfaces)${regenOk ? ", manifest regenerated" : " — manifest regen FAILED"}`,
+    backupCreated: true,
+  };
+}
+
+// ── Steam DRM → GBE conversion (admin-triggered, post-import) ────────────
+
+/**
+ * Admin-triggered Steam DRM → GBE upgrade.
+ *
+ * Parallel to upgradeSseToGbe but targets games that shipped with real
+ * Steam DRM (steamclient64.dll / gameoverlayrenderer64.dll) rather than
+ * SmartSteamEmu. Swaps the bundled `steam_api*.dll` on disk for the GBE
+ * equivalent, writes `steam_settings/` next to it with the supplied
+ * AppID, runs Goldberg setup, and regenerates the droplet manifest so
+ * depot checksums reflect the new DLL.
+ *
+ * The original DLL is preserved as `<dll>.steam_backup` for reversion.
+ *
+ * Idempotent: if a `.steam_backup` already exists we treat the game as
+ * already upgraded and skip the swap (but still refresh settings + regen).
+ */
+export async function upgradeSteamDrmToGbe(
+  versionDir: string,
+  gameId: string,
+  appId: string,
+  logger: { info: (msg: string) => void; warn: (msg: string) => void },
+): Promise<UpgradeResult> {
+  if (!hasSteamDrmMarker(versionDir)) {
+    return {
+      success: false,
+      message:
+        "No Steam DRM markers (steamclient64.dll / gameoverlayrenderer64.dll) found in game directory",
+      backupCreated: false,
+    };
+  }
+
+  const dllInfo = findSteamApiDll(versionDir);
+  if (!dllInfo) {
+    return {
+      success: false,
+      message:
+        "Steam DRM markers found but no steam_api DLL present in game directory",
+      backupCreated: false,
+    };
+  }
+
+  const { dllDir, dllName } = dllInfo;
+  const backupPath = path.join(dllDir, dllName) + STEAM_DRM_BACKUP_SUFFIX;
+  const alreadyUpgraded = fs.existsSync(backupPath);
+
+  if (alreadyUpgraded) {
+    logger.info(
+      `${dllName}${STEAM_DRM_BACKUP_SUFFIX} already exists — treating as previously upgraded, refreshing settings only`,
+    );
+    // Ensure steam_settings/steam_appid.txt + configs.user.ini exist
+    const steamSettings = path.join(dllDir, "steam_settings");
+    fs.mkdirSync(steamSettings, { recursive: true });
+    fs.writeFileSync(
+      path.join(steamSettings, "steam_appid.txt"),
+      appId,
+      "utf-8",
+    );
+    fs.writeFileSync(
+      path.join(steamSettings, "configs.user.ini"),
+      `[user::saves]\nlocal_save_path=./drop-goldberg\n`,
+      "utf-8",
+    );
+  } else {
+    const ok = await swapDllAndWriteSettings(
+      {
+        dllDir,
+        dllName,
+        appId,
+        backupSuffix: STEAM_DRM_BACKUP_SUFFIX,
+      },
+      logger,
+    );
+    if (!ok) {
+      return {
+        success: false,
+        message: `Failed to swap ${dllName} with GBE DLL — check server logs`,
+        backupCreated: false,
+      };
+    }
+  }
+
+  try {
+    const { setupGoldberg } = await import("./goldberg");
+    await setupGoldberg(gameId, dllDir);
+  } catch (e) {
+    logger.warn(`setupGoldberg follow-up failed (non-critical): ${e}`);
+  }
+
+  // ── Regenerate manifest so checksums match the new DLL ─────────────────
+  const { libraryManager } = await import("./library");
+  const regenOk = await libraryManager.regenerateManifestForLatestVersion(
+    gameId,
+    logger,
+  );
+  if (!regenOk) {
+    logger.warn(
+      `Manifest regen did not complete — downloads may fail checksum validation until re-imported`,
+    );
+  }
+
+  const action = alreadyUpgraded ? "Refreshed" : "Swapped";
+  return {
+    success: true,
+    message: `${action} ${dllName} → GBE (AppID ${appId})${regenOk ? ", manifest regenerated" : " — manifest regen FAILED"}`,
+    backupCreated: !alreadyUpgraded,
   };
 }
 
 /**
- * Reverts a GBE upgrade by removing `steam_settings/`.
+ * Reverts a GBE upgrade by restoring whichever backup is present
+ * (`.sse_backup` from an SSE upgrade, `.steam_backup` from a Steam
+ * DRM upgrade) and removing `steam_settings/`.
  *
- * Since the server-side upgrade no longer touches the original DLL,
- * reverting just means removing the config directory we created.
- * The client will see `steam_emu.ini` (still present) without
- * `steam_settings/` and treat it as a normal SSE game again.
- *
- * Also restores any legacy backups from the old approach (which did
- * replace the DLL server-side) so this handles both old and new upgrades.
+ * Caller is responsible for regenerating the droplet manifest if
+ * the revert is expected to persist — this function only touches
+ * the on-disk files.
  */
 export function revertToSse(
   dllDir: string,
   dllName: string,
 ): { success: boolean; message: string } {
   try {
-    // Restore legacy backups if they exist (from the old DLL-swap approach)
     const dllPath = path.join(dllDir, dllName);
     const sseIniPath = path.join(dllDir, "steam_emu.ini");
-    const dllBackup = dllPath + BACKUP_SUFFIX;
-    const iniBackup = sseIniPath + BACKUP_SUFFIX;
 
-    if (fs.existsSync(dllBackup)) {
-      fs.copyFileSync(dllBackup, dllPath);
-      fs.unlinkSync(dllBackup);
-    }
-    if (fs.existsSync(iniBackup)) {
-      fs.copyFileSync(iniBackup, sseIniPath);
-      fs.unlinkSync(iniBackup);
+    // Try each backup suffix in turn — SSE path first, then Steam DRM.
+    for (const suffix of [BACKUP_SUFFIX, STEAM_DRM_BACKUP_SUFFIX]) {
+      const dllBackup = dllPath + suffix;
+      if (fs.existsSync(dllBackup)) {
+        fs.copyFileSync(dllBackup, dllPath);
+        fs.unlinkSync(dllBackup);
+      }
+      const iniBackup = sseIniPath + suffix;
+      if (fs.existsSync(iniBackup)) {
+        fs.copyFileSync(iniBackup, sseIniPath);
+        fs.unlinkSync(iniBackup);
+      }
     }
 
-    // Remove steam_settings/ that we created
     const steamSettings = path.join(dllDir, "steam_settings");
     if (fs.existsSync(steamSettings)) {
       fs.rmSync(steamSettings, { recursive: true, force: true });
@@ -792,7 +1030,7 @@ export function revertToSse(
 
     return {
       success: true,
-      message: "Reverted to SSE successfully",
+      message: "Reverted GBE upgrade successfully",
     };
   } catch (e) {
     return {
