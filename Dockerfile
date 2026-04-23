@@ -67,7 +67,7 @@ FROM build-base AS run-system
 ENV NODE_ENV=production
 ENV NUXT_TELEMETRY_DISABLED=1
 
-RUN apt-get update && apt-get install -y --no-install-recommends p7zip-full nginx && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends p7zip-full nginx gosu && rm -rf /var/lib/apt/lists/*
 RUN pnpm install prisma@7.3.0
 # init prisma to download all required files
 RUN pnpm prisma init
@@ -85,18 +85,17 @@ ENV NGINX_CONFIG="/nginx.conf"
 # NGINX's port
 ENV PORT=4000
 
-# Drop root. The `node:lts-slim` base image ships a `node` user (uid 1000, gid 1000)
-# that exists for exactly this purpose. We chown the app tree so Prisma can write
-# its engine binaries / query-engine cache at runtime, and hand ownership of the
-# data + library mount points so bind-mounted volumes stay writable without
-# needing `--user root` overrides on deploy.
-#   * /app is rw (Prisma & Nuxt runtime cache)
-#   * /data is rw (application writes — sessions, uploads, logs)
-#   * /library is ro in most deployments but we chown it anyway so the rare
-#     "writable library" case (admin imports via copy) works without escalation.
-# Port 4000 is unprivileged; we do not need CAP_NET_BIND_SERVICE.
+# Privilege-dropping entrypoint. The container boots as root so it can remap
+# the `node` user/group to the PUID/PGID the deployer specifies, then gosu's
+# into that uid for the actual app. This mirrors the LinuxServer.io /
+# Synology convention — deployers whose host bind-mounts aren't owned by
+# uid 1000 (e.g. Synology's `canpop2:users`) can set PUID/PGID in compose
+# instead of chowning host files. Default remains 1000:1000.
+#
+# We pre-create /data /library so the chown at startup has targets even on
+# fresh deploys before the bind-mount arrives. Port 4000 is unprivileged;
+# no CAP_NET_BIND_SERVICE needed.
 RUN mkdir -p /data /library \
-    && chown -R node:node /app /data /library
-USER node
+    && chmod +x /app/startup/entrypoint.sh
 
-CMD ["sh", "/app/startup/launch.sh"]
+ENTRYPOINT ["/app/startup/entrypoint.sh"]
