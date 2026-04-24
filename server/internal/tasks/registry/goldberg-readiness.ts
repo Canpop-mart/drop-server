@@ -7,6 +7,7 @@ import {
   resolveGameVersionDir,
   setupGoldberg,
 } from "../../goldberg";
+import { findSteamApiDll, isGbeDll } from "../../gbe";
 import fs from "fs";
 import path from "path";
 
@@ -82,8 +83,23 @@ export default defineDropTask({
         path.join(versionDir, "steam_settings"),
       );
 
+      // Also verify the steam_api DLL is a GBE build — if a game was
+      // imported before the setupGoldberg DLL-swap patch landed, the
+      // settings will be present but the DLL is still Valve's, so the
+      // game can't SteamAPI_Init() without a real Steam client running.
+      // If no DLL is present at all we can't fix it from here, so treat
+      // that as "not a readiness problem" (returns true).
+      const dllInfo = findSteamApiDll(versionDir);
+      const hasGbeDll = dllInfo
+        ? isGbeDll(path.join(dllInfo.dllDir, dllInfo.dllName))
+        : true;
+
       const allGood =
-        hasAppIdFile && hasAchievementsFile && hasDbRecords && hasSteamSettings;
+        hasAppIdFile &&
+        hasAchievementsFile &&
+        hasDbRecords &&
+        hasSteamSettings &&
+        hasGbeDll;
 
       if (allGood) {
         healthy++;
@@ -93,6 +109,7 @@ export default defineDropTask({
         if (!hasAppIdFile) missing.push("steam_appid.txt");
         if (!hasAchievementsFile) missing.push("achievements.json");
         if (!hasDbRecords) missing.push("DB records");
+        if (!hasGbeDll) missing.push("GBE DLL swap (currently non-GBE)");
         logger.info(
           `${game.mName} — missing: ${missing.join(", ")}. Running setup...`,
         );

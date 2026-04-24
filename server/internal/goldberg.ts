@@ -245,10 +245,14 @@ export async function fetchSteamAchievements(
  * 1. Reads `steam_appid.txt` to get the AppID
  * 2. Reads local `achievements.json` — if missing, fetches from Steam's
  *    public API and writes it to disk for the emulator
- * 3. Creates/updates the `GameExternalLink` (Goldberg ↔ AppID)
- * 4. Upserts all `Achievement` definition records in the DB
- *
- * Runtime config (`configs.user.ini`) is handled client-side at launch.
+ * 3. Swaps the bundled `steam_api[64].dll` for a GBE build if it isn't
+ *    one already — without this the game calls Valve's real Steamworks,
+ *    fails to reach a Steam pipe, and exits on launch. Original DLL is
+ *    preserved as `<dll>.steam_backup`.
+ * 4. Creates/updates the `GameExternalLink` (Goldberg ↔ AppID)
+ * 5. Upserts all `Achievement` definition records in the DB
+ * 6. Regenerates the droplet manifest if the DLL was swapped, so client
+ *    downloads don't fail checksum validation against the new bytes.
  *
  * Failures are logged but never thrown — Goldberg setup should never
  * block a version import.
@@ -345,6 +349,44 @@ export async function setupGoldberg(
       console.log(`[GOLDBERG] Created save dir ${saveDir}`);
     }
 
+    // ── 2c. Ensure steam_api DLL is a GBE build ──────────────────────────
+    // setupGoldberg owns this swap so config and binary are guaranteed
+    // consistent. Historically the swap only happened at version-import
+    // time via autoUpgradeSteamDrmIfNeeded, which silently skipped when
+    // steam_settings/ already existed — leaving games stuck on Valve's
+    // original steam_api64.dll. That DLL tries to reach a real Steam
+    // pipe, fails, and the game exits with no visible error.
+    let didSwapDll = false;
+    if (dllInfo) {
+      const { ensureGbeDll } = await import("./gbe");
+      const swapLogger = {
+        info: (msg: string) => console.log(msg),
+        warn: (msg: string) => console.log(msg),
+      };
+      const result = await ensureGbeDll(
+        dllInfo.dllDir,
+        dllInfo.dllName,
+        appId,
+        swapLogger,
+      );
+      if (result.swapped) {
+        console.log(
+          `[GOLDBERG] Swapped ${dllInfo.dllName} to GBE (original backed up as ${dllInfo.dllName}.steam_backup)`,
+        );
+        didSwapDll = true;
+      } else if (result.alreadyGbe) {
+        console.log(`[GOLDBERG] ${dllInfo.dllName} is already a GBE build`);
+      } else {
+        console.log(
+          `[GOLDBERG] DLL swap skipped for ${dllInfo.dllName}: ${result.error ?? "unknown"}`,
+        );
+      }
+    } else {
+      console.log(
+        `[GOLDBERG] No steam_api DLL found in ${settingsRoot}, skipping swap`,
+      );
+    }
+
     // ── 3. Fetch/read achievement definitions ────────────────────────────
     const forceRefresh = options?.forceRefreshAchievements ?? false;
     let definitions = forceRefresh ? [] : readGoldbergDefinitions(settingsRoot);
@@ -415,48 +457,76 @@ export async function setupGoldberg(
     });
 
     // ── 5. Upsert achievement definitions in DB ──────────────────────────
+    let count = 0;
     if (definitions.length === 0) {
       console.log(`[GOLDBERG] No achievements found for AppID ${appId}`);
-      return;
-    }
+    } else {
+      for (const def of definitions) {
+        const apiName = def.name ?? "";
+        if (!apiName) continue;
 
-    let count = 0;
-    for (const def of definitions) {
-      const apiName = def.name ?? "";
-      if (!apiName) continue;
-
-      await prisma.achievement.upsert({
-        where: {
-          gameId_provider_externalId: {
+        await prisma.achievement.upsert({
+          where: {
+            gameId_provider_externalId: {
+              gameId,
+              provider: ExternalAccountProvider.Goldberg,
+              externalId: apiName,
+            },
+          },
+          create: {
             gameId,
             provider: ExternalAccountProvider.Goldberg,
             externalId: apiName,
+            title: def.displayName ?? apiName,
+            description: def.description ?? "",
+            iconUrl: def.icon ?? "",
+            iconLockedUrl: def.icon_gray ?? "",
+            displayOrder: count,
           },
-        },
-        create: {
-          gameId,
-          provider: ExternalAccountProvider.Goldberg,
-          externalId: apiName,
-          title: def.displayName ?? apiName,
-          description: def.description ?? "",
-          iconUrl: def.icon ?? "",
-          iconLockedUrl: def.icon_gray ?? "",
-          displayOrder: count,
-        },
-        update: {
-          title: def.displayName ?? apiName,
-          description: def.description ?? "",
-          iconUrl: def.icon ?? "",
-          iconLockedUrl: def.icon_gray ?? "",
-          displayOrder: count,
-        },
-      });
-      count++;
+          update: {
+            title: def.displayName ?? apiName,
+            description: def.description ?? "",
+            iconUrl: def.icon ?? "",
+            iconLockedUrl: def.icon_gray ?? "",
+            displayOrder: count,
+          },
+        });
+        count++;
+      }
+
+      console.log(
+        `[GOLDBERG] Done: ${count} achievements for game=${gameId} appId=${appId}`,
+      );
     }
 
-    console.log(
-      `[GOLDBERG] Done: ${count} achievements for game=${gameId} appId=${appId}`,
-    );
+    // ── 6. Regenerate manifest if we swapped the DLL ─────────────────────
+    // Swapping the steam_api DLL changes bytes on disk, which invalidates
+    // the droplet manifest's per-file checksums for clients that verify on
+    // download. Skipped when no swap happened (common case: already GBE).
+    if (didSwapDll) {
+      try {
+        const { libraryManager } = await import("./library");
+        const regenLogger = {
+          info: (msg: string) => console.log(msg),
+          warn: (msg: string) => console.log(msg),
+        };
+        const regenOk = await libraryManager.regenerateManifestForLatestVersion(
+          gameId,
+          regenLogger,
+        );
+        if (regenOk) {
+          console.log(
+            `[GOLDBERG] Regenerated manifest for game=${gameId} after DLL swap`,
+          );
+        } else {
+          console.log(
+            `[GOLDBERG] Manifest regen FAILED for game=${gameId} — clients may hit checksum mismatches on next download`,
+          );
+        }
+      } catch (e) {
+        console.log(`[GOLDBERG] Manifest regen threw for game=${gameId}: ${e}`);
+      }
+    }
   } catch (e) {
     console.log(`[GOLDBERG] Setup failed for game=${gameId}: ${e}`);
   }

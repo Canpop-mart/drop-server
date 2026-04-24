@@ -382,6 +382,32 @@ export function hasSteamDrmMarker(rootDir: string): boolean {
   return hasSteamDrmMarkerRecursive(rootDir, 0, 5);
 }
 
+/**
+ * Returns true when the DLL at `dllPath` looks like a GBE / Goldberg
+ * build. Detects by ASCII signatures embedded in the release binaries —
+ * gbe_fork ships with "Goldberg", "Mr_Goldberg", and/or "gbe_fork" in
+ * its .rdata section, none of which appear in Valve's steam_api64.dll.
+ *
+ * Used as a cheap "is the swap already done?" check before calling
+ * swapDllAndWriteSettings, so we don't waste I/O or blow away a good
+ * `.steam_backup` with a second GBE-over-GBE swap.
+ *
+ * Reads the whole file into memory, which is fine for typical
+ * steam_api DLLs (~300KB–1MB).
+ */
+export function isGbeDll(dllPath: string): boolean {
+  try {
+    const buf = fs.readFileSync(dllPath);
+    return (
+      buf.includes(Buffer.from("Goldberg")) ||
+      buf.includes(Buffer.from("Mr_Goldberg")) ||
+      buf.includes(Buffer.from("gbe_fork"))
+    );
+  } catch {
+    return false;
+  }
+}
+
 function hasSteamDrmMarkerRecursive(
   dir: string,
   depth: number,
@@ -638,6 +664,48 @@ async function swapDllAndWriteSettings(
   );
 
   return true;
+}
+
+/**
+ * Ensures the game's steam_api DLL is a GBE build — the canonical
+ * idempotent entry point for setupGoldberg & the readiness scanner.
+ *
+ * - If `dllPath` is already a GBE build, returns { alreadyGbe: true }
+ *   without touching disk.
+ * - Otherwise backs up the original as `<dll>.steam_backup` and swaps
+ *   in the cached GBE DLL via `swapDllAndWriteSettings`, which also
+ *   (re-)writes `steam_settings/{steam_appid.txt,configs.user.ini}`.
+ *
+ * Safe to call repeatedly: only hits disk when a real swap is needed.
+ *
+ * Callers carrying SSE-specific metadata (interfaces / DLCs) should
+ * call `swapDllAndWriteSettings` directly so that metadata gets
+ * persisted to `steam_interfaces.txt` / `dlc.txt`.
+ */
+export async function ensureGbeDll(
+  dllDir: string,
+  dllName: string,
+  appId: string,
+  logger: { info: (msg: string) => void; warn: (msg: string) => void },
+): Promise<{ swapped: boolean; alreadyGbe: boolean; error?: string }> {
+  const dllPath = path.join(dllDir, dllName);
+
+  if (!fs.existsSync(dllPath)) {
+    return { swapped: false, alreadyGbe: false, error: "DLL not found" };
+  }
+
+  if (isGbeDll(dllPath)) {
+    return { swapped: false, alreadyGbe: true };
+  }
+
+  const ok = await swapDllAndWriteSettings(
+    { dllDir, dllName, appId, backupSuffix: STEAM_DRM_BACKUP_SUFFIX },
+    logger,
+  );
+
+  return ok
+    ? { swapped: true, alreadyGbe: false }
+    : { swapped: false, alreadyGbe: false, error: "swap failed" };
 }
 
 // ── Auto SSE → GBE at import time ────────────────────────────────────────
