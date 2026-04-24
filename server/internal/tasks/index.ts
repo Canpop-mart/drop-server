@@ -12,11 +12,17 @@ import cleanupInvites from "./registry/invitations";
 import cleanupSessions from "./registry/sessions";
 import checkUpdate from "./registry/update";
 import cleanupObjects from "./registry/objects";
-import checkIntegrity from "./registry/check-integrity";
 import checkGameUpdates from "./registry/game-update";
-import scanAchievements from "./registry/achievement-scan";
-import { upgradeAllToGbe, downloadGbe } from "./registry/upgrade-to-gbe";
+import scanGoldbergReadiness from "./registry/goldberg-readiness";
+import refreshAchievementDefs from "./registry/refresh-achievement-defs";
+import linkRetroAchievements from "./registry/link-retroachievements";
+import upgradeGbe from "./registry/upgrade-to-gbe";
 import recalculatePlaytime from "./registry/recalculate-playtime";
+import recalculateAchievements from "./registry/recalculate-achievements";
+import scanLibraryHealth from "./registry/library-health";
+import scanLibraryOrphans from "./registry/library-orphans";
+import refreshMetadata from "./registry/refresh-metadata";
+import backupExport from "./registry/backup-export";
 
 type TaskActionLink = `${string}:${string}`;
 
@@ -62,20 +68,34 @@ class TaskHandler {
     "cleanup:sessions",
     "check:update",
   ];
-  private weeklyScheduledTasks: TaskGroup[] = ["cleanup:objects"];
+  private weeklyScheduledTasks: TaskGroup[] = [
+    "cleanup:objects",
+    "scan:library-health",
+  ];
 
   constructor() {
-    // register the cleanup invitations task
+    // Scheduled cleanup / health
     this.saveScheduledTask(cleanupInvites);
     this.saveScheduledTask(cleanupSessions);
     this.saveScheduledTask(checkUpdate);
     this.saveScheduledTask(cleanupObjects);
-    this.saveScheduledTask(checkIntegrity);
+    this.saveScheduledTask(scanLibraryHealth);
+
+    // Library maintenance (on-demand)
     this.saveScheduledTask(checkGameUpdates);
-    this.saveScheduledTask(scanAchievements);
-    this.saveScheduledTask(downloadGbe);
-    this.saveScheduledTask(upgradeAllToGbe);
+    this.saveScheduledTask(scanLibraryOrphans);
+    this.saveScheduledTask(refreshMetadata);
+
+    // Achievements (on-demand)
+    this.saveScheduledTask(scanGoldbergReadiness);
+    this.saveScheduledTask(refreshAchievementDefs);
+    this.saveScheduledTask(linkRetroAchievements);
+    this.saveScheduledTask(recalculateAchievements);
+    this.saveScheduledTask(upgradeGbe);
+
+    // System (on-demand)
     this.saveScheduledTask(recalculatePlaytime);
+    this.saveScheduledTask(backupExport);
   }
 
   /**

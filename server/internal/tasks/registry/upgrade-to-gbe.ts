@@ -11,58 +11,55 @@ import {
 } from "../../gbe";
 
 /**
- * Batch task: scans all games and upgrades them to GBE (Goldberg fork)
- * for proper achievement support. Covers two cases:
+ * Combined download + upgrade task. Two phases:
+ *   1. Ensure latest GBE release is cached in /data/gbe-cache (downloads if missing).
+ *   2. Scan every game and upgrade SSE or Steam DRM installs to GBE in place.
  *
- *   1. SmartSteamEmu games (identified by steam_emu.ini next to the DLL)
- *   2. Real Steam DRM games (identified by steamclient64.dll /
- *      gameoverlayrenderer64.dll anywhere under the version directory,
- *      plus a Steam AppID from the game's metadata)
+ * Single-game upgrade is still handled via
+ * /api/v1/admin/game/[id]/upgrade-to-gbe for per-game overrides.
  *
- * For each matching game the server writes steam_settings/ adjacent to
- * the Steam API DLL. The DLL swap itself is performed client-side at
- * launch time so existing manifest checksums stay valid.
- *
- * Safe to run multiple times — already-configured games are skipped.
+ * Safe to re-run — already-upgraded games are skipped.
  */
-export const upgradeAllToGbe = defineDropTask({
-  buildId: () => `upgrade:all-to-gbe:${new Date().toISOString()}`,
-  name: "Upgrade All Games to GBE (SSE + Steam DRM)",
+export default defineDropTask({
+  buildId: () => `upgrade:gbe:${new Date().toISOString()}`,
+  name: "Upgrade to GBE",
   acls: ["system:maintenance:read"],
-  taskGroup: "upgrade:all-to-gbe",
+  taskGroup: "upgrade:gbe",
 
   async run({ progress, logger }) {
-    logger.info("Starting batch upgrade to GBE (SSE + Steam DRM)");
+    logger.info("── Phase 1: Download + cache GBE DLLs ──");
+    progress(2);
 
-    // ── Step 1: Ensure GBE DLLs are cached ────────────────────────────────
-    progress(5);
-    const hasWin64 = hasCachedDlls("win64");
-    const hasWin32 = hasCachedDlls("win32");
+    const archs = ["win64", "win32", "linux"] as const;
+    const needsDownload = !archs.some((a) => hasCachedDlls(a));
 
-    if (!hasWin64 && !hasWin32) {
+    if (needsDownload) {
       logger.info("No cached GBE DLLs found, downloading from GitHub...");
       const tag = await downloadGbeDlls();
       if (tag) {
         logger.info(`Downloaded GBE release: ${tag}`);
       } else {
         logger.info(
-          "Failed to download GBE DLLs automatically. " +
-            "GBE uses .7z archives — you may need to download from " +
-            "https://github.com/Detanup01/gbe_fork/releases and place " +
-            "the DLLs in the cache directory manually.",
+          "Automated download failed (releases may use .7z). Check /data/gbe-cache " +
+            "for archives needing manual extraction, or download from " +
+            "https://github.com/Detanup01/gbe_fork/releases.",
         );
       }
     } else {
-      logger.info("GBE DLLs already cached");
+      logger.info("GBE DLLs already cached — skipping download.");
     }
 
-    // ── Step 2: Scan all games ────────────────────────────────────────────
+    for (const arch of archs) {
+      logger.info(
+        `  ${arch}: ${hasCachedDlls(arch) ? "✓ cached" : "✗ not found"}`,
+      );
+    }
+
+    logger.info("── Phase 2: Scan + upgrade games ──");
     progress(10);
+
     const games = await prisma.game.findMany({
-      select: {
-        id: true,
-        mName: true,
-      },
+      select: { id: true, mName: true },
     });
 
     if (games.length === 0) {
@@ -89,7 +86,7 @@ export const upgradeAllToGbe = defineDropTask({
     for (const game of games) {
       scanned++;
       const reportProgress = () =>
-        progress(10 + Math.round((scanned / games.length) * 85));
+        progress(10 + Math.round((scanned / games.length) * 88));
 
       const versionDir = await resolveGameVersionDir(game.id);
       if (!versionDir) {
@@ -105,7 +102,6 @@ export const upgradeAllToGbe = defineDropTask({
         continue;
       }
 
-      // ── SSE path ────────────────────────────────────────────────────────
       if (detection?.type === "sse") {
         sseFound++;
         logger.info(
@@ -142,10 +138,6 @@ export const upgradeAllToGbe = defineDropTask({
         continue;
       }
 
-      // ── Steam DRM path ──────────────────────────────────────────────────
-      // Triggered when steamclient64.dll / gameoverlayrenderer64.dll is
-      // present alongside a bundled steam_api64.dll (legitimate Steam DRM,
-      // not SSE). AppID comes from the game's Steam metadata.
       if (hasSteamDrmMarker(versionDir)) {
         drmFound++;
 
@@ -192,7 +184,6 @@ export const upgradeAllToGbe = defineDropTask({
         continue;
       }
 
-      // No emulator, no Steam DRM — skip silently
       reportProgress();
     }
 
@@ -201,48 +192,6 @@ export const upgradeAllToGbe = defineDropTask({
         `SSE: found ${sseFound}, upgraded ${sseUpgraded}, already done ${sseSkipped}, failed ${sseFailed}. ` +
         `Steam DRM: found ${drmFound}, upgraded ${drmUpgraded}, already done ${drmSkipped}, skipped (no AppID) ${drmNoAppId}, failed ${drmFailed}.`,
     );
-    progress(100);
-  },
-});
-
-// Single-game upgrade is handled via a direct API endpoint at
-// /api/v1/admin/game/[id]/upgrade-to-gbe — see that route for details.
-
-/**
- * Downloads GBE DLLs from GitHub without upgrading any games.
- * Useful when the automated extraction fails and you need to
- * download the archives for manual extraction.
- */
-export const downloadGbe = defineDropTask({
-  buildId: () => `download:gbe:${new Date().toISOString()}`,
-  name: "Download GBE DLLs",
-  acls: ["system:maintenance:read"],
-  taskGroup: "download:gbe",
-
-  async run({ progress, logger }) {
-    logger.info("Downloading latest GBE release from GitHub...");
-    progress(10);
-
-    const tag = await downloadGbeDlls();
-
-    if (tag) {
-      logger.info(`Downloaded GBE release: ${tag}`);
-
-      // Report what we have cached
-      const archs = ["win64", "win32", "linux"] as const;
-      for (const arch of archs) {
-        logger.info(
-          `  ${arch}: ${hasCachedDlls(arch) ? "✓ cached" : "✗ not found"}`,
-        );
-      }
-    } else {
-      logger.info(
-        "Could not download GBE DLLs automatically. " +
-          "The release may use .7z archives. Check the cache directory for " +
-          "downloaded archives that need manual extraction.",
-      );
-    }
-
     progress(100);
   },
 });

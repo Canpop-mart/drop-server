@@ -90,120 +90,54 @@
         </ul>
       </div>
       <div>
-        <h2 class="text-sm font-medium text-zinc-400">
-          {{ $t("tasks.admin.dailyScheduledTitle") }}
-        </h2>
-        <ul role="list" class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <li
-            v-for="task in dailyTasks"
-            :key="task"
-            class="col-span-1 divide-y divide-gray-200 rounded-lg bg-zinc-800 border border-zinc-700 shadow-sm"
+        <template v-for="section in sections" :key="section.key">
+          <h2
+            class="text-sm font-medium text-zinc-400"
+            :class="section.first ? '' : 'mt-8'"
           >
-            <div class="flex w-full items-center justify-between space-x-6 p-6">
-              <div class="flex-1">
-                <div class="flex items-center space-x-2">
-                  <h3 class="text-sm font-medium text-zinc-100">
-                    {{ scheduledTasks[task].name }}
-                  </h3>
-                </div>
-                <p class="mt-1 text-sm text-zinc-400">
-                  {{ scheduledTasks[task].description }}
-                </p>
-                <button
-                  class="mt-3 rounded-md text-xs font-medium text-zinc-100 hover:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-100 focus:ring-offset-2"
-                  @click="() => startTask(task)"
-                >
-                  <i18n-t
-                    keypath="tasks.admin.execute"
-                    tag="span"
-                    scope="global"
-                    class="inline-flex items-center gap-x-1"
+            {{ section.title }}
+          </h2>
+          <p v-if="section.blurb" class="mt-1 text-xs text-zinc-500">
+            {{ section.blurb }}
+          </p>
+          <ul role="list" class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <li
+              v-for="task in section.tasks"
+              :key="task"
+              class="col-span-1 divide-y divide-gray-200 rounded-lg bg-zinc-800 border border-zinc-700 shadow-sm"
+            >
+              <div
+                class="flex w-full items-center justify-between space-x-6 p-6"
+              >
+                <div class="flex-1">
+                  <div class="flex items-center space-x-2">
+                    <h3 class="text-sm font-medium text-zinc-100">
+                      {{ scheduledTasks[task].name }}
+                    </h3>
+                  </div>
+                  <p class="mt-1 text-sm text-zinc-400">
+                    {{ scheduledTasks[task].description }}
+                  </p>
+                  <button
+                    class="mt-3 rounded-md text-xs font-medium text-zinc-100 hover:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-100 focus:ring-offset-2"
+                    @click="() => startTask(task)"
                   >
-                    <template #arrow>
-                      <PlayIcon class="size-4" aria-hidden="true" />
-                    </template>
-                  </i18n-t>
-                </button>
-              </div>
-            </div>
-          </li>
-        </ul>
-        <h2 class="text-sm font-medium text-zinc-400 mt-8">
-          {{ $t("tasks.admin.weeklyScheduledTitle") }}
-        </h2>
-        <ul role="list" class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <li
-            v-for="task in weeklyTasks"
-            :key="task"
-            class="col-span-1 divide-y divide-gray-200 rounded-lg bg-zinc-800 border border-zinc-700 shadow-sm"
-          >
-            <div class="flex w-full items-center justify-between space-x-6 p-6">
-              <div class="flex-1">
-                <div class="flex items-center space-x-2">
-                  <h3 class="text-sm font-medium text-zinc-100">
-                    {{ scheduledTasks[task].name }}
-                  </h3>
+                    <i18n-t
+                      keypath="tasks.admin.execute"
+                      tag="span"
+                      scope="global"
+                      class="inline-flex items-center gap-x-1"
+                    >
+                      <template #arrow>
+                        <PlayIcon class="size-4" aria-hidden="true" />
+                      </template>
+                    </i18n-t>
+                  </button>
                 </div>
-                <p class="mt-1 text-sm text-zinc-400">
-                  {{ scheduledTasks[task].description }}
-                </p>
-                <button
-                  class="mt-3 rounded-md text-xs font-medium text-zinc-100 hover:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-100 focus:ring-offset-2"
-                  @click="() => startTask(task)"
-                >
-                  <i18n-t
-                    keypath="tasks.admin.execute"
-                    tag="span"
-                    scope="global"
-                    class="inline-flex items-center gap-x-1"
-                  >
-                    <template #arrow>
-                      <PlayIcon class="size-4" aria-hidden="true" />
-                    </template>
-                  </i18n-t>
-                </button>
               </div>
-            </div>
-          </li>
-        </ul>
-        <h2 class="text-sm font-medium text-zinc-400 mt-8">
-          {{ $t("tasks.admin.utilityTitle") }}
-        </h2>
-        <ul role="list" class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <li
-            v-for="task in other"
-            :key="task"
-            class="col-span-1 divide-y divide-gray-200 rounded-lg bg-zinc-800 border border-zinc-700 shadow-sm"
-          >
-            <div class="flex w-full items-center justify-between space-x-6 p-6">
-              <div class="flex-1">
-                <div class="flex items-center space-x-2">
-                  <h3 class="text-sm font-medium text-zinc-100">
-                    {{ scheduledTasks[task].name }}
-                  </h3>
-                </div>
-                <p class="mt-1 text-sm text-zinc-400">
-                  {{ scheduledTasks[task].description }}
-                </p>
-                <button
-                  class="mt-3 rounded-md text-xs font-medium text-zinc-100 hover:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-100 focus:ring-offset-2"
-                  @click="() => startTask(task)"
-                >
-                  <i18n-t
-                    keypath="tasks.admin.execute"
-                    tag="span"
-                    scope="global"
-                    class="inline-flex items-center gap-x-1"
-                  >
-                    <template #arrow>
-                      <PlayIcon class="size-4" aria-hidden="true" />
-                    </template>
-                  </i18n-t>
-                </button>
-              </div>
-            </div>
-          </li>
-        </ul>
+            </li>
+          </ul>
+        </template>
       </div>
     </div>
   </div>
@@ -223,8 +157,15 @@ definePageMeta({
 
 const { t } = useI18n();
 
-const { runningTasks, historicalTasks, dailyTasks, weeklyTasks, other } =
-  await $dropFetch("/api/v1/admin/task");
+const {
+  runningTasks,
+  historicalTasks,
+  dailyTasks,
+  weeklyTasks,
+  library,
+  achievements,
+  system,
+} = await $dropFetch("/api/v1/admin/task");
 
 const liveRunningTasks = ref(
   await Promise.all(runningTasks.map((e) => useTask(e))),
@@ -233,6 +174,7 @@ const liveRunningTasks = ref(
 const scheduledTasks: {
   [key in TaskGroup]: { name: string; description: string };
 } = {
+  // Scheduled cleanup (automatic)
   "cleanup:invitations": {
     name: t("tasks.admin.scheduled.cleanupInvitationsName"),
     description: t("tasks.admin.scheduled.cleanupInvitationsDescription"),
@@ -249,43 +191,106 @@ const scheduledTasks: {
     name: t("tasks.admin.scheduled.checkUpdateName"),
     description: t("tasks.admin.scheduled.checkUpdateDescription"),
   },
-  "import:game": {
-    name: "",
-    description: "",
-  },
-  "import:version": {
-    name: "",
-    description: "",
-  },
-  "import:check-integrity": {
-    name: "Check Integrity",
-    description: "Re-imports all versions and updates their manifests.",
-  },
+
+  // System-triggered, hidden from admin buttons
+  "import:game": { name: "", description: "" },
+  "import:version": { name: "", description: "" },
+
+  // Library maintenance
   "check:game-updates": {
-    name: "Check for Game Updates",
+    name: "Check Game Updates",
     description:
-      "Checks Steam for new build IDs and flags any games that have an update available.",
+      "Hits Steam for fresh build IDs and flips updateAvailable on any game that's behind.",
   },
-  "scan:achievements": {
-    name: "Scan All Achievements",
+  "scan:library-health": {
+    name: "Scan Library Health",
     description:
-      "Checks Goldberg readiness, refreshes Steam achievement definitions, and auto-links RetroAchievements for all games.",
+      "Verifies every imported version's files still exist and are readable. Catches stale mounts and ACL drift.",
   },
-  "download:gbe": {
-    name: "Download GBE DLLs",
+  "cleanup:library-orphans": {
+    name: "Scan Library Orphans",
     description:
-      "Downloads the latest GBE (Goldberg fork) release from GitHub for use in SSE → GBE upgrades.",
+      "Reports folders on disk not in the DB, and DB rows with no matching folder. Report-only — never deletes.",
   },
-  "upgrade:all-to-gbe": {
-    name: "",
-    description: "",
+  "refresh:metadata": {
+    name: "Audit Metadata",
+    description:
+      "Lists games with missing descriptions, cover art, or suspicious release dates so you can re-link them.",
   },
+
+  // Achievements
+  "scan:goldberg-readiness": {
+    name: "Scan Goldberg Readiness",
+    description:
+      "Verifies steam_settings/, steam_appid.txt, achievements.json, and DB records for every Steam/Goldberg game. Auto-fixes gaps.",
+  },
+  "refresh:achievement-defs": {
+    name: "Refresh Achievement Definitions",
+    description:
+      "Re-pulls achievement titles, descriptions, and icons from the Steam API for every linked game.",
+  },
+  "link:retroachievements": {
+    name: "Auto-link RetroAchievements",
+    description:
+      "Searches RetroAchievements for every unlinked game and imports its achievement set when a match is found.",
+  },
+  "recalculate:achievements": {
+    name: "Recalculate Achievements",
+    description:
+      "Audits per-user unlock counts and flags games whose definitions never fetched. Reports only.",
+  },
+  "upgrade:gbe": {
+    name: "Upgrade to GBE",
+    description:
+      "Ensures the GBE (Goldberg fork) DLLs are cached, then scans every game and upgrades SSE/Steam DRM installs in place.",
+  },
+
+  // System
   "recalculate:playtime": {
     name: "Recalculate Playtime",
     description:
-      "Recomputes all cumulative playtime from actual session records. Fixes any inflated totals caused by orphan double-counting.",
+      "Recomputes all cumulative playtime from session records. Fixes totals inflated by orphan double-counting.",
+  },
+  "backup:export": {
+    name: "Export Backup",
+    description:
+      "Writes a JSON snapshot of games, users, versions, and achievements to /data/backups. Keeps the most recent 10.",
   },
 };
+
+const sections = computed(() => [
+  {
+    key: "daily",
+    title: t("tasks.admin.dailyScheduledTitle"),
+    blurb: t("tasks.admin.dailyScheduledBlurb"),
+    tasks: dailyTasks,
+    first: true,
+  },
+  {
+    key: "weekly",
+    title: t("tasks.admin.weeklyScheduledTitle"),
+    blurb: t("tasks.admin.weeklyScheduledBlurb"),
+    tasks: weeklyTasks,
+  },
+  {
+    key: "library",
+    title: t("tasks.admin.libraryTitle"),
+    blurb: t("tasks.admin.libraryBlurb"),
+    tasks: library,
+  },
+  {
+    key: "achievements",
+    title: t("tasks.admin.achievementsTitle"),
+    blurb: t("tasks.admin.achievementsBlurb"),
+    tasks: achievements,
+  },
+  {
+    key: "system",
+    title: t("tasks.admin.systemTitle"),
+    blurb: t("tasks.admin.systemBlurb"),
+    tasks: system,
+  },
+]);
 
 async function startTask(taskGroup: string) {
   const task = await $dropFetch("/api/v1/admin/task", {

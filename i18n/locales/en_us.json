@@ -1009,10 +1009,15 @@
   },
   "tasks": {
     "admin": {
+      "achievementsBlurb": "Tasks that touch Steam/Goldberg achievement data and RetroAchievements links.",
+      "achievementsTitle": "Achievements",
       "back": "{arrow} Back to Tasks",
       "completedTasksTitle": "Completed tasks",
+      "dailyScheduledBlurb": "Runs automatically every 24 hours. Manual runs trigger an out-of-schedule pass.",
       "dailyScheduledTitle": "Daily scheduled tasks",
       "execute": "{arrow} Execute",
+      "libraryBlurb": "On-demand audits of on-disk game files, metadata, and Steam update state.",
+      "libraryTitle": "Library maintenance",
       "noActions": "No actions",
       "noTasksRunning": "No tasks currently running",
       "progress": "{0}%",
@@ -1027,8 +1032,10 @@
         "cleanupSessionsDescription": "Cleans up expired sessions to save space and ensure security.",
         "cleanupSessionsName": "Clean up sessions."
       },
-      "utilityTitle": "Utility tasks",
+      "systemBlurb": "Server-wide maintenance and backup.",
+      "systemTitle": "System",
       "viewTask": "View {arrow}",
+      "weeklyScheduledBlurb": "Runs automatically every 7 days, right after the daily batch.",
       "weeklyScheduledTitle": "Weekly scheduled tasks"
     }
   },

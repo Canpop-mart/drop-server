@@ -17,17 +17,11 @@ export default defineEventHandler(async (h3) => {
   const historicalTasks = await prisma.task.findMany({
     where: {
       OR: [
-        {
-          acls: { hasSome: allAcls },
-        },
-        {
-          acls: { isEmpty: true },
-        },
+        { acls: { hasSome: allAcls } },
+        { acls: { isEmpty: true } },
       ],
     },
-    orderBy: {
-      ended: "desc",
-    },
+    orderBy: { ended: "desc" },
     select: {
       id: true,
       name: true,
@@ -37,15 +31,35 @@ export default defineEventHandler(async (h3) => {
     },
     take: 32,
   });
+
   const dailyTasks = await taskHandler.dailyTasks();
   const weeklyTasks = await taskHandler.weeklyTasks();
-  const other: TaskGroup[] = [
-    "import:check-integrity",
+
+  // On-demand admin categories. Ordering here controls the UI reading order.
+  const library: TaskGroup[] = [
     "check:game-updates",
-    "scan:achievements",
-    "download:gbe",
+    "cleanup:library-orphans",
+    "refresh:metadata",
+  ];
+  const achievements: TaskGroup[] = [
+    "scan:goldberg-readiness",
+    "refresh:achievement-defs",
+    "link:retroachievements",
+    "recalculate:achievements",
+    "upgrade:gbe",
+  ];
+  const system: TaskGroup[] = [
     "recalculate:playtime",
+    "backup:export",
   ];
 
-  return { runningTasks, historicalTasks, dailyTasks, weeklyTasks, other };
+  return {
+    runningTasks,
+    historicalTasks,
+    dailyTasks,
+    weeklyTasks,
+    library,
+    achievements,
+    system,
+  };
 });
