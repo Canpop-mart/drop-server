@@ -75,7 +75,9 @@ export default defineDropTask({
       try {
         const entries = fs.readdirSync(versionDir);
         if (entries.length === 0) {
-          logger.info(`${label} — directory exists but is empty: ${versionDir}`);
+          logger.info(
+            `${label} — directory exists but is empty: ${versionDir}`,
+          );
           emptyDir++;
         } else {
           // Spot-check that we can actually stat one of the entries —

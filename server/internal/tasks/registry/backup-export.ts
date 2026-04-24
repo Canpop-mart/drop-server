@@ -46,13 +46,22 @@ export default defineDropTask({
     // Pull each table in sequence so a partial failure is obvious.
     // Ordering mirrors the roughly-dependency order used by Prisma schema.
     const steps: { key: string; fn: () => Promise<unknown> }[] = [
-      { key: "applicationSettings", fn: () => prisma.applicationSettings.findMany() },
+      {
+        key: "applicationSettings",
+        fn: () => prisma.applicationSettings.findMany(),
+      },
       { key: "library", fn: () => prisma.library.findMany() },
       { key: "user", fn: () => prisma.user.findMany() },
       { key: "game", fn: () => prisma.game.findMany() },
       { key: "gameVersion", fn: () => prisma.gameVersion.findMany() },
-      { key: "launchConfiguration", fn: () => prisma.launchConfiguration.findMany() },
-      { key: "setupConfiguration", fn: () => prisma.setupConfiguration.findMany() },
+      {
+        key: "launchConfiguration",
+        fn: () => prisma.launchConfiguration.findMany(),
+      },
+      {
+        key: "setupConfiguration",
+        fn: () => prisma.setupConfiguration.findMany(),
+      },
       { key: "company", fn: () => prisma.company.findMany() },
       { key: "gameTag", fn: () => prisma.gameTag.findMany() },
       { key: "gameRating", fn: () => prisma.gameRating.findMany() },
@@ -93,8 +102,7 @@ export default defineDropTask({
       .filter((f) => f.startsWith("drop-backup-") && f.endsWith(".json"))
       .map((f) => ({ f, full: path.join(backupDir, f) }))
       .sort(
-        (a, b) =>
-          fs.statSync(b.full).mtimeMs - fs.statSync(a.full).mtimeMs,
+        (a, b) => fs.statSync(b.full).mtimeMs - fs.statSync(a.full).mtimeMs,
       );
 
     const KEEP = 10;

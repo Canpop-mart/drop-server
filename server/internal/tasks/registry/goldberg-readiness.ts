@@ -75,9 +75,12 @@ export default defineDropTask({
       }
 
       const hasAppIdFile = !!readGoldbergAppId(versionDir);
-      const hasAchievementsFile = readGoldbergDefinitions(versionDir).length > 0;
+      const hasAchievementsFile =
+        readGoldbergDefinitions(versionDir).length > 0;
       const hasDbRecords = game._count.achievements > 0;
-      const hasSteamSettings = fs.existsSync(path.join(versionDir, "steam_settings"));
+      const hasSteamSettings = fs.existsSync(
+        path.join(versionDir, "steam_settings"),
+      );
 
       const allGood =
         hasAppIdFile && hasAchievementsFile && hasDbRecords && hasSteamSettings;

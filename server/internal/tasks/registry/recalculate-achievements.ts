@@ -50,7 +50,9 @@ export default defineDropTask({
 
     logger.info("Phase 2: per-user unlock stats");
 
-    const users = await prisma.user.findMany({ select: { id: true, username: true } });
+    const users = await prisma.user.findMany({
+      select: { id: true, username: true },
+    });
     let totalUnlocks = 0;
     const perUser: { username: string; unlocks: number; games: number }[] = [];
 
@@ -89,7 +91,9 @@ export default defineDropTask({
 
     perUser.sort((a, b) => b.unlocks - a.unlocks);
     for (const u of perUser) {
-      logger.info(`  ${u.username}: ${u.unlocks} unlocks across ${u.games} game(s)`);
+      logger.info(
+        `  ${u.username}: ${u.unlocks} unlocks across ${u.games} game(s)`,
+      );
     }
 
     logger.info(

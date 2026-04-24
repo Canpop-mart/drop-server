@@ -16,10 +16,7 @@ export default defineEventHandler(async (h3) => {
   const runningTasks = (await taskHandler.runningTasks()).map((e) => e.id);
   const historicalTasks = await prisma.task.findMany({
     where: {
-      OR: [
-        { acls: { hasSome: allAcls } },
-        { acls: { isEmpty: true } },
-      ],
+      OR: [{ acls: { hasSome: allAcls } }, { acls: { isEmpty: true } }],
     },
     orderBy: { ended: "desc" },
     select: {
@@ -48,10 +45,7 @@ export default defineEventHandler(async (h3) => {
     "recalculate:achievements",
     "upgrade:gbe",
   ];
-  const system: TaskGroup[] = [
-    "recalculate:playtime",
-    "backup:export",
-  ];
+  const system: TaskGroup[] = ["recalculate:playtime", "backup:export"];
 
   return {
     runningTasks,

@@ -50,9 +50,14 @@ export default defineDropTask({
       if (!g.mIconObjectId) issues.push("no icon");
       if (!g.mBannerObjectId) issues.push("no banner");
       if (!g.mCoverObjectId) issues.push("no cover");
-      if (g.mReleased && g.mReleased.getTime() > now + 365 * 24 * 60 * 60 * 1000) {
+      if (
+        g.mReleased &&
+        g.mReleased.getTime() > now + 365 * 24 * 60 * 60 * 1000
+      ) {
         // Released more than a year in the future — almost certainly a bad row.
-        issues.push(`release date ${g.mReleased.toISOString().slice(0, 10)} is far future`);
+        issues.push(
+          `release date ${g.mReleased.toISOString().slice(0, 10)} is far future`,
+        );
       }
 
       if (issues.length > 0) {
@@ -72,7 +77,9 @@ export default defineDropTask({
     if (problems.length === 0) {
       logger.info("No metadata issues found.");
     } else {
-      logger.info(`Found ${problems.length} game(s) with missing or suspicious metadata:`);
+      logger.info(
+        `Found ${problems.length} game(s) with missing or suspicious metadata:`,
+      );
       for (const p of problems) logger.info(`  ${p}`);
       logger.info(
         "Fix by re-linking these games from the admin library page. Manual-source games are never auto-refreshed.",
