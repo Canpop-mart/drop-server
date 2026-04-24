@@ -217,6 +217,11 @@ const scheduledTasks: {
     description:
       "Lists games with missing descriptions, cover art, or suspicious release dates so you can re-link them.",
   },
+  "regenerate:manifests": {
+    name: "Regenerate Manifests",
+    description:
+      "Re-hashes every game's latest version and rewrites its droplet manifest. Run this after mass DLL swaps (or any on-disk change) so clients stop hitting checksum-invalid errors on download.",
+  },
 
   // Achievements
   "scan:goldberg-readiness": {

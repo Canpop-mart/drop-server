@@ -37,6 +37,7 @@ export default defineEventHandler(async (h3) => {
     "check:game-updates",
     "cleanup:library-orphans",
     "refresh:metadata",
+    "regenerate:manifests",
   ];
   const achievements: TaskGroup[] = [
     "scan:goldberg-readiness",
