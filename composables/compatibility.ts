@@ -18,10 +18,14 @@ export type CompatLibrarySummary = Record<string, GameCompatSummary>;
  * Backed by `GET /api/v1/client/compat/library-summary` and cached for the
  * lifetime of the page. Call `refreshCompatSummary()` after a test run
  * completes to invalidate.
+ *
+ * Internally the state ref carries `CompatLibrarySummary | undefined` so
+ * we can use `undefined` as a "not yet fetched" sentinel — `useState` won't
+ * accept `() => undefined` for a non-nullable type. The post-fetch cast
+ * narrows the return type for ergonomic call sites.
  */
 export const useCompatSummary = async () => {
-  // @ts-expect-error undefined sentinel for "not yet fetched"
-  const state = useState<CompatLibrarySummary>(
+  const state = useState<CompatLibrarySummary | undefined>(
     "compat-summary",
     () => undefined,
   );
@@ -30,11 +34,11 @@ export const useCompatSummary = async () => {
       "/api/v1/client/compat/library-summary",
     );
   }
-  return state;
+  return state as Ref<CompatLibrarySummary>;
 };
 
 export async function refreshCompatSummary() {
-  const state = useState<CompatLibrarySummary>("compat-summary");
+  const state = useState<CompatLibrarySummary | undefined>("compat-summary");
   state.value = await $dropFetch<CompatLibrarySummary>(
     "/api/v1/client/compat/library-summary",
   );
