@@ -41,19 +41,24 @@
       </span>
       <span v-else class="shrink-0" />
 
-      <!-- Update available badge (always visible) OR version badge (hover only) -->
-      <span
-        v-if="game?.updateAvailable"
-        class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500 text-white leading-tight shrink-0 whitespace-nowrap shadow-lg"
-      >
-        {{ $t("store.updateAvailable") }}
-      </span>
-      <span
-        v-else-if="versionLabel"
-        class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-green-700 text-white leading-tight shrink-0 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-      >
-        {{ versionLabel }}
-      </span>
+      <!-- Right side: update + compat badges stack -->
+      <div class="flex items-center gap-1 shrink-0">
+        <!-- Compat badges (always visible if any platform tested) -->
+        <CompatBadge v-if="compat" :compat="compat" />
+        <!-- Update available badge (always visible) OR version badge (hover only) -->
+        <span
+          v-if="game?.updateAvailable"
+          class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500 text-white leading-tight whitespace-nowrap shadow-lg"
+        >
+          {{ $t("store.updateAvailable") }}
+        </span>
+        <span
+          v-else-if="versionLabel"
+          class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-green-700 text-white leading-tight whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+        >
+          {{ versionLabel }}
+        </span>
+      </div>
     </div>
 
     <!-- Centered hover "eye" button -->
@@ -98,6 +103,7 @@
 
 <script setup lang="ts">
 import { EyeIcon } from "@heroicons/vue/24/solid";
+import type { GameCompatSummary } from "~/composables/compatibility";
 
 const { t } = useI18n();
 const {
@@ -106,6 +112,7 @@ const {
   showTitleDescription = true,
   animate = true,
   defaultPlaceholder = false,
+  compat = undefined,
 } = defineProps<{
   game:
     | {
@@ -127,6 +134,13 @@ const {
   showTitleDescription?: boolean;
   animate?: boolean;
   defaultPlaceholder?: boolean;
+  /**
+   * Compatibility test results for this game across the user's clients.
+   * Pass `useCompatSummary().value[game.id]` from the parent. Optional —
+   * when omitted, no badge is rendered and the card behaves exactly as
+   * before this feature shipped.
+   */
+  compat?: GameCompatSummary | undefined;
 }>();
 
 const imageProps = {

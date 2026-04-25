@@ -395,6 +395,9 @@
 
           <!-- Right column: Game Images + Achievements (mirrors client sidebar) -->
           <div class="space-y-6">
+            <!-- Compatibility (only renders if any client has tested this game) -->
+            <GameCompatPanel :compat="gameCompat" />
+
             <!-- Game Images carousel -->
             <div class="bg-zinc-800/50 rounded-xl p-6 backdrop-blur-sm">
               <h2 class="text-xl font-display font-semibold text-zinc-100 mb-4">
@@ -656,6 +659,12 @@ const { game, rating, sizes, platforms } = await $dropFetch(
 if (!game) {
   throw createError({ statusCode: 404, message: t("library.notFound") });
 }
+
+// Compat data for this specific game (per platform). Soft-fails so a server
+// misconfiguration doesn't 500 the entire detail page; the panel just won't
+// render when there's no data.
+const compatSummaryRef = await useCompatSummary().catch(() => null);
+const gameCompat = computed(() => compatSummaryRef?.value?.[id]);
 
 // Author-controlled Markdown → sanitized HTML. micromark's output can contain
 // raw HTML, so we run it through DOMPurify before v-html (see composables/sanitize.ts).

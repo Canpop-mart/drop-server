@@ -20,6 +20,7 @@ model Client {
   streamingSessions StreamingSession[]
   requestedStreams  StreamingSession[] @relation("StreamingSessionRequester")
   installedGames    ClientInstalledGame[]
+  compatibilityResults GameCompatibilityResult[]
 }
 
 /// Tracks which games are installed on which client devices.

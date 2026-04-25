@@ -82,6 +82,7 @@
             v-for="game in games"
             :key="game.id"
             :game="game"
+            :compat="compatSummary[game.id]"
             :href="`/library/game/${game?.id}`"
           />
         </div>
@@ -105,6 +106,13 @@ const currentlyDeleting = ref<CollectionModel | undefined>();
 const { t } = useI18n();
 const library = await useLibrary();
 const games = library.value.entries.map((e) => e.game);
+
+// Compat data is fetched separately so the existing collection endpoint
+// stays focused on library membership; merged in the template via
+// `:compat="compatSummary[game.id]"`. Failure to fetch is non-fatal —
+// cards render without badges.
+const compatSummaryRef = await useCompatSummary().catch(() => null);
+const compatSummary = computed(() => compatSummaryRef?.value ?? {});
 
 useHead({
   title: t("userHeader.links.library"),

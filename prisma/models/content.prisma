@@ -74,6 +74,7 @@ model Game {
   showcases              ProfileShowcase[]
   streamingSessions      StreamingSession[]
   clientInstalls         ClientInstalledGame[]
+  compatibilityResults   GameCompatibilityResult[]
 
   @@unique([metadataSource, metadataId], name: "metadataKey")
   @@unique([libraryId, libraryPath], name: "libraryKey")

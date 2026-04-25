@@ -1,0 +1,53 @@
+enum GameCompatibilityStatus {
+    Untested      @map("untested")       // never run by this client
+    Installing    @map("installing")     // worker is downloading the game
+    Testing       @map("testing")        // worker has launched the game and is observing
+    AliveRenders  @map("alive_renders")  // process alive and rendering correctly (user/heuristic confirmed)
+    AliveNoRender @map("alive_no_render") // process alive but no frames presented (STS2-class)
+    EarlyExit     @map("early_exit")     // started then died before the timeout
+    Crash         @map("crash")          // unhandled exception (page fault, etc.)
+    NoLaunch      @map("no_launch")      // never came alive at all
+    InstallFailed @map("install_failed") // worker couldn't even download/extract the game
+}
+
+/// Per-(game, client) compatibility test results.
+///
+/// One row per test run; the latest row per (gameId, clientId) is the current
+/// state, older rows are kept as history. Querying for "current compat" means
+/// `ORDER BY testedAt DESC LIMIT 1` per pair (or the index supports a window
+/// query).
+///
+/// `clientId` identifies the test environment — a Steam Deck and a Windows PC
+/// belonging to the same user will have different Client rows, so per-platform
+/// results are naturally separated by joining through Client.platform.
+model GameCompatibilityResult {
+    id String @id @default(uuid())
+
+    gameId String
+    game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+    clientId String
+    client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+    status        GameCompatibilityStatus
+    /// Short fingerprint for grouping similar failures: crash address, last
+    /// `err:` line, etc. Capped at ~120 chars on insert by the API handler.
+    signature     String?
+    /// Populated for Linux clients (e.g. "GE-Proton10-32", "Proton-Experimental").
+    /// Null for Windows clients.
+    protonVersion String?
+    /// Free-form, e.g. "Required vsync=off in settings.save".
+    notes         String?
+    /// Up to ~16KB of relevant log lines for triage; trimmed on insert if larger.
+    logExcerpt    String?
+
+    testedAt DateTime @default(now()) @db.Timestamptz(6)
+
+    /// Primary access pattern: "what's the latest result for this game on this client?"
+    @@index([gameId, clientId, testedAt(sort: Desc)])
+    /// Secondary: "give me everything this client has tested" (for the worker's
+    /// "find next untested" query, joined against Game).
+    @@index([clientId, status, testedAt(sort: Desc)])
+    /// Tertiary: dashboard rollups by status.
+    @@index([status])
+}
