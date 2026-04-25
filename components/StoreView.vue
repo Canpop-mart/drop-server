@@ -318,6 +318,7 @@
                   v-for="game in games"
                   :key="game.id"
                   :game="game"
+                  :compat="compatSummary[game.id]"
                   :href="`/store/${game.id}`"
                   :show-title-description="showGamePanelTextDecoration"
                 />
@@ -459,6 +460,11 @@ const {
 
 const { t } = useI18n();
 const mobileFiltersOpen = ref(false);
+
+// Per-(game, platform) compat status, used to render badges on each tile.
+// Soft-fails so the store still loads when offline.
+const compatSummaryRef = await useCompatSummary().catch(() => null);
+const compatSummary = computed(() => compatSummaryRef?.value ?? {});
 
 const searchText = ref("");
 let searchDebounce: ReturnType<typeof setTimeout> | null = null;

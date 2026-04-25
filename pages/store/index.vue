@@ -225,6 +225,7 @@
               v-for="game in recentlyAdded.slice(3, 3 + recentlyAddedRowCount)"
               :key="game.id"
               :game="game"
+              :compat="compatSummary[game.id]"
               :href="`/store/${game.id}`"
             />
           </div>
@@ -257,6 +258,11 @@ type TrendingGame = StoreGame & {
 const featured = await $dropFetch("/api/v1/store/featured");
 const user = useUser();
 const { t } = useI18n();
+
+// Compat status badges per game (per platform). Soft-fails so an offline
+// or unauthenticated user still sees the store; the badges just won't render.
+const compatSummaryRef = await useCompatSummary().catch(() => null);
+const compatSummary = computed(() => compatSummaryRef?.value ?? {});
 
 useHead({ title: t("store.title") });
 

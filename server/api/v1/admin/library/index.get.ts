@@ -121,6 +121,49 @@ export default defineEventHandler(async (h3) => {
       });
     }
 
+    // Compat filters: compat.<bucket> where bucket is one of
+    //   working   — any compat result with status AliveRenders
+    //   broken    — any compat result with status Crash/EarlyExit/NoLaunch/InstallFailed
+    //   noRender  — any compat result with status AliveNoRender (needs review)
+    //   untested  — no compat results at all
+    //
+    // Implemented as Game-relation filters so the existing query pipeline
+    // composes them naturally with all other filters.
+    if (filterSet.has("compat.working")) {
+      rawFilters.push({
+        where: {
+          compatibilityResults: { some: { status: "AliveRenders" } },
+        },
+      });
+    }
+    if (filterSet.has("compat.broken")) {
+      rawFilters.push({
+        where: {
+          compatibilityResults: {
+            some: {
+              status: {
+                in: ["Crash", "EarlyExit", "NoLaunch", "InstallFailed"],
+              },
+            },
+          },
+        },
+      });
+    }
+    if (filterSet.has("compat.noRender")) {
+      rawFilters.push({
+        where: {
+          compatibilityResults: { some: { status: "AliveNoRender" } },
+        },
+      });
+    }
+    if (filterSet.has("compat.untested")) {
+      rawFilters.push({
+        where: {
+          compatibilityResults: { none: {} },
+        },
+      });
+    }
+
     // Library filters: library.<libraryId>
     const libraryFilters = [...filterSet]
       .filter((f) => f.startsWith("library."))

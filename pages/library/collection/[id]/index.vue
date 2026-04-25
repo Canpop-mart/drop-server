@@ -26,6 +26,7 @@
         v-for="entry in collection?.entries"
         :key="entry.gameId"
         :game="entry.game"
+        :compat="compatSummary[entry.game.id]"
         :href="`/library/game/${entry.game.id}`"
       />
     </div>
@@ -47,6 +48,11 @@ if (collection.value === undefined) {
     statusMessage: t("library.collection.notFound"),
   });
 }
+
+// Compat data for each game in the collection — soft-fails (no badges
+// shown) so a misconfigured server doesn't break the page.
+const compatSummaryRef = await useCompatSummary().catch(() => null);
+const compatSummary = computed(() => compatSummaryRef?.value ?? {});
 
 useHead({
   title: collection.value?.name || t("library.collection.title"),

@@ -37,7 +37,9 @@
           />
           <div class="flex items-center gap-x-2">
             <AddLibraryButton :game-id="game.id" />
+            <CompatBadge v-if="gameCompat" :compat="gameCompat" />
           </div>
+          <GameCompatPanel :compat="gameCompat" />
           <NuxtLink
             v-if="user?.admin && !isClient"
             :href="`/admin/library/${game.id}`"
@@ -371,6 +373,11 @@ const { game, rating, sizes, platforms } = await $dropFetch(
   `/api/v1/games/${gameId}`,
 );
 const isClient = isClientRequest();
+
+// Compat data scoped to this specific game (per-platform). Soft-fails so
+// an offline / unauthenticated visit still renders the store page.
+const compatSummaryRef = await useCompatSummary().catch(() => null);
+const gameCompat = computed(() => compatSummaryRef?.value?.[gameId]);
 // Sanitize micromark output before letting v-html render it. See
 // composables/sanitize.ts for the rationale — mDescription is author-controlled
 // Markdown and micromark lets raw HTML pass through.
