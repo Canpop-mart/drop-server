@@ -1,6 +1,6 @@
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
-import { Platform } from "~/prisma/client/enums";
+import type { Platform } from "~/prisma/client/enums";
 
 const STALE_DAYS = 60;
 
@@ -23,17 +23,21 @@ const STALE_DAYS = 60;
  * just confirms the worker is reporting from the platform it claims to
  * be, no candidate pruning. Keeps the contract forward-compatible.
  */
-export default defineClientEventHandler(async (h3, { clientId, fetchUser }) => {
+export default defineClientEventHandler(async (h3, { clientId }) => {
   const query = getQuery(h3);
   const platformParam =
     typeof query.platform === "string"
       ? (query.platform as Platform)
       : undefined;
 
-  const user = await fetchUser();
-
-  // Find a game in the user's library that this client either hasn't
-  // tested yet OR last tested before the staleness threshold.
+  // Find a game installed *on this specific client* that this client
+  // either hasn't tested yet OR last tested before the staleness
+  // threshold. Scoping to ClientInstalledGame for THIS clientId (not any
+  // client owned by the user) is critical — otherwise a Windows worker
+  // would be handed games that only the user's Steam Deck has installed,
+  // immediately fail to launch, and pollute the compat history with
+  // bogus NoLaunch rows.
+  //
   // Single query: NOT EXISTS (recent result) → ordered by mReleased desc
   // so newer games get triaged first (more likely to be the games the
   // user actually cares about right now).
@@ -50,6 +54,8 @@ export default defineClientEventHandler(async (h3, { clientId, fetchUser }) => {
            g."metadataId",
            latest."testedAt" AS "lastTestedAt"
     FROM "Game" g
+    INNER JOIN "ClientInstalledGame" cig
+      ON cig."gameId" = g.id AND cig."clientId" = ${clientId}
     LEFT JOIN LATERAL (
       SELECT "testedAt"
       FROM "GameCompatibilityResult" r
@@ -57,21 +63,9 @@ export default defineClientEventHandler(async (h3, { clientId, fetchUser }) => {
       ORDER BY r."testedAt" DESC
       LIMIT 1
     ) latest ON TRUE
-    WHERE EXISTS (
-      -- The game must be in the user's library. We approximate this as
-      -- "any client owned by this user has it installed" OR "it's in
-      -- their default library." For self-hosted instances both are fine.
-      SELECT 1 FROM "Client" c
-      WHERE c."userId" = ${user.id}
-        AND EXISTS (
-          SELECT 1 FROM "ClientInstalledGame" cig
-          WHERE cig."clientId" = c.id AND cig."gameId" = g.id
-        )
-    )
-    AND (
+    WHERE
       latest."testedAt" IS NULL
       OR latest."testedAt" < NOW() - (${STALE_DAYS} || ' days')::INTERVAL
-    )
     ORDER BY g."mReleased" DESC NULLS LAST
     LIMIT 1
   `;
