@@ -48,6 +48,24 @@ function normalizeOrigin(raw: string | undefined): string | undefined {
   }
 }
 
+// Origins emitted by Tauri's custom server:// protocol when drop-app
+// makes API calls from its webview. These are always trusted because
+// they can only be produced by a Tauri WebView running on the same
+// machine — an attacker on a different host cannot forge them. We
+// allowlist them by default so every drop-server install supports
+// drop-app out of the box without per-deployment env-var fiddling.
+//
+// (The reason drop-app calls non-`/api/v1/client/**` endpoints in the
+// first place: collection/library management endpoints are shared
+// between the Nuxt web UI and drop-app to avoid maintaining two
+// parallel API surfaces. See AddLibraryButton.vue for an example.)
+const TAURI_CUSTOM_PROTOCOL_ORIGINS = [
+  "http://server.localhost",
+  "https://server.localhost",
+  // Some Tauri platforms (notably macOS) use the `tauri://` scheme.
+  "tauri://server.localhost",
+] as const;
+
 function extractExpectedOrigins(hostHeader: string | undefined): Set<string> {
   const out = new Set<string>();
 
@@ -57,6 +75,11 @@ function extractExpectedOrigins(hostHeader: string | undefined): Set<string> {
   if (hostHeader) {
     out.add(`http://${hostHeader}`);
     out.add(`https://${hostHeader}`);
+  }
+
+  // Always accept Tauri webview origins (drop-app).
+  for (const o of TAURI_CUSTOM_PROTOCOL_ORIGINS) {
+    out.add(o);
   }
 
   // Also accept any origin explicitly allowlisted via env var.
