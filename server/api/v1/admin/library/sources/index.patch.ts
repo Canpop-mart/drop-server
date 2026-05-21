@@ -10,6 +10,16 @@ const UpdateLibrarySource = type({
   id: "string",
   name: "string",
   options: "object",
+  // Optional opt-out for the GBE steam_api DLL auto-swap. Default ON
+  // matches the historical behaviour; admins flip it off when the
+  // library is full of pre-fixed games whose crack DLLs must be
+  // preserved. See server/internal/gbe.ts → ensureGbeDll.
+  autoSwapSteamApiDll: "boolean?",
+  // Optional opt-out for the whole emulator-setup phase of version
+  // imports. Default ON. When OFF the `setupEmulators` phase is a full
+  // no-op (no Goldberg achievement setup, no DLL swap) for every game
+  // in this library. Strictly broader than autoSwapSteamApiDll.
+  autoEmulatorSetup: "boolean?",
 }).configure(throwingArktype);
 
 export default defineEventHandler<{ body: typeof UpdateLibrarySource.infer }>(
@@ -46,6 +56,14 @@ export default defineEventHandler<{ body: typeof UpdateLibrarySource.infer }>(
         data: {
           name: body.name,
           options: body.options,
+          // Only update when the client sent a value; leave existing
+          // value alone otherwise.
+          ...(body.autoSwapSteamApiDll === undefined
+            ? {}
+            : { autoSwapSteamApiDll: body.autoSwapSteamApiDll }),
+          ...(body.autoEmulatorSetup === undefined
+            ? {}
+            : { autoEmulatorSetup: body.autoEmulatorSetup }),
         },
       })
     ).at(0);

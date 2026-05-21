@@ -40,7 +40,7 @@ export default defineEventHandler(async (h3) => {
     taskGroup: "import:version",
     acls: ["system:import:version:read"],
     name: `Refreshing versions for ${game.mName}`,
-    async run({ progress, logger, addAction }) {
+    async run({ progress, logger, addAction, markPhase, signal }) {
       // Step 1: Purge existing versions
       logger.info(`Purging existing versions for ${game.mName}`);
       const { count } = await prisma.gameVersion.deleteMany({
@@ -154,7 +154,7 @@ export default defineEventHandler(async (h3) => {
             requiredContent: [],
           },
           wrapTaskContext(
-            { logger, progress, addAction },
+            { logger, progress, addAction, markPhase, signal },
             { min, max, prefix: version.name },
           ),
         );

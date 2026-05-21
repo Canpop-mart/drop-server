@@ -18,6 +18,7 @@ import refreshAchievementDefs from "./registry/refresh-achievement-defs";
 import linkRetroAchievements from "./registry/link-retroachievements";
 import upgradeGbe from "./registry/upgrade-to-gbe";
 import regenerateManifests from "./registry/regenerate-manifests";
+import restoreSteamBackup from "./registry/restore-steam-backup";
 import recalculatePlaytime from "./registry/recalculate-playtime";
 import recalculateAchievements from "./registry/recalculate-achievements";
 import scanLibraryHealth from "./registry/library-health";
@@ -26,6 +27,19 @@ import refreshMetadata from "./registry/refresh-metadata";
 import backupExport from "./registry/backup-export";
 
 type TaskActionLink = `${string}:${string}`;
+
+// ── Receipt helpers ────────────────────────────────────────────────
+export type TaskReceiptStatus =
+  | "success"
+  | "failed"
+  | "cancelled"
+  | "orphaned";
+
+export type TaskPhase = {
+  name: string;
+  startedAt: string;
+  endedAt: string;
+};
 
 // a task that has been run
 type FinishedTask = {
@@ -43,6 +57,22 @@ type FinishedTask = {
   startTime: string;
   // ISO timestamp of when the task ended
   endTime: string | undefined;
+
+  // cancellation
+  cancelled: boolean;
+  abortController: AbortController;
+  phases: TaskPhase[];
+  /// Snapshot of the original task definition so we can rebuild it for retry.
+  retryArgs:
+    | {
+        taskGroup: TaskGroup;
+        name: string;
+        key: string | undefined;
+        acls: string[];
+        initialActions: TaskActionLink[];
+        kind: "registered" | "ad-hoc";
+      }
+    | undefined;
 };
 
 // a currently running task in the pool
@@ -54,10 +84,17 @@ type TaskPoolEntry = FinishedTask & {
  * The TaskHandler setups up two-way connections to web clients and manages the state for them
  * This allows long-running tasks (like game imports and such) to report progress, success and error states
  * easily without re-inventing the wheel every time.
+ *
+ * As of the 2026 audit (see docs/audit/tasks-2026.md), every registered task is
+ * declared via `defineDropTask`, may optionally declare a `schedule`, and gets
+ * a TaskReceipt row when it finishes. Cancel and retry are first-class.
+ * `taskHandler.create()` is kept as a back-compat shim for ad-hoc imports
+ * (library/metadata flow) — those still work but don't get the dedup/schedule
+ * machinery a `DropTask` does.
  */
 class TaskHandler {
   // registry of scheduled tasks to be created
-  private taskCreators: Map<TaskGroup, () => Task> = new Map();
+  private taskCreators: Map<TaskGroup, DropTask> = new Map();
 
   // list of all currently running tasks
   private taskPool = new Map<string, TaskPoolEntry>();
@@ -94,6 +131,7 @@ class TaskHandler {
     this.saveScheduledTask(recalculateAchievements);
     this.saveScheduledTask(upgradeGbe);
     this.saveScheduledTask(regenerateManifests);
+    this.saveScheduledTask(restoreSteamBackup);
 
     // System (on-demand)
     this.saveScheduledTask(recalculatePlaytime);
@@ -102,10 +140,51 @@ class TaskHandler {
 
   /**
    * Saves scheduled task to the registry
-   * @param createTask
    */
   private saveScheduledTask(task: DropTask) {
-    this.taskCreators.set(task.taskGroup, task.build);
+    this.taskCreators.set(task.taskGroup, task);
+  }
+
+  /**
+   * Walks every registered task and seeds its dedupKey on disk if missing.
+   * Not exposed publicly — used only by `scheduler.ts` and admin endpoints
+   * that need to enumerate registered tasks.
+   */
+  getRegisteredTasks(): ReadonlyMap<TaskGroup, DropTask> {
+    return this.taskCreators;
+  }
+
+  /**
+   * Returns the registered DropTask for a group, or undefined for ad-hoc
+   * groups (import:game, import:version).
+   */
+  getRegisteredTask(group: TaskGroup): DropTask | undefined {
+    return this.taskCreators.get(group);
+  }
+
+  /**
+   * Sweeps unfinished TaskReceipt rows on startup. Anything still marked
+   * `in_progress` (no endedAt + status="in_progress") came from a server
+   * that crashed mid-task — flip it to `orphaned` so the admin UI shows
+   * a consistent picture and so retry can target it.
+   *
+   * Idempotent. Safe to run multiple times.
+   */
+  async sweepOrphanedReceipts(): Promise<number> {
+    const orphans = await prisma.taskReceipt.updateMany({
+      where: { status: "in_progress", endedAt: null },
+      data: {
+        status: "orphaned",
+        endedAt: new Date(),
+        error: "Server restarted before this task finished",
+      },
+    });
+    if (orphans.count > 0) {
+      logger.warn(
+        `[TASK:sweep] Marked ${orphans.count} orphaned receipt(s) from a previous crash`,
+      );
+    }
+    return orphans.count;
   }
 
   async create(iTask: Omit<Task, "id">, parentTask?: TaskRunContext) {
@@ -119,14 +198,14 @@ class TaskHandler {
     let updateCollectResolves: Array<(value: unknown) => void> = [];
     let logOffset: number = 0;
 
-    // if taskgroup disallows concurrency
+    // Single-flight by group (existing behaviour). Concurrent groups
+    // (import:*) bypass this. Per-task dedup via task.key is enforced
+    // above by hasTaskKey.
     if (!taskGroups[task.taskGroup].concurrency) {
       for (const existingTask of this.taskPool.values()) {
-        // if a task is already running, we don't want to start another
         if (existingTask.taskGroup === task.taskGroup) {
-          // TODO: handle this more gracefully, maybe with a queue? should be configurable
           logger.warn(
-            `Task group ${task.taskGroup} does not allow concurrent tasks. Task ${task.id} will not be started.`,
+            `[TASK:${task.taskGroup}] Task group does not allow concurrent tasks — refusing to start ${task.id}`,
           );
           throw new Error(
             `Task group ${task.taskGroup} does not allow concurrent tasks.`,
@@ -134,6 +213,8 @@ class TaskHandler {
         }
       }
     }
+
+    const abortController = new AbortController();
 
     const updateAllClients = (reset = false) =>
       new Promise((r) => {
@@ -148,7 +229,7 @@ class TaskHandler {
 
           const taskMessage: TaskMessage = {
             id: task.id,
-            name: task.name,
+            name: taskEntry.name,
             success: taskEntry.success,
             progress: taskEntry.progress,
             error: taskEntry.error,
@@ -227,9 +308,31 @@ class TaskHandler {
         const taskEntry = this.taskPool.get(task.id);
         if (!taskEntry) return;
         taskEntry.progress = progress;
-        // log(`Progress: ${progress}%`);
         updateAllClients();
       });
+
+    // ── Phase tracking ────────────────────────────────────────────
+    // Tasks declare phases via context.markPhase("phase name") so
+    // TaskReceipt.progressLog can record timing. Cheap to call (just
+    // closes the previous phase and opens a new one).
+    let openPhase: { name: string; startedAt: string } | null = null;
+    const closeOpenPhase = () => {
+      const entry = this.taskPool.get(task.id);
+      if (!entry || !openPhase) return;
+      entry.phases.push({
+        name: openPhase.name,
+        startedAt: openPhase.startedAt,
+        endedAt: new Date().toISOString(),
+      });
+      openPhase = null;
+    };
+    const markPhase = (name: string) => {
+      closeOpenPhase();
+      openPhase = { name, startedAt: new Date().toISOString() };
+      taskLogger.info(`[phase] ${name}`);
+    };
+
+    const registered = this.taskCreators.get(task.taskGroup);
 
     this.taskPool.set(task.id, {
       name: task.name,
@@ -244,9 +347,57 @@ class TaskHandler {
       startTime: new Date().toISOString(),
       endTime: undefined,
       actions: task.initialActions ?? [],
+      cancelled: false,
+      abortController,
+      phases: [],
+      retryArgs: {
+        taskGroup: task.taskGroup,
+        name: task.name,
+        key: task.key,
+        acls: task.acls,
+        initialActions: task.initialActions ?? [],
+        // We can only auto-retry tasks built from the registry — ad-hoc
+        // tasks (game imports etc.) have closures we can't reconstruct.
+        kind: registered ? "registered" : "ad-hoc",
+      },
     });
 
     await updateAllClients(true);
+
+    // Write a placeholder receipt up-front so the orphan sweep on
+    // startup can find rows from a crashed server. We update this row
+    // at the end of taskFunc with the real status / error / phases.
+    // Only top-level tasks (no parentTask) get their own receipt —
+    // sub-tasks roll up under the parent's row.
+    if (!parentTask) {
+      try {
+        await prisma.taskReceipt.create({
+          data: {
+            id: task.id,
+            taskKey: task.key ?? null,
+            taskGroup: task.taskGroup,
+            name: task.name,
+            acls: task.acls,
+            actions: task.initialActions ?? [],
+            startedAt: new Date(),
+            status: "in_progress",
+            progress: 0,
+            retryArgs: {
+              taskGroup: task.taskGroup,
+              name: task.name,
+              key: task.key,
+              acls: task.acls,
+              initialActions: task.initialActions ?? [],
+              kind: registered ? "registered" : "ad-hoc",
+            },
+          },
+        });
+      } catch (e) {
+        logger.error(
+          `[TASK:${task.taskGroup}] Failed to write initial TaskReceipt for ${task.id}: ${e}`,
+        );
+      }
+    }
 
     const taskFunc = async () => {
       const taskEntry = this.taskPool.get(task.id);
@@ -256,17 +407,50 @@ class TaskHandler {
         updateAllClients();
       };
 
+      let status: TaskReceiptStatus = "success";
+
       try {
-        await task.run({ progress, logger: taskLogger, addAction });
-        taskEntry.success = true;
+        await task.run({
+          progress,
+          logger: taskLogger,
+          addAction,
+          markPhase,
+          signal: abortController.signal,
+        });
+        if (taskEntry.cancelled) {
+          status = "cancelled";
+          taskEntry.error = {
+            title: "Task cancelled",
+            description: "Cancelled from the admin UI",
+          };
+        } else {
+          taskEntry.success = true;
+        }
       } catch (error: unknown) {
         taskEntry.success = false;
-        taskEntry.error = {
-          title: "An error occurred",
-          description: (error as string).toString(),
-        };
+        if (taskEntry.cancelled) {
+          status = "cancelled";
+          taskEntry.error = {
+            title: "Task cancelled",
+            description:
+              error instanceof Error
+                ? error.message
+                : "Cancelled from the admin UI",
+          };
+        } else {
+          status = "failed";
+          taskEntry.error = {
+            title: "An error occurred",
+            description:
+              error instanceof Error ? error.message : String(error),
+          };
+        }
+        logger.warn(
+          `[TASK:${taskEntry.taskGroup}] Task ${task.id} ended ${status}: ${taskEntry.error.description}`,
+        );
       }
 
+      closeOpenPhase();
       taskEntry.endTime = new Date().toISOString();
       await updateAllClients();
 
@@ -276,6 +460,8 @@ class TaskHandler {
           this.disconnect(clientId, task.id);
         }
 
+        // Legacy Task row — preserved for back-compat with old admin
+        // queries until the UI fully moves to TaskReceipt.
         await prisma.task.create({
           data: {
             id: task.id,
@@ -295,6 +481,44 @@ class TaskHandler {
             ...(taskEntry.error ? { error: taskEntry.error } : undefined),
           },
         });
+
+        // Seal the in-flight TaskReceipt that was written at task
+        // start. We update by id (PK) — if the placeholder row is
+        // missing for some reason (e.g. the create above failed),
+        // upsert recovers gracefully so we still get a receipt.
+        try {
+          const final = {
+            endedAt: new Date(taskEntry.endTime),
+            status,
+            error: taskEntry.error?.description ?? null,
+            progress: taskEntry.progress,
+            actions: taskEntry.actions,
+            progressLog: {
+              phases: taskEntry.phases,
+              log: taskEntry.log,
+            },
+          };
+          await prisma.taskReceipt.upsert({
+            where: { id: task.id },
+            update: final,
+            create: {
+              id: task.id,
+              taskKey: taskEntry.key ?? null,
+              taskGroup: taskEntry.taskGroup,
+              name: taskEntry.name,
+              acls: taskEntry.acls,
+              startedAt: new Date(taskEntry.startTime),
+              retryArgs: taskEntry.retryArgs
+                ? (taskEntry.retryArgs as unknown as object)
+                : undefined,
+              ...final,
+            },
+          });
+        } catch (e) {
+          logger.error(
+            `[TASK:${taskEntry.taskGroup}] Failed to seal TaskReceipt for ${task.id}: ${e}`,
+          );
+        }
       }
       this.taskPool.delete(task.id);
     };
@@ -303,6 +527,27 @@ class TaskHandler {
     if (parentTask) await fnPromise;
 
     return task.id;
+  }
+
+  /**
+   * Signal a running task to abort. The task's run() must respect the
+   * AbortSignal (passed in TaskRunContext) for this to do anything —
+   * we can't kill arbitrary async work mid-flight.
+   *
+   * Returns true if a running task was found, false otherwise.
+   */
+  cancel(taskId: string): boolean {
+    const entry = this.taskPool.get(taskId);
+    if (!entry) return false;
+    if (entry.cancelled) return true;
+    entry.cancelled = true;
+    entry.abortController.abort(
+      new Error(`Task ${entry.taskGroup} cancelled by admin`),
+    );
+    logger.info(
+      `[TASK:${entry.taskGroup}] Cancellation requested for ${taskId}`,
+    );
+    return true;
   }
 
   async connect(
@@ -414,12 +659,12 @@ class TaskHandler {
   }
 
   async runTaskGroupByName(name: TaskGroup) {
-    const taskConstructor = this.taskCreators.get(name);
-    if (!taskConstructor) {
+    const registered = this.taskCreators.get(name);
+    if (!registered) {
       logger.warn(`No task found for group ${name}`);
       return;
     }
-    const task = taskConstructor();
+    const task = registered.build();
     const id = await this.create(task);
     return id;
   }
@@ -481,6 +726,19 @@ export type TaskRunContext = {
   progress: (progress: number) => void;
   logger: typeof logger;
   addAction: (link: TaskActionLink) => void;
+  /**
+   * Open a new named phase. The previous phase (if any) is closed and
+   * its duration captured in TaskReceipt.progressLog.phases. Cheap to
+   * call — purely an accounting hook, doesn't affect progress %.
+   */
+  markPhase: (name: string) => void;
+  /**
+   * Cancellation signal — fires when the admin hits Cancel. Long loops
+   * inside a task should periodically check `signal.aborted` and bail.
+   * AbortSignal-aware libraries (fetch, fs/promises, etc.) can be
+   * passed `{ signal }` directly.
+   */
+  signal: AbortSignal;
 };
 
 export function wrapTaskContext(
@@ -506,6 +764,11 @@ export function wrapTaskContext(
       return context.progress(adjustedProgress);
     },
     logger: child,
+    // markPhase and signal pass straight through — the parent owns
+    // both. We don't want sub-tasks to flip phase names underneath
+    // the parent.
+    markPhase: context.markPhase,
+    signal: context.signal,
   };
 }
 
@@ -535,6 +798,19 @@ export type PeerImpl = {
   close: () => void;
 };
 
+/**
+ * Schedule declared by a DropTask. Two flavours, evaluated by
+ * `scheduler.ts` at boot:
+ *   - `{ intervalMs }` — run every N ms after the last completion.
+ *   - `{ daily: true }` / `{ weekly: true }` — bucket into the legacy
+ *     daily/weekly scheduler so behaviour stays identical for the
+ *     four tasks that already used it.
+ */
+export type DropTaskSchedule =
+  | { intervalMs: number }
+  | { daily: true }
+  | { weekly: true };
+
 export interface BuildTask {
   buildId: () => string;
   taskGroup: TaskGroup;
@@ -542,10 +818,30 @@ export interface BuildTask {
   run: (context: TaskRunContext) => Promise<void>;
   acls: GlobalACL[];
   initialActions?: TaskActionLink[];
+  schedule?: DropTaskSchedule;
+  /**
+   * Optional lifecycle hooks. Run inside the same try/catch as `run`
+   * so failures here surface as task failures with a sensible error
+   * message instead of unhandled promise rejections.
+   *
+   * Order: setup -> run -> teardown (always). onError fires once on
+   * any setup/run failure, before teardown.
+   */
+  setup?: (context: TaskRunContext) => Promise<void>;
+  teardown?: (context: TaskRunContext) => Promise<void>;
+  onError?: (error: unknown, context: TaskRunContext) => Promise<void>;
+  /**
+   * Returns a stable string identifying "the same run". If a task with
+   * the same key is already running, `create()` refuses to start
+   * another. Defaults to a per-group key, which together with the
+   * existing concurrency:false flag enforces single-flight.
+   */
+  dedupKey?: () => string;
 }
 
-interface DropTask {
+export interface DropTask {
   taskGroup: TaskGroup;
+  schedule?: DropTaskSchedule;
   build: () => Task;
 }
 
@@ -556,42 +852,74 @@ export const TaskLog = type({
   prefix: "string?",
 });
 
-// /**
-//  * Create a log message with a timestamp in the format YYYY-MM-DD HH:mm:ss.SSS UTC
-//  * @param message
-//  * @returns
-//  */
-// function msgWithTimestamp(message: string): string {
-//   const now = new Date();
-
-//   const pad = (n: number, width = 2) => n.toString().padStart(width, "0");
-
-//   const year = now.getUTCFullYear();
-//   const month = pad(now.getUTCMonth() + 1);
-//   const day = pad(now.getUTCDate());
-
-//   const hours = pad(now.getUTCHours());
-//   const minutes = pad(now.getUTCMinutes());
-//   const seconds = pad(now.getUTCSeconds());
-//   const milliseconds = pad(now.getUTCMilliseconds(), 3);
-
-//   const log: typeof TaskLog.infer = {
-//     timestamp: `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${milliseconds} UTC`,
-//     message,
-//   };
-//   return JSON.stringify(log);
-// }
+/**
+ * Wrap a BuildTask in the canonical run/setup/teardown/onError envelope.
+ * Lets registry tasks declare lifecycle hooks without each one re-inventing
+ * try/finally inside `run()`.
+ */
+function wrapLifecycle(buildTask: BuildTask) {
+  if (!buildTask.setup && !buildTask.teardown && !buildTask.onError) {
+    return buildTask.run;
+  }
+  return async (ctx: TaskRunContext) => {
+    let caught: unknown = undefined;
+    try {
+      if (buildTask.setup) {
+        ctx.markPhase("setup");
+        await buildTask.setup(ctx);
+      }
+      ctx.markPhase("run");
+      await buildTask.run(ctx);
+    } catch (e) {
+      caught = e;
+      if (buildTask.onError) {
+        try {
+          ctx.markPhase("onError");
+          await buildTask.onError(e, ctx);
+        } catch (hookErr) {
+          ctx.logger.warn(`[onError hook threw] ${hookErr}`);
+        }
+      }
+    } finally {
+      if (buildTask.teardown) {
+        try {
+          ctx.markPhase("teardown");
+          await buildTask.teardown(ctx);
+        } catch (hookErr) {
+          ctx.logger.warn(`[teardown hook threw] ${hookErr}`);
+        }
+      }
+    }
+    if (caught) throw caught;
+  };
+}
 
 export function defineDropTask(buildTask: BuildTask): DropTask {
+  const wrappedRun = wrapLifecycle(buildTask);
+  // Wrap the run with a dedup guard at create-time. We can't enforce
+  // it here (the handler doesn't exist yet), so we attach the key
+  // function and let `create()` consult it. Done as a closure so
+  // call sites that go through `taskHandler.create({...defineDropTask(x).build()})`
+  // also get dedup.
   return {
     taskGroup: buildTask.taskGroup,
+    schedule: buildTask.schedule,
     build: () => ({
       id: buildTask.buildId(),
       taskGroup: buildTask.taskGroup,
       name: buildTask.name,
-      run: buildTask.run,
+      run: wrappedRun,
       acls: buildTask.acls,
       initialActions: buildTask.initialActions ?? [],
+      // The dedup key is consumed by `create()` via the task.key field.
+      // We default to per-group so single-flight is the norm (group
+      // concurrency:false already enforces the same thing, but `key`
+      // lets us short-circuit the check earlier and produces a clearer
+      // error). Pass `dedupKey: () => undefined` (or omit the field
+      // and customise in your own implementation) to opt out.
+      key: buildTask.dedupKey
+        ? buildTask.dedupKey()
+        : `dropTask:${buildTask.taskGroup}`,
     }),
   };
 }

@@ -34,8 +34,13 @@ export default defineDropTask({
   name: "Check for Game Updates",
   acls: ["system:maintenance:read"],
   taskGroup: "check:game-updates",
+  // Steam build IDs change weekly at most for stable branches; hitting
+  // their unofficial API once every 6h is comfortably under the rate
+  // limit and catches the case where an admin imported a game days ago
+  // and never noticed the update flag.
+  schedule: { intervalMs: 6 * 60 * 60 * 1000 },
 
-  async run({ progress, logger }) {
+  async run({ progress, logger, signal }) {
     logger.info("Starting game update check");
 
     // Only Steam-sourced games can be checked — metadataId = Steam App ID
@@ -65,6 +70,12 @@ export default defineDropTask({
     let updatesFound = 0;
 
     for (const game of games) {
+      // Respect admin cancel — long polite delay per game means a
+      // restore-from-cancel needs to abort fast.
+      if (signal.aborted) {
+        logger.info(`Cancelled after checking ${checked}/${games.length}`);
+        return;
+      }
       const currentBuildId = game.versions[0]?.versionPath ?? null;
 
       if (!currentBuildId) {

@@ -10,20 +10,17 @@ import prisma from "../db/database";
 import { fuzzy } from "fast-fuzzy";
 import type { TaskRunContext } from "../tasks";
 import taskHandler from "../tasks";
-import notificationSystem from "../notifications";
 import { GameNotFoundError, type LibraryProvider } from "./provider";
 import { logger } from "../logging";
 import type { GameModel } from "~/prisma/client/models";
 import { createHash } from "node:crypto";
 import type { WorkingLibrarySource } from "~/server/api/v1/admin/library/sources/index.get";
-import gameSizeManager from "~/server/internal/gamesize";
-import { setupGoldberg } from "~/server/internal/goldberg";
 import type { ImportVersion } from "~/server/api/v1/admin/import/version/index.post";
 import { GameType, type Platform } from "~/prisma/client/enums";
-import { castManifest } from "./manifest/utils";
-import { dropletInterface } from "../services/torrential/droplet-interface";
-import fs from "fs";
 import { Shescape } from "shescape";
+import { restoreSteamBackup } from "../gbe";
+import { runVersionImport } from "./import";
+import type { ImportContext, ImportReceiptShape } from "./import/types";
 import type {
   Prisma,
   Game,
@@ -134,9 +131,24 @@ export interface UnimportedVersionInformation {
   identifier: string;
 }
 
+/** TTL for the unimported-games scan cache. */
+const UNIMPORTED_GAMES_CACHE_TTL_MS = 30_000;
+
 class LibraryManager {
   private libraries: Map<string, LibraryProvider<unknown>> = new Map();
   private shescape = new Shescape({});
+
+  /**
+   * Per-library cache of `provider.listGames()`. Keyed by libraryId; the
+   * entry stores the library root mtime it was built against plus a
+   * wall-clock timestamp. A hit requires BOTH the mtime to be unchanged
+   * and the entry to be under {@link UNIMPORTED_GAMES_CACHE_TTL_MS} old.
+   * Busted explicitly on import (`bustUnimportedGamesCache`).
+   */
+  private listGamesCache = new Map<
+    string,
+    { games: string[]; mtimeMs: number | undefined; cachedAt: number }
+  >();
 
   addLibrary(library: LibraryProvider<unknown>) {
     this.libraries.set(library.id(), library);
@@ -144,6 +156,42 @@ class LibraryManager {
 
   removeLibrary(id: string) {
     this.libraries.delete(id);
+    this.listGamesCache.delete(id);
+  }
+
+  /**
+   * Invalidates the unimported-games scan cache. Called after an import
+   * so a freshly-imported game stops showing up as unimported even if
+   * the 30s TTL hasn't elapsed and the directory mtime didn't change.
+   */
+  bustUnimportedGamesCache(libraryId?: string) {
+    if (libraryId) this.listGamesCache.delete(libraryId);
+    else this.listGamesCache.clear();
+  }
+
+  /**
+   * `provider.listGames()` with a short-lived per-library cache. The
+   * cache is keyed on libraryId and validated against the library root
+   * directory mtime + a 30s TTL; providers that can't report an mtime
+   * still get the TTL guard.
+   */
+  private async cachedListGames(
+    libraryId: string,
+    library: LibraryProvider<unknown>,
+  ): Promise<string[]> {
+    const mtimeMs = library.rootMtimeMs?.();
+    const cached = this.listGamesCache.get(libraryId);
+    const now = Date.now();
+    if (
+      cached &&
+      now - cached.cachedAt < UNIMPORTED_GAMES_CACHE_TTL_MS &&
+      cached.mtimeMs === mtimeMs
+    ) {
+      return cached.games;
+    }
+    const games = await library.listGames();
+    this.listGamesCache.set(libraryId, { games, mtimeMs, cachedAt: now });
+    return games;
   }
 
   getLibrary(libraryId: string): LibraryProvider<unknown> | undefined {
@@ -201,7 +249,7 @@ class LibraryManager {
     }
 
     for (const [id, library] of this.libraries.entries()) {
-      const providerGames = await library.listGames();
+      const providerGames = await this.cachedListGames(id, library);
       const providerUnimportedGames = providerGames.filter(
         (libraryPath) =>
           !instanceGames[id]?.[libraryPath] &&
@@ -627,14 +675,21 @@ class LibraryManager {
   }
   */
 
-  async importVersion(
+  /**
+   * Validates the import request and assembles an {@link ImportContext}.
+   * Shared by the task-backed `importVersion` and the synchronous
+   * `dryRunVersionImport` so both go through identical preconditions.
+   *
+   * Returns `undefined` when the game/library can't be resolved (callers
+   * surface a 400). Throws `createError` for bad-request validation.
+   */
+  private async buildImportContext(
     gameId: string,
     version: UnimportedVersionInformation,
     metadata: typeof ImportVersion.infer,
-    parentTask?: TaskRunContext,
-  ) {
-    const taskKey = createVersionImportTaskKey(gameId, version.identifier);
-
+    task: TaskRunContext,
+    dryRun: boolean,
+  ): Promise<ImportContext | undefined> {
     if (metadata.delta) {
       for (const platformObject of [
         ...metadata.launches,
@@ -648,9 +703,7 @@ class LibraryManager {
             delta: false,
             OR: [
               { launches: { some: { platform: platformObject.platform } } },
-              {
-                setups: { some: { platform: platformObject.platform } },
-              },
+              { setups: { some: { platform: platformObject.platform } } },
             ],
           },
         });
@@ -684,16 +737,15 @@ class LibraryManager {
         libraryPath: true,
         type: true,
         discFolders: true,
+        metadataSource: true,
+        metadataId: true,
+        autoSwapSteamApiDll: true,
+        library: {
+          select: { autoSwapSteamApiDll: true, autoEmulatorSetup: true },
+        },
       },
     });
     if (!game || !game.libraryId) return undefined;
-
-    // For multi-disc games, libraryPath is an abstract base name that doesn't
-    // exist on disk. The actual directories are in discFolders[].
-    const isMultiDisc = game.discFolders && game.discFolders.length > 1;
-    const effectiveLibraryPath = isMultiDisc
-      ? game.discFolders![0]
-      : game.libraryPath;
 
     if (game.type === GameType.Dependency && !metadata.onlySetup)
       throw createError({
@@ -704,247 +756,217 @@ class LibraryManager {
     const library = this.libraries.get(game.libraryId);
     if (!library) return undefined;
 
-    const unimportedVersion =
-      version.type === "depot"
-        ? await prisma.unimportedGameVersion.findUnique({
-            where: { id: version.identifier },
-          })
-        : undefined;
+    const isMultiDisc = !!(game.discFolders && game.discFolders.length > 1);
+
+    // Effective swap policy: game override → library default → true.
+    const autoSwapDll =
+      game.autoSwapSteamApiDll ??
+      game.library?.autoSwapSteamApiDll ??
+      true;
+    // autoEmulatorSetup is library-only; default true.
+    const autoEmulatorSetup = game.library?.autoEmulatorSetup ?? true;
+
+    const logger: ImportContext["logger"] = {
+      info: (msg) => task.logger.info(msg),
+      warn: (msg) => task.logger.warn(msg),
+    };
+
+    return {
+      gameId,
+      gameName: game.mName,
+      gameType: game.type,
+      libraryId: game.libraryId,
+      libraryPath: game.libraryPath,
+      discFolders: game.discFolders ?? [],
+      isMultiDisc,
+      steamAppId:
+        game.metadataSource === "Steam"
+          ? (game.metadataId ?? undefined)
+          : undefined,
+      library,
+      version,
+      metadata,
+      autoSwapDll,
+      autoEmulatorSetup,
+      dryRun,
+      task,
+      logger,
+      warnings: [],
+    };
+  }
+
+  /**
+   * Imports a version inside a task. The heavy lifting is the decomposed
+   * pipeline in `server/internal/library/import/` — this method only
+   * builds the context and hands it to `runVersionImport`, keeping the
+   * orchestration phase-labelled in the task log.
+   *
+   * Returns the task id, or `undefined` when the game/library is invalid.
+   */
+  async importVersion(
+    gameId: string,
+    version: UnimportedVersionInformation,
+    metadata: typeof ImportVersion.infer,
+    parentTask?: TaskRunContext,
+  ) {
+    const taskKey = createVersionImportTaskKey(gameId, version.identifier);
+
+    // Cheap pre-check so we can 400 before spawning a task.
+    const precheck = await prisma.game.findUnique({
+      where: { id: gameId },
+      select: { mName: true, libraryId: true },
+    });
+    if (!precheck || !precheck.libraryId) return undefined;
+    if (!this.libraries.has(precheck.libraryId)) return undefined;
+
+    // A version import means the library is being mutated — drop the
+    // unimported-games scan cache so the admin UI re-scans next fetch.
+    this.bustUnimportedGamesCache(precheck.libraryId);
 
     return await taskHandler.create(
       {
         key: taskKey,
         taskGroup: "import:version",
-        name: `Importing version ${version.name} for ${game.mName}`,
+        name: `Importing version ${version.name} for ${precheck.mName}`,
         acls: ["system:import:version:read"],
-        async run({ progress, logger }) {
-          let versionPath: string | null = null;
-          let manifest;
-          let fileList;
-
-          if (version.type === "local") {
-            versionPath = version.identifier;
-
-            // Auto-upgrade SSE → GBE and set up Goldberg BEFORE manifest
-            // generation so all emulator config files (achievements.json,
-            // steam_appid.txt, drop-goldberg/<AppID>/) are included in the
-            // manifest and downloaded by clients.
-            try {
-              const versionDir = library.resolveVersionDir(
-                effectiveLibraryPath,
-                versionPath,
-              );
-              if (versionDir) {
-                const { autoUpgradeSseIfNeeded, autoUpgradeSteamDrmIfNeeded } =
-                  await import("~/server/internal/gbe");
-
-                // Pass 1: SSE (cracked) games → GBE. DLL swap triggers when
-                // steam_emu.ini is adjacent to the Steam API DLL.
-                await autoUpgradeSseIfNeeded(versionDir, gameId, logger);
-
-                // Pass 2: Legitimate Steam DRM → GBE. Triggers when
-                // steamclient64.dll / gameoverlayrenderer64.dll markers are
-                // present AND we have a Steam AppID from metadata. Skipped
-                // if pass 1 already wrote steam_settings/ next to the DLL.
-                const steamMeta = await prisma.game.findUnique({
-                  where: { id: gameId },
-                  select: { metadataSource: true, metadataId: true },
-                });
-                const steamAppId =
-                  steamMeta?.metadataSource === "Steam"
-                    ? (steamMeta.metadataId ?? undefined)
-                    : undefined;
-                await autoUpgradeSteamDrmIfNeeded(
-                  versionDir,
-                  gameId,
-                  steamAppId,
-                  logger,
-                );
-
-                await setupGoldberg(gameId, versionDir);
-              }
-            } catch (e) {
-              logger.warn(
-                `Pre-manifest emulator setup failed (non-critical): ${e}`,
-              );
-            }
-
-            // First, create the manifest via droplet.
-            // This takes up 90% of our progress, so we wrap it in a *0.9
-
-            if (isMultiDisc) {
-              // Multi-disc: create a persistent directory with symlinks to each
-              // disc folder. This directory is kept permanently so that the
-              // download/serve system (torrential) can resolve the path when
-              // clients request the version. The game's libraryPath is updated
-              // to point here.
-              const baseDir = library.resolveVersionDir(
-                game.discFolders![0],
-                versionPath,
-              );
-              if (!baseDir)
-                throw new Error(
-                  `Could not resolve disc folder: ${game.discFolders![0]}`,
-                );
-              const libraryBase = path.dirname(baseDir);
-              const multiDiscDirName = `.drop-multidisc-${gameId}`;
-              const multiDiscDir = path.join(libraryBase, multiDiscDirName);
-
-              logger.info(
-                `Multi-disc game with ${game.discFolders!.length} disc(s), staging at ${multiDiscDir}`,
-              );
-              fs.mkdirSync(multiDiscDir, { recursive: true });
-
-              // Create symlinks for each disc folder inside the combined dir
-              for (const folder of game.discFolders!) {
-                const src = path.join(libraryBase, folder);
-                const dest = path.join(multiDiscDir, folder);
-                if (!fs.existsSync(dest) && fs.existsSync(src)) {
-                  fs.symlinkSync(src, dest, "junction");
-                  logger.info(`Linked disc folder: ${folder}`);
-                }
-              }
-
-              // Generate a single manifest from the combined dir
-              manifest = await dropletInterface.generateDropletManifest(
-                multiDiscDir,
-                (value) => progress(value * 0.9),
-                (value) => logger.info(value),
-              );
-              fileList = await dropletInterface.listFiles(multiDiscDir);
-
-              // Update the game's libraryPath so torrential can find the files
-              await prisma.game.updateMany({
-                where: { id: gameId },
-                data: { libraryPath: multiDiscDirName },
-              });
-              logger.info(
-                `Updated libraryPath to ${multiDiscDirName} for multi-disc serving`,
-              );
-            } else {
-              manifest = await library.generateDropletManifest(
-                effectiveLibraryPath,
-                versionPath,
-                (value) => {
-                  progress(value * 0.9);
-                },
-                (value) => {
-                  logger.info(value);
-                },
-              );
-              fileList = await library.versionReaddir(
-                effectiveLibraryPath,
-                versionPath,
-              );
-            }
-            logger.info("Created manifest successfully!");
-          } else if (version.type === "depot" && unimportedVersion) {
-            manifest = castManifest(unimportedVersion.manifest);
-            fileList = unimportedVersion.fileList;
-            progress(90);
-          } else {
-            throw "Could not find or create manifest for this version.";
+        run: async (taskContext) => {
+          const ctx = await this.buildImportContext(
+            gameId,
+            version,
+            metadata,
+            taskContext,
+            false,
+          );
+          if (!ctx) {
+            throw new Error(
+              "Could not resolve game or library for this version import.",
+            );
           }
-
-          const largestIndex = await prisma.gameVersion.findFirst({
-            where: { gameId: gameId },
-            orderBy: {
-              versionIndex: "desc",
-            },
-            select: {
-              versionIndex: true,
-            },
-          });
-          const currentIndex = largestIndex ? largestIndex.versionIndex + 1 : 0;
-
-          // Then, create the database object
-          const newVersion = await prisma.gameVersion.create({
-            data: {
-              game: {
-                connect: {
-                  id: gameId,
-                },
-              },
-
-              displayName: metadata.displayName ?? versionPath ?? null,
-
-              versionPath,
-              dropletManifest: manifest,
-              fileList,
-              versionIndex: currentIndex,
-              delta: metadata.delta,
-
-              onlySetup: metadata.onlySetup,
-              setups: {
-                createMany: {
-                  data: metadata.setups.map((v) => ({
-                    command: v.launch,
-                    platform: v.platform,
-                  })),
-                },
-              },
-
-              launches: {
-                createMany: !metadata.onlySetup
-                  ? {
-                      data: metadata.launches.map((v) => ({
-                        name: v.name,
-                        command: v.launch,
-                        platform: v.platform,
-                        ...(v.emulatorId && game.type === "Game"
-                          ? {
-                              emulatorId: v.emulatorId,
-                            }
-                          : undefined),
-                        emulatorSuggestions:
-                          game.type === "Emulator" ? (v.suggestions ?? []) : [],
-                        discPaths: v.discPaths ?? [],
-                      })),
-                    }
-                  : { data: [] },
-              },
-            },
-          });
-          logger.info("Successfully created version!");
-
-          // Clear the update-available flag now that a new version is installed
-          await prisma.game.updateMany({
-            where: { id: gameId },
-            data: { updateAvailable: false },
-          });
-
-          // NOTE: setupGoldberg() now runs BEFORE manifest generation (above)
-          // so that all emulator files are included in the download.
-
-          notificationSystem.systemPush({
-            nonce: `version-create-${gameId}-${version}`,
-            title: `'${game.mName}' ('${version.name}') finished importing.`,
-            description: `Drop finished importing version ${version.name} for ${game.mName}.`,
-            actions: [`View|/admin/library/${gameId}`],
-            acls: ["system:import:version:read"],
-          });
-
-          // Ensure cache is filled (also pre-caches the manifest)
-          try {
-            await gameSizeManager.getVersionSize(newVersion.versionId);
-          } catch (e) {
-            logger.warn(`Failed to pre-cache game size and manifest: ${e}`);
-          }
-
-          if (version.type === "depot") {
-            // SAFETY: we can only reach this if the type is depot and identifier is valid
-            // eslint-disable-next-line drop/no-prisma-delete
-            await prisma.unimportedGameVersion.delete({
-              where: {
-                id: version.identifier,
-              },
-            });
-          }
-          progress(100);
+          await runVersionImport(ctx);
         },
       },
       parentTask,
     );
+  }
+
+  /**
+   * Dry-run a version import: runs preload + manifest planning + launch
+   * detection, writes NOTHING to the DB and touches NO filesystem.
+   * Returns a receipt-shaped object describing what a real import would
+   * do. Used by `?dryRun=true` on the import endpoints.
+   */
+  async dryRunVersionImport(
+    gameId: string,
+    version: UnimportedVersionInformation,
+    metadata: typeof ImportVersion.infer,
+  ): Promise<ImportReceiptShape | undefined> {
+    // A dry-run still needs a TaskRunContext shape for logging/progress,
+    // but it must not spawn a real task. We synthesise a no-op context.
+    const logLines: string[] = [];
+    const noopTask: TaskRunContext = {
+      progress: () => {},
+      // pino-compatible enough for our info/warn calls
+      logger: {
+        info: (msg: unknown) => logLines.push(`INFO ${String(msg)}`),
+        warn: (msg: unknown) => logLines.push(`WARN ${String(msg)}`),
+      } as unknown as TaskRunContext["logger"],
+      addAction: () => {},
+      markPhase: () => {},
+      signal: new AbortController().signal,
+    };
+
+    const ctx = await this.buildImportContext(
+      gameId,
+      version,
+      metadata,
+      noopTask,
+      true,
+    );
+    if (!ctx) return undefined;
+
+    const receipt = await runVersionImport(ctx);
+    return receipt;
+  }
+
+  /**
+   * Reverts an imported version: deletes the GameVersion (cascades the
+   * ImportReceipt), restores any `.steam_backup` DLL on disk, and queues
+   * a manifest regeneration for whatever version is now latest.
+   *
+   * Returns a small summary. Throws `createError` on bad input.
+   */
+  async revertImportedVersion(versionId: string): Promise<{
+    gameId: string;
+    restoredBackups: number;
+    manifestRegenQueued: boolean;
+  }> {
+    const version = await prisma.gameVersion.findUnique({
+      where: { versionId },
+      select: {
+        versionId: true,
+        versionPath: true,
+        gameId: true,
+        game: {
+          select: {
+            libraryId: true,
+            libraryPath: true,
+            discFolders: true,
+          },
+        },
+      },
+    });
+    if (!version)
+      throw createError({ statusCode: 404, message: "Version not found" });
+
+    const gameId = version.gameId;
+    let restoredBackups = 0;
+
+    // ── Restore any .steam_backup DLLs on disk ─────────────────────────
+    const library = version.game.libraryId
+      ? this.libraries.get(version.game.libraryId)
+      : undefined;
+    if (library && version.versionPath) {
+      const isMultiDisc =
+        version.game.discFolders && version.game.discFolders.length > 1;
+      const effectivePath = isMultiDisc
+        ? version.game.discFolders[0]
+        : version.game.libraryPath;
+      const versionDir = library.resolveVersionDir(
+        effectivePath,
+        version.versionPath,
+      );
+      if (versionDir) {
+        const results = restoreSteamBackup(versionDir);
+        restoredBackups = results.filter((r) => r.restored).length;
+        for (const r of results) {
+          logger.info(
+            `[import:revert] ${r.dllPath}: ${r.note ?? (r.restored ? "restored" : "skipped")}`,
+          );
+        }
+      }
+    }
+
+    // ── Delete the GameVersion (ImportReceipt cascades) ────────────────
+    await prisma.gameVersion.deleteMany({ where: { versionId } });
+    logger.info(
+      `[import:revert] Deleted GameVersion ${versionId} (ImportReceipt cascaded)`,
+    );
+    if (version.game.libraryId)
+      this.bustUnimportedGamesCache(version.game.libraryId);
+
+    // ── Regenerate the manifest for whatever version is now latest ─────
+    let manifestRegenQueued = false;
+    const stillHasVersions =
+      (await prisma.gameVersion.count({ where: { gameId } })) > 0;
+    if (stillHasVersions && restoredBackups > 0) {
+      const ok = await this.regenerateManifestForLatestVersion(gameId, {
+        info: (m) => logger.info(`[import:revert] ${m}`),
+        warn: (m) => logger.warn(`[import:revert] ${m}`),
+      });
+      manifestRegenQueued = ok;
+    }
+
+    return { gameId, restoredBackups, manifestRegenQueued };
   }
 
   async peekFile(

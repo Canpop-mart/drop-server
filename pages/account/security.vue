@@ -136,6 +136,93 @@
       </div>
       <div v-if="!superlevel" class="absolute inset-0 bg-zinc-900/50" />
     </div>
+
+    <!-- Change password -->
+    <div class="mt-10">
+      <div class="border-b border-white/10 pb-2">
+        <h3 class="text-base font-semibold text-white">
+          {{ $t("account.security.password.title") }}
+        </h3>
+        <p class="mt-1 text-sm text-gray-400">
+          {{ $t("account.security.password.description") }}
+        </p>
+      </div>
+      <form class="mt-4 max-w-sm space-y-4" @submit.prevent="changePassword">
+        <div>
+          <label
+            for="current-password"
+            class="block text-sm font-medium text-zinc-300 mb-1"
+            >{{ $t("account.security.password.currentLabel") }}</label
+          >
+          <input
+            id="current-password"
+            v-model="currentPassword"
+            type="password"
+            autocomplete="current-password"
+            required
+            class="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
+          />
+        </div>
+        <div>
+          <label
+            for="new-password"
+            class="block text-sm font-medium text-zinc-300 mb-1"
+            >{{ $t("account.security.password.newLabel") }}</label
+          >
+          <p
+            :class="[
+              pwValidNew ? 'text-blue-400' : 'text-red-500',
+              'block text-xs font-medium leading-5 mb-1',
+            ]"
+          >
+            {{ $t("account.security.password.passwordFormat") }}
+          </p>
+          <input
+            id="new-password"
+            v-model="newPassword"
+            type="password"
+            autocomplete="new-password"
+            required
+            class="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
+          />
+        </div>
+        <div>
+          <label
+            for="confirm-new-password"
+            class="block text-sm font-medium text-zinc-300 mb-1"
+            >{{ $t("account.security.password.confirmLabel") }}</label
+          >
+          <p
+            v-if="confirmNewPassword.length > 0 && !pwMatches"
+            class="block text-xs font-medium leading-5 mb-1 text-red-500"
+          >
+            {{ $t("account.security.password.confirmMismatch") }}
+          </p>
+          <input
+            id="confirm-new-password"
+            v-model="confirmNewPassword"
+            type="password"
+            autocomplete="new-password"
+            required
+            class="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
+          />
+        </div>
+
+        <LoadingButton :loading="pwLoading" :disabled="!pwCanSubmit">
+          {{ $t("account.security.password.submit") }}
+        </LoadingButton>
+
+        <div v-if="pwSuccess" class="rounded-md bg-green-600/10 p-3">
+          <p class="text-sm font-medium text-green-400">
+            {{ $t("account.security.password.success") }}
+          </p>
+        </div>
+        <div v-if="pwError" class="rounded-md bg-red-600/10 p-3">
+          <p class="text-sm font-medium text-red-500">{{ pwError }}</p>
+        </div>
+      </form>
+    </div>
+
     <ModalTemplate v-model="webAuthnOpen" size-class="max-w-2xl">
       <template #default>
         <div class="sm:flex sm:items-center">
@@ -241,6 +328,10 @@ import {
   CheckCircleIcon,
 } from "@heroicons/vue/20/solid";
 import { CheckIcon, ClockIcon, KeyIcon } from "@heroicons/vue/24/outline";
+import { type } from "arktype";
+import { FetchError } from "ofetch";
+
+const { t } = useI18n();
 const superlevel = await $dropFetch("/api/v1/user/superlevel");
 //const auth = await $dropFetch("/api/v1/user/auth");
 const mfa = await $dropFetch("/api/v1/user/mfa");
@@ -253,5 +344,56 @@ async function deletePasskey(id: string) {
     body: { id },
     failTitle: "Failed to delete passkey",
   });
+}
+
+// --- Change password ---
+const currentPassword = ref("");
+const newPassword = ref("");
+const confirmNewPassword = ref("");
+const pwLoading = ref(false);
+const pwSuccess = ref(false);
+const pwError = ref<string | undefined>(undefined);
+
+const pwValidator = type("string >= 8");
+const pwValidNew = computed(
+  () => !((pwValidator(newPassword.value) as unknown) instanceof type.errors),
+);
+const pwMatches = computed(
+  () => newPassword.value === confirmNewPassword.value,
+);
+const pwCanSubmit = computed(
+  () =>
+    currentPassword.value.length > 0 &&
+    pwValidNew.value &&
+    pwMatches.value &&
+    !pwLoading.value,
+);
+
+async function changePassword() {
+  if (!pwCanSubmit.value) return;
+  pwLoading.value = true;
+  pwError.value = undefined;
+  pwSuccess.value = false;
+  try {
+    await $dropFetch("/api/v1/user/password", {
+      method: "POST",
+      body: {
+        currentPassword: currentPassword.value,
+        newPassword: newPassword.value,
+      },
+    });
+    pwSuccess.value = true;
+    currentPassword.value = "";
+    newPassword.value = "";
+    confirmNewPassword.value = "";
+  } catch (e) {
+    if (e instanceof FetchError) {
+      pwError.value = e.data?.message || t("errors.unknown");
+    } else {
+      pwError.value = t("errors.unknown");
+    }
+  } finally {
+    pwLoading.value = false;
+  }
 }
 </script>

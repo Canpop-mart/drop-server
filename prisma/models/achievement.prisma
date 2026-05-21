@@ -60,7 +60,15 @@ model UserAchievement {
     achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
     unlockedAt    DateTime
     syncedAt      DateTime    @default(now())
+    /// Which write path recorded this unlock — "client-report" (Goldberg
+    /// local save), "ra-poll" (in-game RA poll) or "session-end" (RA sync
+    /// when a session ends). Provenance only; the @@unique below is what
+    /// makes double-credit impossible regardless of source.
+    source        String      @default("")
 
+    /// One unlock row per (user, achievement). Every writer goes through
+    /// unlocksRepo.recordUnlock, which upserts against this key — so two
+    /// providers reporting the same unlock can never create two rows.
     @@unique([userId, achievementId])
     @@index([userId])
     @@index([achievementId])

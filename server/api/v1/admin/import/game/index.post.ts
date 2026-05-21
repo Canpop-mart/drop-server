@@ -4,6 +4,8 @@ import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
 import aclManager from "~/server/internal/acls";
 import libraryManager from "~/server/internal/library";
 import metadataHandler from "~/server/internal/metadata";
+import taskHandler from "~/server/internal/tasks";
+import { pickLaunchesFromPreload } from "~/server/internal/library/import/pickLaunches";
 
 const ImportGameBody = type({
   library: "string",
@@ -17,6 +19,11 @@ const ImportGameBody = type({
   // For multi-disc games: the ordered list of actual disc folder names
   // (e.g. ["Xenogears (USA) (Disc 1)", "Xenogears (USA) (Disc 2)"])
   ["discFolders?"]: "string[]",
+  // One-click "import game + first version": when true, after the game
+  // is created the endpoint auto-queues a version import IF exactly one
+  // unimported version is discovered. The admin UI gates this behind a
+  // single confirm modal.
+  autoImportFirstVersion: "boolean = false",
 }).configure(throwingArktype);
 
 export default defineEventHandler<{ body: typeof ImportGameBody.infer }>(
@@ -24,7 +31,7 @@ export default defineEventHandler<{ body: typeof ImportGameBody.infer }>(
     const allowed = await aclManager.allowSystemACL(h3, ["import:game:new"]);
     if (!allowed) throw createError({ statusCode: 403 });
 
-    const { library, path, metadata, type, discFolders } =
+    const { library, path, metadata, type, discFolders, autoImportFirstVersion } =
       await readDropValidatedBody(h3, ImportGameBody);
 
     if (!path)
@@ -40,28 +47,120 @@ export default defineEventHandler<{ body: typeof ImportGameBody.infer }>(
         statusMessage: "Invalid library or game.",
       });
 
-    const taskId = metadata
-      ? await metadataHandler.createGame(
-          metadata,
+    // ── Plain game import ────────────────────────────────────────────
+    if (!autoImportFirstVersion) {
+      const created = metadata
+        ? await metadataHandler.createGame(
+            metadata,
+            library,
+            path,
+            type,
+            discFolders,
+          )
+        : await metadataHandler.createGameWithoutMetadata(
+            library,
+            path,
+            type,
+            discFolders,
+          );
+
+      if (!created)
+        throw createError({
+          statusCode: 400,
+          statusMessage:
+            "Duplicate metadata import. Please chose a different game or metadata provider.",
+        });
+
+      return { taskId: created.taskId, gameId: created.gameId };
+    }
+
+    // ── One-click: game import + first-version import in one task ─────
+    // A wrapper task nests the game import as a child, then — if exactly
+    // one unimported version exists — nests the version import too. Both
+    // children are awaited (the task runner awaits child tasks).
+    const wrapperId = await taskHandler.create({
+      taskGroup: "import:game",
+      name: `Import "${metadata?.name ?? path}" + first version`,
+      acls: ["system:import:game:read"],
+      async run(ctx) {
+        ctx.markPhase("game");
+        const created = metadata
+          ? await metadataHandler.createGame(
+              metadata,
+              library,
+              path,
+              type,
+              discFolders,
+              ctx,
+            )
+          : await metadataHandler.createGameWithoutMetadata(
+              library,
+              path,
+              type,
+              discFolders,
+              ctx,
+            );
+        if (!created) {
+          throw new Error(
+            "Duplicate metadata import — game already exists for this metadata.",
+          );
+        }
+
+        ctx.markPhase("discover-versions");
+        const unimported = await libraryManager.fetchUnimportedGameVersions(
           library,
           path,
-          type,
-          discFolders,
-        )
-      : await metadataHandler.createGameWithoutMetadata(
-          library,
-          path,
-          type,
-          discFolders,
         );
+        if (!unimported || unimported.length === 0) {
+          ctx.logger.info(
+            "[one-click] No unimported versions found — game import only.",
+          );
+          return;
+        }
+        if (unimported.length !== 1) {
+          ctx.logger.info(
+            `[one-click] ${unimported.length} unimported versions found — ` +
+              `skipping auto-import (only auto-imports when exactly one).`,
+          );
+          return;
+        }
 
-    if (!taskId)
-      throw createError({
-        statusCode: 400,
-        statusMessage:
-          "Duplicate metadata import. Please chose a different game or metadata provider.",
-      });
+        const only = unimported[0];
+        ctx.logger.info(
+          `[one-click] Exactly one version ("${only.name}") — auto-importing it.`,
+        );
+        const preload = await libraryManager.fetchUnimportedVersionInformation(
+          created.gameId,
+          only,
+        );
+        if (!preload || preload.length === 0) {
+          ctx.logger.warn(
+            `[one-click] No executables auto-discovered for "${only.name}" — ` +
+              `skipping auto-import. Use the version wizard to finish.`,
+          );
+          return;
+        }
+        const picked = pickLaunchesFromPreload(preload, false);
 
-    return { taskId };
+        ctx.markPhase("version");
+        await libraryManager.importVersion(
+          created.gameId,
+          only,
+          {
+            id: created.gameId,
+            version: only,
+            launches: picked.launches,
+            setups: picked.setups,
+            onlySetup: false,
+            delta: false,
+            requiredContent: [],
+          },
+          ctx,
+        );
+        ctx.logger.info(`[one-click] Finished importing "${only.name}".`);
+      },
+    });
+
+    return { taskId: wrapperId, autoImportFirstVersion: true };
   },
 );

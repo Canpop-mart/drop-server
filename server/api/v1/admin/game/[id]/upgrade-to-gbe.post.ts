@@ -10,6 +10,7 @@ import {
   upgradeSteamDrmToGbe,
 } from "~/server/internal/gbe";
 import { logger } from "~/server/internal/logging";
+import { getQuery } from "h3";
 
 /**
  * POST /api/v1/admin/game/:id/upgrade-to-gbe
@@ -98,11 +99,21 @@ export default defineEventHandler(async (h3) => {
       });
     }
 
+    // Admin escape hatch: pass ?force=1 to bypass the positive-Valve
+    // fingerprint check (e.g. for a custom Goldberg fork that doesn't
+    // carry the standard signatures, or for a DLL we deliberately want
+    // to clobber). Without it, ensureGbeDll refuses to overwrite known
+    // cracks or unidentifiable DLLs.
+    const query = getQuery(h3);
+    const forceGbeSwap =
+      query.force === "1" || query.force === "true" || query.force === true;
+
     const result = await upgradeSteamDrmToGbe(
       versionDir,
       gameId,
       steamAppId,
       localLogger,
+      { forceGbeSwap },
     );
     return {
       success: result.success,

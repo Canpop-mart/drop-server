@@ -4,6 +4,7 @@ import prisma from "~/server/internal/db/database";
 import type { ExternalAccountProvider } from "~/prisma/client/enums";
 import notificationSystem from "~/server/internal/notifications";
 import { logger } from "~/server/internal/logging";
+import { unlocksRepo } from "~/server/internal/achievements";
 
 // Sanity bounds on client-reported achievement unlocks. A single report batch
 // can't exceed 500 unlocks (a single player legitimately unlocking 500
@@ -42,7 +43,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   }
 
   logger.info(
-    `[ACH] Report received: game=${gameId} user=${user.id} count=${body.achievements.length}`,
+    `[ACH:goldberg] Report received: game=${gameId} user=${user.id} count=${body.achievements.length}`,
   );
 
   // Fetch game name + all matching achievements in bulk (avoids N+1)
@@ -91,12 +92,10 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     );
     if (!achievement) {
       logger.warn(
-        `[ACH] Achievement NOT FOUND in DB: gameId=${gameId} externalId=${report.externalId}`,
+        `[ACH:goldberg] Achievement NOT FOUND in DB: gameId=${gameId} externalId=${report.externalId}`,
       );
       continue;
     }
-
-    const wasAlreadyUnlocked = alreadyUnlockedIds.has(achievement.id);
 
     // Validate the reported unlock timestamp. Client-supplied dates are clamped
     // to [OLDEST_PLAUSIBLE_UNLOCK, now + ALLOWED_CLOCK_SKEW]. Out-of-range values
@@ -113,24 +112,21 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
         ? new Date(nowMs)
         : parsedUnlockedAt;
 
-    await prisma.userAchievement.upsert({
-      where: {
-        userId_achievementId: {
-          userId: user.id,
-          achievementId: achievement.id,
-        },
-      },
-      create: {
-        userId: user.id,
-        achievementId: achievement.id,
-        unlockedAt,
-      },
-      update: {},
+    // Canonical unlock write path — idempotent upsert keyed on
+    // (userId, achievementId). The RA poll / session-end paths use the
+    // same repo, so the same unlock can never be double-credited.
+    const { created } = await unlocksRepo.recordUnlock({
+      userId: user.id,
+      achievementId: achievement.id,
+      source: "client-report",
+      occurredAt: unlockedAt,
     });
 
     recorded++;
 
-    if (!wasAlreadyUnlocked) {
+    // `created` from the repo is the source of truth, but cross-check
+    // against the pre-fetched set too (defends against a stale read).
+    if (created && !alreadyUnlockedIds.has(achievement.id)) {
       newlyUnlocked.push({
         title: achievement.title,
         iconUrl: achievement.iconUrl ?? "",
@@ -149,12 +145,12 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
         acls: ["user:store:read"],
       })
       .catch((err) => {
-        logger.warn(`[ACH] Failed to push notification: ${err}`);
+        logger.warn(`[ACH:goldberg] Failed to push notification: ${err}`);
       });
   }
 
   logger.info(
-    `[ACH] Report complete: game=${gameId} recorded=${recorded} newlyUnlocked=${newlyUnlocked.length}`,
+    `[ACH:goldberg] Report complete: game=${gameId} recorded=${recorded} newlyUnlocked=${newlyUnlocked.length}`,
   );
 
   return { recorded };

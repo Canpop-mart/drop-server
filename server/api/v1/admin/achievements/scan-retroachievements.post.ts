@@ -1,21 +1,25 @@
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
-import { ExternalAccountProvider } from "~/prisma/client/enums";
-import {
-  createRAClient,
-  resolveRACredentials,
-} from "~/server/internal/retroachievements";
+import { scanGame } from "~/server/internal/achievements";
+import { resolveRACredentials } from "~/server/internal/retroachievements";
 import { logger } from "~/server/internal/logging";
 
 /**
- * Scans all games that have emulator launch configs (ROM games)
- * For each game, searches RA API by game name
- * If a confident match is found, creates the GameExternalLink + Achievement records
+ * Back-compat wrapper — bulk-refreshes RetroAchievements definitions for
+ * every game that ALREADY has an RA link.
+ *
+ * BEHAVIOUR CHANGE (2026 achievements audit, see
+ * docs/audit/achievements-2026.md): the old version of this endpoint also
+ * tried to auto-link unlinked games by searching RA by name. That
+ * search-and-link behaviour now lives exclusively in the
+ * `link:retroachievements` background task (slow, rate-limited, RA-API
+ * heavy). This endpoint only refreshes definitions for linked games so it
+ * stays fast and predictable. To auto-link, run the task from the admin
+ * task panel or the Bulk tab on the achievements page.
  */
 export default defineEventHandler(async (h3) => {
   const allowed = await aclManager.allowSystemACL(h3, ["game:update"]);
   if (!allowed) throw createError({ statusCode: 403 });
-
   const userId = await aclManager.getUserIdACL(h3, ["read"]);
   if (!userId) throw createError({ statusCode: 403 });
 
@@ -28,189 +32,44 @@ export default defineEventHandler(async (h3) => {
     });
   }
 
-  const raClient = createRAClient(raCreds.username, raCreds.apiKey);
-
-  // Find all games (typically ROM-based games have emulator configs)
-  const games = await prisma.game.findMany({
-    select: {
-      id: true,
-      mName: true,
-      libraryPath: true,
+  // Only games with an existing RA link — auto-linking is the task's job.
+  const linkedGames = await prisma.game.findMany({
+    where: {
+      externalLinks: { some: { provider: "RetroAchievements" } },
     },
+    select: { id: true, mName: true, libraryPath: true },
   });
 
-  const results: {
+  logger.info(
+    `[ACH:ra] scan-retroachievements (back-compat) — refreshing ${linkedGames.length} linked game(s)`,
+  );
+
+  const details: {
     gameId: string;
     gameName: string;
     matched: boolean;
-    raGameId?: number;
-    raGameName?: string;
     achievements?: number;
-    error?: string;
+    note?: string;
   }[] = [];
 
-  for (const game of games) {
-    try {
-      // Skip if already has a RA link
-      const existingLink = await prisma.gameExternalLink.findUnique({
-        where: {
-          gameId_provider: {
-            gameId: game.id,
-            provider: ExternalAccountProvider.RetroAchievements,
-          },
-        },
-      });
-
-      if (existingLink) {
-        results.push({
-          gameId: game.id,
-          gameName: game.mName ?? game.libraryPath,
-          matched: false,
-          error: "Already linked to RetroAchievements",
-        });
-        continue;
-      }
-
-      // Search RA for this game
-      const gameName = game.mName ?? game.libraryPath;
-      const searchResults = await raClient.searchGame(gameName);
-
-      if (searchResults.length === 0) {
-        results.push({
-          gameId: game.id,
-          gameName,
-          matched: false,
-          error: "No matches found on RetroAchievements",
-        });
-        continue;
-      }
-
-      // Use the first result (highest achievement count among filtered results)
-      const match = searchResults[0];
-
-      // Fetch achievement definitions
-      const gameInfo = await raClient.getGameAchievements(match.ID);
-      if (!gameInfo) {
-        results.push({
-          gameId: game.id,
-          gameName,
-          matched: false,
-          error: "Failed to fetch game info from RetroAchievements",
-        });
-        continue;
-      }
-
-      // Create the external link
-      await prisma.gameExternalLink.create({
-        data: {
-          gameId: game.id,
-          provider: ExternalAccountProvider.RetroAchievements,
-          externalGameId: String(match.ID),
-        },
-      });
-
-      // Create achievement definitions (batch operation)
-      // Fetch existing achievements to determine create vs update
-      const existingAchievements = await prisma.achievement.findMany({
-        where: {
-          gameId: game.id,
-          provider: ExternalAccountProvider.RetroAchievements,
-        },
-        select: { externalId: true, id: true },
-      });
-      const existingMap = new Map(
-        existingAchievements.map((a) => [a.externalId, a.id]),
-      );
-
-      const toCreate = [];
-      const toUpdate = [];
-      let order = 0;
-
-      for (const [externalId, achievement] of Object.entries(
-        gameInfo.Achievements || {},
-      )) {
-        const iconUrl = achievement.BadgeName
-          ? `https://media.retroachievements.org/Badge/${achievement.BadgeName}.png`
-          : "";
-        const iconLockedUrl = achievement.BadgeName
-          ? `https://media.retroachievements.org/Badge/${achievement.BadgeName}_lock.png`
-          : "";
-
-        const achievementData = {
-          title: achievement.Title || externalId,
-          description: achievement.Description || "",
-          iconUrl,
-          iconLockedUrl,
-          displayOrder: order,
-        };
-
-        if (existingMap.has(externalId)) {
-          toUpdate.push({
-            id: existingMap.get(externalId)!,
-            data: achievementData,
-          });
-        } else {
-          toCreate.push({
-            gameId: game.id,
-            provider: ExternalAccountProvider.RetroAchievements,
-            externalId,
-            ...achievementData,
-          });
-        }
-
-        order++;
-      }
-
-      // Batch create new achievements
-      if (toCreate.length > 0) {
-        await prisma.achievement.createMany({ data: toCreate });
-      }
-
-      // Batch update existing achievements
-      if (toUpdate.length > 0) {
-        await Promise.all(
-          toUpdate.map(({ id, data }) =>
-            prisma.achievement.updateMany({ where: { id }, data }),
-          ),
-        );
-      }
-
-      const achievementCount = toCreate.length + toUpdate.length;
-
-      results.push({
-        gameId: game.id,
-        gameName,
-        matched: true,
-        raGameId: match.ID,
-        raGameName: match.Title,
-        achievements: achievementCount,
-      });
-
-      logger.info(
-        `[RA Scan] Matched ${gameName} to RA game ${match.Title} (${match.ID}) with ${achievementCount} achievements`,
-      );
-    } catch (error) {
-      logger.warn(
-        `[RA Scan] Error processing game ${game.id}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      results.push({
-        gameId: game.id,
-        gameName: game.mName ?? game.libraryPath,
-        matched: false,
-        error:
-          error instanceof Error ? error.message : "Unknown error occurred",
-      });
-    }
+  for (const game of linkedGames) {
+    const [outcome] = await scanGame(game.id, ["retroachievements"], {
+      userId,
+    });
+    details.push({
+      gameId: game.id,
+      gameName: game.mName ?? game.libraryPath,
+      matched: !!outcome?.result.linked,
+      achievements: outcome?.result.definitionCount,
+      note: outcome?.result.note,
+    });
   }
 
-  const matched = results.filter((r) => r.matched);
-  logger.info(
-    `[RA Scan] Completed: scanned ${games.length} games, matched ${matched.length}`,
-  );
-
+  const matched = details.filter((d) => d.matched);
   return {
-    gamesScanned: games.length,
+    gamesScanned: linkedGames.length,
     gamesMatched: matched.length,
-    details: results,
+    note: "Refreshes linked games only. Run the link:retroachievements task to auto-link new games.",
+    details,
   };
 });

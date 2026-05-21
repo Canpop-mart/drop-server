@@ -26,7 +26,8 @@ export default defineDropTask({
   acls: ["system:maintenance:read"],
   taskGroup: "upgrade:gbe",
 
-  async run({ progress, logger }) {
+  async run({ progress, logger, markPhase, signal }) {
+    markPhase("download GBE DLLs");
     logger.info("── Phase 1: Download + cache GBE DLLs ──");
     progress(2);
 
@@ -55,6 +56,7 @@ export default defineDropTask({
       );
     }
 
+    markPhase("scan + upgrade games");
     logger.info("── Phase 2: Scan + upgrade games ──");
     progress(10);
 
@@ -84,6 +86,12 @@ export default defineDropTask({
     let drmFailed = 0;
 
     for (const game of games) {
+      // GBE upgrades hit disk hard; respect cancellation between games
+      // so a long scan can be aborted promptly from the admin UI.
+      if (signal.aborted) {
+        logger.info(`Cancelled after scanning ${scanned}/${games.length}`);
+        return;
+      }
       scanned++;
       const reportProgress = () =>
         progress(10 + Math.round((scanned / games.length) * 88));

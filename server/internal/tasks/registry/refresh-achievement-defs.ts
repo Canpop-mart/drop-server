@@ -48,6 +48,7 @@ export default defineDropTask({
       try {
         await setupGoldberg(game.id, versionDir, {
           forceRefreshAchievements: true,
+          logger,
         });
         refreshed++;
       } catch (e) {

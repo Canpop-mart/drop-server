@@ -17,3 +17,47 @@ model Task {
 
     @@id([id, started])
 }
+
+/// Receipts persist the canonical, queryable record of every task run.
+/// The legacy `Task` model embeds the full pretty-printed log array per
+/// row, which makes it expensive to filter and impossible to mark as
+/// "cancelled" or "orphaned" after the fact. `TaskReceipt` is the
+/// schema we query from the admin history tab and the retry endpoint,
+/// while `Task` is kept around for back-compat with existing rows.
+///
+/// status is one of: success | failed | cancelled | orphaned
+/// - success: run() returned without throwing.
+/// - failed: run() threw or was aborted with an error.
+/// - cancelled: the operator hit Cancel via the admin UI.
+/// - orphaned: the server restarted while the task was in flight; it
+///             never got a chance to record an end state, so the
+///             startup sweep marks it after the fact.
+model TaskReceipt {
+    id        String   @id @default(uuid())
+    taskKey   String?
+    taskGroup String
+    name      String
+    acls      String[]
+    actions   String[]
+
+    startedAt DateTime  @default(now())
+    endedAt   DateTime?
+    status    String
+
+    /// One-line error description (for failed/cancelled). Full stack
+    /// stays in progressLog if pino captured it.
+    error String?
+    /// Final progress value at the time the receipt was sealed.
+    progress Float @default(0)
+    /// Original create() args needed for one-click retry. Includes the
+    /// taskGroup so the registry can rebuild the task even if it now
+    /// lives in a different group.
+    retryArgs Json?
+    /// Phase timings + log snapshots produced via TaskRunContext.markPhase().
+    /// Shape: { phases: [{ name: string, startedAt: ISO, endedAt: ISO }],
+    ///          log: string[] }
+    progressLog Json?
+
+    @@index([status, startedAt])
+    @@index([taskGroup, startedAt])
+}

@@ -5,14 +5,21 @@ import { IGDBProvider } from "../internal/metadata/igdb";
 import { ManualMetadataProvider } from "../internal/metadata/manual";
 import { PCGamingWikiProvider } from "../internal/metadata/pcgamingwiki";
 import { SteamProvider } from "../internal/metadata/steam";
+import { GiantBombProvider } from "../internal/metadata/giantbomb";
 import { logger } from "~/server/internal/logging";
 
 export default defineNitroPlugin(async (_nitro) => {
+  // Each provider's constructor throws MissingMetadataProviderConfig if
+  // its required env vars are absent — the try/catch below turns that
+  // into a skipped provider rather than a boot failure. So GiantBomb is
+  // listed here but only actually registers when GIANT_BOMB_API_KEY is
+  // set. (The 2026 metadata audit re-wired it through the shared HTTP
+  // client; it is no longer dead code.)
   const metadataProviders = [
-    //GiantBombProvider, // GiantBomb changed their API
     SteamProvider,
     PCGamingWikiProvider,
     IGDBProvider,
+    GiantBombProvider,
   ];
 
   const providers = new Map<string, MetadataProvider>();

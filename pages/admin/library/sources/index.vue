@@ -157,6 +157,54 @@
             v-model="sourceConfig"
           />
 
+          <div class="flex items-start gap-x-3">
+            <input
+              id="autoSwapSteamApiDll"
+              v-model="autoSwapSteamApiDll"
+              name="autoSwapSteamApiDll"
+              type="checkbox"
+              class="mt-1 h-4 w-4 rounded border-zinc-700 bg-zinc-800 text-blue-600 focus:ring-blue-600"
+            />
+            <div>
+              <label
+                for="autoSwapSteamApiDll"
+                class="block text-sm font-medium leading-6 text-zinc-100"
+                >Auto-swap steam_api DLL to GBE</label
+              >
+              <p class="text-zinc-400 block text-xs font-medium leading-6">
+                When enabled, Drop will replace a positively-identified
+                vanilla Valve <code>steam_api[64].dll</code> with the cached
+                GBE build at import time. Leaves OnlineFix / CODEX / EMPRESS /
+                CreamAPI / unknown custom DLLs untouched. Disable for
+                libraries of pre-fixed games.
+              </p>
+            </div>
+          </div>
+
+          <div class="flex items-start gap-x-3">
+            <input
+              id="autoEmulatorSetup"
+              v-model="autoEmulatorSetup"
+              name="autoEmulatorSetup"
+              type="checkbox"
+              class="mt-1 h-4 w-4 rounded border-zinc-700 bg-zinc-800 text-blue-600 focus:ring-blue-600"
+            />
+            <div>
+              <label
+                for="autoEmulatorSetup"
+                class="block text-sm font-medium leading-6 text-zinc-100"
+                >Run emulator setup on import</label
+              >
+              <p class="text-zinc-400 block text-xs font-medium leading-6">
+                When enabled, version imports run the emulator-setup phase
+                (SSE detection, Goldberg achievement scaffolding and the
+                gated DLL swap). Disable to make that phase a complete no-op
+                for every game in this library — broader than the DLL-swap
+                toggle above.
+              </p>
+            </div>
+          </div>
+
           <input type="submit" class="hidden" />
         </form>
 
@@ -260,6 +308,8 @@ const actionSourceOpen = ref(false);
 const currentSourceOption = ref<LibraryBackend>("Filesystem");
 const sourceName = ref("");
 const sourceConfig = ref<object>({});
+const autoSwapSteamApiDll = ref(true);
+const autoEmulatorSetup = ref(true);
 
 const modalError = ref<undefined | string>();
 const modalLoading = ref(false);
@@ -302,6 +352,8 @@ async function performActionSource() {
         name: sourceName.value,
         backend: createMode ? currentSourceOption.value : undefined,
         options: sourceConfig.value,
+        autoSwapSteamApiDll: autoSwapSteamApiDll.value,
+        autoEmulatorSetup: autoEmulatorSetup.value,
       },
       method: createMode ? "POST" : "PATCH",
       headers,
@@ -322,6 +374,8 @@ function performActionSource_wrapper() {
       actionSourceOpen.value = false;
       sourceConfig.value = {};
       sourceName.value = "";
+      autoSwapSteamApiDll.value = true;
+      autoEmulatorSetup.value = true;
     })
     .catch((e) => {
       if (e instanceof FetchError) {
@@ -341,6 +395,10 @@ function edit(index: number) {
 
   sourceName.value = source.name;
   sourceConfig.value = source.options! as object;
+  // Pre-populate the toggles from the existing source; fall back to ON
+  // for older rows that pre-date the columns (the DB defaults also ON).
+  autoSwapSteamApiDll.value = source.autoSwapSteamApiDll ?? true;
+  autoEmulatorSetup.value = source.autoEmulatorSetup ?? true;
 
   editIndex.value = index;
   actionSourceOpen.value = true;

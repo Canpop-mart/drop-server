@@ -10,6 +10,7 @@
 
 import fs, { createWriteStream } from "fs";
 import path from "path";
+import { createHash } from "crypto";
 import { pipeline } from "stream/promises";
 import { systemConfig } from "./config/sys-conf";
 import { logger } from "~/server/internal/logging";
@@ -80,6 +81,29 @@ interface GhRelease {
 }
 
 /**
+ * Minimal logger shape used by the download / extract helpers. Defaults
+ * to a thin wrapper over the global server logger when nothing is
+ * passed — the version-import task path always supplies its own task
+ * logger so the messages show up in the live progress feed.
+ */
+export type SwapLogger = {
+  info: (msg: string) => void;
+  warn: (msg: string) => void;
+};
+
+/**
+ * Default fallback logger used when a helper is called outside of a
+ * task context (e.g. one-off admin script). Routes through the pino
+ * server logger so output still lands in the application log.
+ */
+function fallbackLogger(): SwapLogger {
+  return {
+    info: (msg) => logger.info(msg),
+    warn: (msg) => logger.warn(msg),
+  };
+}
+
+/**
  * Fetches the latest GBE release from GitHub and caches the DLLs locally.
  *
  * GBE releases contain archives with names like:
@@ -89,21 +113,23 @@ interface GhRelease {
  *
  * Extracts archives using p7zip (installed in the Docker image).
  */
-export async function fetchLatestRelease(): Promise<GhRelease | null> {
+export async function fetchLatestRelease(
+  log: SwapLogger = fallbackLogger(),
+): Promise<GhRelease | null> {
   try {
     const res = await fetch(
       `https://api.github.com/repos/${GBE_REPO}/releases/latest`,
       { signal: AbortSignal.timeout(15_000) },
     );
     if (!res.ok) {
-      console.log(
+      log.warn(
         `[GBE] GitHub API returned ${res.status} fetching latest release`,
       );
       return null;
     }
     return (await res.json()) as GhRelease;
   } catch (e) {
-    console.log(`[GBE] Failed to fetch latest release: ${e}`);
+    log.warn(`[GBE] Failed to fetch latest release: ${e}`);
     return null;
   }
 }
@@ -111,11 +137,15 @@ export async function fetchLatestRelease(): Promise<GhRelease | null> {
 /**
  * Downloads a file from a URL to a local path.
  */
-async function downloadFile(url: string, dest: string): Promise<boolean> {
+async function downloadFile(
+  url: string,
+  dest: string,
+  log: SwapLogger,
+): Promise<boolean> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(120_000) });
     if (!res.ok || !res.body) {
-      console.log(`[GBE] Download failed: ${res.status} from ${url}`);
+      log.warn(`[GBE] Download failed: ${res.status} from ${url}`);
       return false;
     }
     const fileStream = createWriteStream(dest);
@@ -123,7 +153,7 @@ async function downloadFile(url: string, dest: string): Promise<boolean> {
     await pipeline(res.body, fileStream);
     return true;
   } catch (e) {
-    console.log(`[GBE] Download error for ${url}: ${e}`);
+    log.warn(`[GBE] Download error for ${url}: ${e}`);
     return false;
   }
 }
@@ -135,11 +165,13 @@ async function downloadFile(url: string, dest: string): Promise<boolean> {
  *
  * Supports .zip (unzip), .7z (7z from p7zip-full), and .tar.gz (tar).
  */
-export async function downloadGbeDlls(): Promise<string | null> {
-  const release = await fetchLatestRelease();
+export async function downloadGbeDlls(
+  log: SwapLogger = fallbackLogger(),
+): Promise<string | null> {
+  const release = await fetchLatestRelease(log);
   if (!release) return null;
 
-  console.log(
+  log.info(
     `[GBE] Latest release: ${release.tag_name} (${release.assets.length} assets)`,
   );
 
@@ -174,17 +206,17 @@ export async function downloadGbeDlls(): Promise<string | null> {
 
   for (const asset of emuAssets) {
     const tmpPath = path.join(cacheRoot(), asset.name);
-    console.log(`[GBE] Downloading ${asset.name} (${asset.size} bytes)...`);
+    log.info(`[GBE] Downloading ${asset.name} (${asset.size} bytes)...`);
 
-    if (!(await downloadFile(asset.browser_download_url, tmpPath))) {
+    if (!(await downloadFile(asset.browser_download_url, tmpPath, log))) {
       continue;
     }
 
     try {
-      await extractArchiveDlls(tmpPath, asset.name);
+      await extractArchiveDlls(tmpPath, asset.name, log);
       downloaded = true;
     } catch (e) {
-      console.log(`[GBE] Failed to extract ${asset.name}: ${e}`);
+      log.warn(`[GBE] Failed to extract ${asset.name}: ${e}`);
     }
 
     // Clean up archive
@@ -198,7 +230,7 @@ export async function downloadGbeDlls(): Promise<string | null> {
   }
 
   if (!downloaded) {
-    console.log(
+    log.warn(
       `[GBE] Could not extract DLLs from release ${release.tag_name}. ` +
         `Ensure p7zip-full is installed (apt-get install p7zip-full).`,
     );
@@ -218,6 +250,7 @@ export async function downloadGbeDlls(): Promise<string | null> {
 async function extractArchiveDlls(
   archivePath: string,
   fileName: string,
+  log: SwapLogger,
 ): Promise<void> {
   const { execFileSync } = await import("child_process");
   const tmpDir = archivePath + "_extracted";
@@ -242,8 +275,8 @@ async function extractArchiveDlls(
       throw new Error(`Unsupported archive format: ${fileName}`);
     }
 
-    logger.info(`[GBE] Extracted ${fileName}, scanning for DLLs...`);
-    findAndCacheDlls(tmpDir);
+    log.info(`[GBE] Extracted ${fileName}, scanning for DLLs...`);
+    findAndCacheDlls(tmpDir, log);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -257,7 +290,7 @@ async function extractArchiveDlls(
  * subdirectories (e.g. `regular/` and `experimental/`). We prefer
  * `experimental` builds when available since they have more features.
  */
-function findAndCacheDlls(dir: string): void {
+function findAndCacheDlls(dir: string, log: SwapLogger): void {
   // Collect all DLL paths first so we can pick the best variant
   const found = new Map<GbeArch, { path: string; score: number }>();
 
@@ -302,7 +335,7 @@ function findAndCacheDlls(dir: string): void {
     const dllName = path.basename(info.path);
     const dest = path.join(archDir(arch), dllName);
     fs.copyFileSync(info.path, dest);
-    console.log(`[GBE] Cached ${dllName} → ${dest}`);
+    log.info(`[GBE] Cached ${dllName} → ${dest}`);
   }
 }
 
@@ -382,30 +415,223 @@ export function hasSteamDrmMarker(rootDir: string): boolean {
   return hasSteamDrmMarkerRecursive(rootDir, 0, 5);
 }
 
+// ── DLL fingerprinting (positive identification) ─────────────────────────
+//
+// The swap path used to be **opt-out** — if the DLL didn't contain a GBE
+// signature ("Goldberg" / "Mr_Goldberg" / "gbe_fork") it was assumed to be
+// a vanilla Valve Steamworks build and got swapped. That destroyed
+// pre-applied OnlineFix, CODEX, EMPRESS, CreamAPI, and custom Goldberg
+// fork DLLs on every import, leaving the working crack behind as
+// `<dll>.steam_backup`.
+//
+// The new model is **opt-in for swap**:
+//   1. Try to positively identify a vanilla Valve Steamworks DLL.
+//   2. Try to positively identify a known crack DLL.
+//   3. If neither matches, leave the file alone.
+
 /**
- * Returns true when the DLL at `dllPath` looks like a GBE / Goldberg
- * build. Detects by ASCII signatures embedded in the release binaries —
- * gbe_fork ships with "Goldberg", "Mr_Goldberg", and/or "gbe_fork" in
- * its .rdata section, none of which appear in Valve's steam_api64.dll.
+ * Returns true when the DLL contains ASCII signatures characteristic of
+ * a Goldberg / gbe_fork release binary.
  *
- * Used as a cheap "is the swap already done?" check before calling
- * swapDllAndWriteSettings, so we don't waste I/O or blow away a good
- * `.steam_backup` with a second GBE-over-GBE swap.
- *
- * Reads the whole file into memory, which is fine for typical
- * steam_api DLLs (~300KB–1MB).
+ * Used downstream of the new opt-in swap logic — purely a "skip, this is
+ * already the swap target" check. **Never** rely on this as a negative
+ * proof of "this must be Valve's DLL".
  */
 export function isGbeDll(dllPath: string): boolean {
-  try {
-    const buf = fs.readFileSync(dllPath);
-    return (
-      buf.includes(Buffer.from("Goldberg")) ||
-      buf.includes(Buffer.from("Mr_Goldberg")) ||
-      buf.includes(Buffer.from("gbe_fork"))
-    );
-  } catch {
-    return false;
+  const buf = readDllForFingerprint(dllPath);
+  if (!buf) return false;
+  return containsAnyAscii(buf, GBE_SIGNATURES);
+}
+
+/** ASCII signatures present in gbe_fork / Goldberg releases. */
+const GBE_SIGNATURES = ["Goldberg", "Mr_Goldberg", "gbe_fork"];
+
+/**
+ * ASCII signatures present in Valve's official steam_api[64].dll. Each
+ * one alone is weak (third-party DLLs frequently reuse Steamworks
+ * interface names so games stay binary-compatible), so callers should
+ * require **at least two** before treating a DLL as vanilla.
+ *
+ * The interface-version strings are exported by the real DLL at known
+ * offsets and almost always appear together in shipped Valve binaries.
+ * "Copyright (c) Valve Corporation" is the strongest single signal.
+ */
+const VALVE_SIGNATURES = [
+  "Copyright (c) Valve Corporation",
+  "Valve Corporation",
+  // Stable Steamworks interface version strings shipped by vanilla DLLs.
+  // Bump these list-wise if Valve rotates an interface.
+  "SteamUser019",
+  "SteamUser020",
+  "SteamUser021",
+  "SteamApps008",
+  "STEAMAPPS_INTERFACE_VERSION008",
+  "SteamUtils009",
+  "SteamUtils010",
+  "STEAMUTILS_INTERFACE_VERSION009",
+  "SteamFriends017",
+  "SteamFriends018",
+  "STEAMFRIENDS_INTERFACE_VERSION017",
+];
+
+/**
+ * ASCII signatures present in well-known crack / wrapper DLLs.
+ *
+ * Each entry is `[label, signatures[]]` — when ANY signature matches the
+ * DLL is treated as a known crack and the auto-swap is suppressed loudly.
+ *
+ * Be conservative with single-word entries (e.g. "CODEX", "RUNE",
+ * "SKIDROW") — they can collide with legitimate strings in unrelated
+ * binaries. Pair them with at least one other crack-specific marker
+ * before adding here, OR use a more specific phrase from the crack's
+ * banner/credit string.
+ */
+const CRACK_SIGNATURES: ReadonlyArray<readonly [string, readonly string[]]> = [
+  ["OnlineFix", ["OnlineFix", "OnlineFix64", "Online-Fix.me"]],
+  ["FCKDRM", ["FCKDRM"]],
+  ["FreeAllAccess", ["FreeAllAccess"]],
+  ["CODEX", ["CODEX presents", "Steam_API_CODEX"]],
+  ["EMPRESS", ["EMPRESS", "empress.coffee"]],
+  ["CreamAPI", ["CreamAPI", "CREAMAPI", "cream_api.ini"]],
+  ["SmartSteamEmu", ["SmartSteamEmu", "SmartSteamEmulator"]],
+  ["SmartSteamLoader", ["SmartSteamLoader"]],
+  ["Greenluma", ["Greenluma", "GreenLuma"]],
+  ["ChromeOSAuthd", ["ChromeOSAuthd"]],
+  ["RUNE", ["RUNE presents", "rune.team"]],
+  ["SKIDROW", ["SKIDROW presents", "skidrow.cracked"]],
+  ["RLD!", ["RELOADED presents", "RLD!"]],
+];
+
+/**
+ * Optional allowlist of SHA-256 hashes that positively identify a DLL as
+ * vanilla Valve Steamworks. Empty by default — populate as you confirm
+ * known-good builds in the wild. A single hash hit is sufficient to
+ * authorise the swap (in contrast to the signature-pair requirement).
+ */
+const VALVE_SHA256_ALLOWLIST: ReadonlySet<string> = new Set<string>([
+  // e.g. "9f3c6e92a4...": "steam_api64.dll @ Steamworks SDK v1.61",
+]);
+
+/** Result of `identifySteamApiDll`. */
+export type SteamApiDllKind =
+  | "valve"
+  | "gbe"
+  | "known-crack"
+  | "unknown"
+  | "missing";
+
+export interface SteamApiDllIdentification {
+  /** Coarse bucket — drives the swap decision. */
+  kind: SteamApiDllKind;
+  /** Human-readable description of what we matched. */
+  fingerprint: string;
+  /** Specific crack label if `kind === "known-crack"`. */
+  crackName?: string;
+  /** SHA-256 of the DLL, when the file was readable. */
+  sha256?: string;
+}
+
+/**
+ * Reads `dllPath` and returns a positive identification of what's in it.
+ *
+ * Priority order (first match wins):
+ *   1. SHA-256 in the Valve allowlist → vanilla Valve.
+ *   2. GBE / Goldberg signatures → already swapped, skip.
+ *   3. Any known-crack signature → leave alone, never swap.
+ *   4. Two or more Valve signatures → vanilla Valve, OK to swap.
+ *   5. Otherwise → unknown, don't swap (conservative default).
+ *
+ * Reading the whole DLL into memory is fine — typical steam_api files
+ * are 300 KB to 1 MB.
+ */
+export function identifySteamApiDll(
+  dllPath: string,
+): SteamApiDllIdentification {
+  const buf = readDllForFingerprint(dllPath);
+  if (!buf) {
+    return { kind: "missing", fingerprint: "could not read DLL" };
   }
+
+  const sha256 = createHash("sha256").update(buf).digest("hex");
+
+  if (VALVE_SHA256_ALLOWLIST.has(sha256)) {
+    return {
+      kind: "valve",
+      fingerprint: `Valve allowlist sha256=${sha256.slice(0, 12)}…`,
+      sha256,
+    };
+  }
+
+  // GBE check first — once swapped, the file ALSO contains Steamworks
+  // interface strings (gbe re-exports them), so without this check
+  // already-swapped DLLs would be re-classified as Valve and re-swapped.
+  if (containsAnyAscii(buf, GBE_SIGNATURES)) {
+    return {
+      kind: "gbe",
+      fingerprint: "GBE / Goldberg signature present",
+      sha256,
+    };
+  }
+
+  for (const [label, sigs] of CRACK_SIGNATURES) {
+    if (containsAnyAscii(buf, sigs)) {
+      return {
+        kind: "known-crack",
+        fingerprint: `${label} signature present`,
+        crackName: label,
+        sha256,
+      };
+    }
+  }
+
+  const valveHits = countAsciiHits(buf, VALVE_SIGNATURES);
+  if (valveHits >= 2) {
+    return {
+      kind: "valve",
+      fingerprint: `${valveHits} Valve signature(s) matched`,
+      sha256,
+    };
+  }
+
+  if (valveHits === 1) {
+    return {
+      kind: "unknown",
+      fingerprint:
+        `only ${valveHits} Valve signature matched (need >=2 for positive ID); ` +
+        `not GBE, not a known crack`,
+      sha256,
+    };
+  }
+
+  return {
+    kind: "unknown",
+    fingerprint:
+      "no Valve, GBE, or known-crack signatures found — custom or unknown build",
+    sha256,
+  };
+}
+
+function readDllForFingerprint(dllPath: string): Buffer | null {
+  try {
+    return fs.readFileSync(dllPath);
+  } catch {
+    return null;
+  }
+}
+
+function containsAnyAscii(buf: Buffer, needles: readonly string[]): boolean {
+  for (const needle of needles) {
+    if (buf.includes(Buffer.from(needle, "utf-8"))) return true;
+  }
+  return false;
+}
+
+function countAsciiHits(buf: Buffer, needles: readonly string[]): number {
+  let n = 0;
+  for (const needle of needles) {
+    if (buf.includes(Buffer.from(needle, "utf-8"))) n++;
+  }
+  return n;
 }
 
 function hasSteamDrmMarkerRecursive(
@@ -599,7 +825,7 @@ async function swapDllAndWriteSettings(
 
   if (!hasCachedDlls(arch)) {
     logger.info(`[GBE] No cached GBE DLL for ${arch}, downloading...`);
-    const tag = await downloadGbeDlls();
+    const tag = await downloadGbeDlls(logger);
     if (!tag || !hasCachedDlls(arch)) {
       logger.warn(
         `[GBE] Failed to download GBE DLLs. Run "Download GBE" task manually.`,
@@ -666,15 +892,44 @@ async function swapDllAndWriteSettings(
   return true;
 }
 
+/** Result of `ensureGbeDll`. */
+export interface EnsureGbeResult {
+  /** True iff a real swap happened on disk. */
+  swapped: boolean;
+  /** True iff the DLL was already a GBE build. */
+  alreadyGbe: boolean;
+  /**
+   * True iff we deliberately skipped the swap because the DLL was
+   * identified as something we must not overwrite (a known crack or
+   * an unknown build that wasn't positively identified as Valve).
+   */
+  skipped: boolean;
+  /** Identification of the on-disk DLL when we read it. */
+  identification?: SteamApiDllIdentification;
+  /** Human-readable failure message when `error` is set. */
+  error?: string;
+}
+
+export interface EnsureGbeOptions {
+  /**
+   * Bypass detection and force the swap to run even for known-crack /
+   * unknown DLLs. Reserved for admin-triggered escape hatch — never set
+   * this from `setupGoldberg`.
+   */
+  forceGbeSwap?: boolean;
+}
+
 /**
  * Ensures the game's steam_api DLL is a GBE build — the canonical
  * idempotent entry point for setupGoldberg & the readiness scanner.
  *
- * - If `dllPath` is already a GBE build, returns { alreadyGbe: true }
- *   without touching disk.
- * - Otherwise backs up the original as `<dll>.steam_backup` and swaps
- *   in the cached GBE DLL via `swapDllAndWriteSettings`, which also
- *   (re-)writes `steam_settings/{steam_appid.txt,configs.user.ini}`.
+ * Swap decision (opt-in, requires positive identification):
+ *   - `gbe`         → already swapped, nothing to do.
+ *   - `valve`       → swap. Original preserved as `<dll>.steam_backup`.
+ *   - `known-crack` → SKIP loudly. Refuses to overwrite OnlineFix etc.
+ *   - `unknown`     → SKIP loudly. Refuses to overwrite a possibly-
+ *                     working crack. Override with `forceGbeSwap: true`.
+ *   - `missing`     → error.
  *
  * Safe to call repeatedly: only hits disk when a real swap is needed.
  *
@@ -687,15 +942,77 @@ export async function ensureGbeDll(
   dllName: string,
   appId: string,
   logger: { info: (msg: string) => void; warn: (msg: string) => void },
-): Promise<{ swapped: boolean; alreadyGbe: boolean; error?: string }> {
+  options?: EnsureGbeOptions,
+): Promise<EnsureGbeResult> {
   const dllPath = path.join(dllDir, dllName);
 
   if (!fs.existsSync(dllPath)) {
-    return { swapped: false, alreadyGbe: false, error: "DLL not found" };
+    return {
+      swapped: false,
+      alreadyGbe: false,
+      skipped: false,
+      error: "DLL not found",
+    };
   }
 
-  if (isGbeDll(dllPath)) {
-    return { swapped: false, alreadyGbe: true };
+  const ident = identifySteamApiDll(dllPath);
+
+  if (ident.kind === "gbe") {
+    logger.info(
+      `[GBE] ${dllName} (sha256=${ident.sha256?.slice(0, 12)}…) ` +
+        `is already a GBE build (${ident.fingerprint}). Skipping swap.`,
+    );
+    return {
+      swapped: false,
+      alreadyGbe: true,
+      skipped: false,
+      identification: ident,
+    };
+  }
+
+  if (ident.kind === "known-crack" && !options?.forceGbeSwap) {
+    logger.warn(
+      `[GBE] ${dllName} (sha256=${ident.sha256?.slice(0, 12)}…) ` +
+        `detected as ${ident.crackName ?? "known crack"} (${ident.fingerprint}). ` +
+        `Skipping GBE swap — refusing to overwrite a working crack. ` +
+        `Pass forceGbeSwap: true if you really want to replace it.`,
+    );
+    return {
+      swapped: false,
+      alreadyGbe: false,
+      skipped: true,
+      identification: ident,
+    };
+  }
+
+  if (ident.kind === "unknown" && !options?.forceGbeSwap) {
+    logger.warn(
+      `[GBE] ${dllName} (sha256=${ident.sha256?.slice(0, 12)}…) — ` +
+        `could not positively identify DLL as Valve; leaving in place. ` +
+        `Fingerprint: ${ident.fingerprint}. ` +
+        `Run with forceGbeSwap: true to override (e.g. via per-game admin toggle).`,
+    );
+    return {
+      swapped: false,
+      alreadyGbe: false,
+      skipped: true,
+      identification: ident,
+    };
+  }
+
+  // At this point: kind === "valve", OR forceGbeSwap === true.
+  const forced = ident.kind !== "valve" && options?.forceGbeSwap;
+  if (forced) {
+    logger.warn(
+      `[GBE] ${dllName} forceGbeSwap is set — proceeding with swap despite ` +
+        `non-Valve fingerprint (${ident.fingerprint}). Original preserved as ` +
+        `${dllName}${STEAM_DRM_BACKUP_SUFFIX}.`,
+    );
+  } else {
+    logger.info(
+      `[GBE] ${dllName} identified as vanilla Valve Steamworks (${ident.fingerprint}). ` +
+        `Swapping to GBE; original preserved as ${dllName}${STEAM_DRM_BACKUP_SUFFIX}.`,
+    );
   }
 
   const ok = await swapDllAndWriteSettings(
@@ -704,8 +1021,19 @@ export async function ensureGbeDll(
   );
 
   return ok
-    ? { swapped: true, alreadyGbe: false }
-    : { swapped: false, alreadyGbe: false, error: "swap failed" };
+    ? {
+        swapped: true,
+        alreadyGbe: false,
+        skipped: false,
+        identification: ident,
+      }
+    : {
+        swapped: false,
+        alreadyGbe: false,
+        skipped: false,
+        identification: ident,
+        error: "swap failed",
+      };
 }
 
 // ── Auto SSE → GBE at import time ────────────────────────────────────────
@@ -822,22 +1150,32 @@ export async function autoUpgradeSteamDrmIfNeeded(
   }
 
   logger.info(
-    `[GBE] Game ${gameId}: Steam DRM detected (AppID ${appId}), auto-upgrading to GBE`,
+    `[GBE] Game ${gameId}: Steam DRM markers found (AppID ${appId}); ` +
+      `checking ${dllInfo.dllName} fingerprint before swap`,
   );
 
-  const ok = await swapDllAndWriteSettings(
-    {
-      dllDir: dllInfo.dllDir,
-      dllName: dllInfo.dllName,
-      appId,
-      backupSuffix: STEAM_DRM_BACKUP_SUFFIX,
-    },
+  // Defer the actual swap decision to ensureGbeDll, which only proceeds
+  // for positively-identified Valve binaries and refuses to overwrite
+  // OnlineFix / CODEX / EMPRESS / CreamAPI / unknown custom DLLs.
+  const result = await ensureGbeDll(
+    dllInfo.dllDir,
+    dllInfo.dllName,
+    appId,
     logger,
   );
 
-  if (ok) {
+  if (result.swapped) {
     logger.info(
       `[GBE] Auto-upgraded ${gameId} from Steam DRM to GBE (AppID ${appId})`,
+    );
+  } else if (result.alreadyGbe) {
+    logger.info(
+      `[GBE] Game ${gameId}: steam_api DLL is already GBE, no swap needed`,
+    );
+  } else if (result.skipped) {
+    logger.warn(
+      `[GBE] Game ${gameId}: skipped GBE swap to preserve pre-existing crack/unknown DLL ` +
+        `(${result.identification?.fingerprint ?? "no fingerprint"})`,
     );
   }
 }
@@ -927,7 +1265,7 @@ export async function upgradeSseToGbe(
   }
 
   try {
-    await setupGoldberg(gameId, dllDir);
+    await setupGoldberg(gameId, dllDir, { logger });
   } catch (e) {
     logger.warn(`setupGoldberg follow-up failed (non-critical): ${e}`);
   }
@@ -973,6 +1311,7 @@ export async function upgradeSteamDrmToGbe(
   gameId: string,
   appId: string,
   logger: { info: (msg: string) => void; warn: (msg: string) => void },
+  options?: { forceGbeSwap?: boolean },
 ): Promise<UpgradeResult> {
   if (!hasSteamDrmMarker(versionDir)) {
     return {
@@ -1015,19 +1354,23 @@ export async function upgradeSteamDrmToGbe(
       "utf-8",
     );
   } else {
-    const ok = await swapDllAndWriteSettings(
-      {
-        dllDir,
-        dllName,
-        appId,
-        backupSuffix: STEAM_DRM_BACKUP_SUFFIX,
-      },
-      logger,
-    );
-    if (!ok) {
+    // Defer the swap to ensureGbeDll so it goes through the same opt-in
+    // identification check as the auto path. Admins can pass
+    // forceGbeSwap: true to override (e.g. for a custom Goldberg fork
+    // that doesn't carry the standard signatures).
+    const result = await ensureGbeDll(dllDir, dllName, appId, logger, {
+      forceGbeSwap: options?.forceGbeSwap,
+    });
+    if (!result.swapped && !result.alreadyGbe) {
+      const reason =
+        result.error ??
+        (result.skipped
+          ? `swap skipped (${result.identification?.fingerprint ?? "unknown reason"}). ` +
+            `Use the per-game admin override if this DLL really needs the swap.`
+          : "unknown error");
       return {
         success: false,
-        message: `Failed to swap ${dllName} with GBE DLL — check server logs`,
+        message: `Did not swap ${dllName}: ${reason}`,
         backupCreated: false,
       };
     }
@@ -1058,6 +1401,106 @@ export async function upgradeSteamDrmToGbe(
     message: `${action} ${dllName} → GBE (AppID ${appId})${regenOk ? ", manifest regenerated" : " — manifest regen FAILED"}`,
     backupCreated: !alreadyUpgraded,
   };
+}
+
+/** Suffix used when stashing the GBE DLL aside during a backup restore. */
+export const GBE_BACKUP_SUFFIX = ".gbe_backup";
+
+/**
+ * Result of `restoreSteamBackup` — one entry per file we touched (or
+ * tried to touch) under a single steam_api DLL path.
+ */
+export interface RestoreSteamBackupResult {
+  /** Path that we restored to (the original `<dll>` location). */
+  dllPath: string;
+  /** True if a backup was found and restored. */
+  restored: boolean;
+  /** Optional note (e.g. "no backup", "already restored", error text). */
+  note?: string;
+}
+
+/**
+ * Recursively walks `rootDir` looking for `*.steam_backup` files, and for
+ * each one restores the original DLL in place, stashing the
+ * currently-installed (presumably GBE) DLL aside as `<dll>.gbe_backup`
+ * before doing the restore.
+ *
+ * Caller is responsible for regenerating the droplet manifest after a
+ * successful restore — this function only touches files on disk.
+ *
+ * Idempotent — if no `.steam_backup` exists under `rootDir`, returns
+ * an empty list.
+ */
+export function restoreSteamBackup(
+  rootDir: string,
+): RestoreSteamBackupResult[] {
+  const results: RestoreSteamBackupResult[] = [];
+  walkForSteamBackups(rootDir, 0, 8, results);
+  return results;
+}
+
+function walkForSteamBackups(
+  dir: string,
+  depth: number,
+  maxDepth: number,
+  out: RestoreSteamBackupResult[],
+): void {
+  if (depth > maxDepth) return;
+
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    if (!entry.name.endsWith(STEAM_DRM_BACKUP_SUFFIX)) continue;
+
+    const backupPath = path.join(dir, entry.name);
+    const originalName = entry.name.slice(
+      0,
+      entry.name.length - STEAM_DRM_BACKUP_SUFFIX.length,
+    );
+    const originalPath = path.join(dir, originalName);
+
+    try {
+      // Stash the current (likely GBE) DLL aside, but only if it's
+      // not already a backup file — the user might have manually
+      // re-applied the crack already.
+      if (fs.existsSync(originalPath)) {
+        const gbeBackupPath = originalPath + GBE_BACKUP_SUFFIX;
+        if (fs.existsSync(gbeBackupPath)) {
+          fs.unlinkSync(gbeBackupPath);
+        }
+        fs.renameSync(originalPath, gbeBackupPath);
+      }
+
+      // Promote the backup back to the original location. Use copyFileSync
+      // + unlinkSync (instead of rename) so we keep both copies if the
+      // unlink races — the user always ends up with the crack restored.
+      fs.copyFileSync(backupPath, originalPath);
+      fs.unlinkSync(backupPath);
+
+      out.push({
+        dllPath: originalPath,
+        restored: true,
+        note: `restored from ${entry.name}; current DLL moved to ${originalName}${GBE_BACKUP_SUFFIX}`,
+      });
+    } catch (e) {
+      out.push({
+        dllPath: originalPath,
+        restored: false,
+        note: `restore failed: ${e instanceof Error ? e.message : String(e)}`,
+      });
+    }
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    walkForSteamBackups(path.join(dir, entry.name), depth + 1, maxDepth, out);
+  }
 }
 
 /**

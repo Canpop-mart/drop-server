@@ -155,10 +155,22 @@
                     class="py-4 pr-4 pl-3 text-right text-sm font-medium whitespace-nowrap sm:pr-0 space-x-2"
                   >
                     <button
+                      class="text-zinc-400 hover:text-zinc-200"
+                      @click="() => showReceipt(version.versionId)"
+                    >
+                      Receipt
+                    </button>
+                    <button
                       class="text-blue-400 hover:text-blue-300"
                       @click="() => startEditing(version)"
                     >
                       {{ $t("common.edit") }}
+                    </button>
+                    <button
+                      class="text-amber-400 hover:text-amber-300"
+                      @click="() => revertVersion(version.versionId)"
+                    >
+                      Revert
                     </button>
                     <button
                       class="text-red-400 hover:text-red-300"
@@ -451,6 +463,81 @@
               </h3>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import receipt panel -->
+    <div
+      v-if="receiptVersionId"
+      class="mt-6 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 p-6"
+    >
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-white font-display">
+          Import receipt
+          <span class="text-zinc-400 text-sm font-normal ml-2 mono">{{
+            receiptVersionId
+          }}</span>
+        </h2>
+        <button
+          class="text-zinc-400 hover:text-zinc-200 text-sm"
+          @click="receiptVersionId = null"
+        >
+          {{ $t("cancel") }}
+        </button>
+      </div>
+
+      <div v-if="receiptLoading" class="text-sm text-zinc-400">Loading…</div>
+      <div v-else-if="!receiptData" class="text-sm text-zinc-500">
+        No import receipt for this version (it predates the feature or was
+        imported without one).
+      </div>
+      <div v-else class="flex flex-col gap-y-4 max-w-2xl">
+        <dl
+          class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-zinc-300 bg-zinc-800 p-4 rounded-xl"
+        >
+          <dt class="text-zinc-500">Files</dt>
+          <dd>{{ receiptData.fileCount }}</dd>
+          <dt class="text-zinc-500">Total size</dt>
+          <dd>{{ receiptData.totalSizeBytes }} bytes</dd>
+          <dt class="text-zinc-500">Chunks</dt>
+          <dd>{{ receiptData.chunkCount }}</dd>
+          <dt class="text-zinc-500">DLL swap</dt>
+          <dd>
+            {{
+              receiptData.dllSwapApplied
+                ? `yes (${receiptData.dllSwapName ?? "?"})`
+                : "no"
+            }}
+          </dd>
+          <dt class="text-zinc-500">Imported</dt>
+          <dd>{{ new Date(receiptData.createdAt).toLocaleString() }}</dd>
+        </dl>
+
+        <div class="bg-zinc-800 p-4 rounded-xl">
+          <h3 class="text-sm font-medium text-zinc-100 mb-2">Phase timings</h3>
+          <ul class="space-y-1 text-xs text-zinc-400">
+            <li
+              v-for="(p, i) in receiptPhases"
+              :key="i"
+              class="flex justify-between"
+            >
+              <span class="text-zinc-300">{{ p.name }}</span>
+              <span>{{ p.durationMs }} ms</span>
+            </li>
+          </ul>
+        </div>
+
+        <div
+          v-if="receiptData.warnings.length"
+          class="bg-zinc-800 p-4 rounded-xl"
+        >
+          <h3 class="text-sm font-medium text-yellow-400 mb-2">
+            Warnings ({{ receiptData.warnings.length }})
+          </h3>
+          <ul class="list-disc pl-5 text-xs text-yellow-300 space-y-1">
+            <li v-for="(w, i) in receiptData.warnings" :key="i">{{ w }}</li>
+          </ul>
         </div>
       </div>
     </div>
@@ -897,6 +984,84 @@ async function deleteVersion(versionId: string) {
         description: t("errors.version.delete.desc", {
           error: (e as H3Error)?.statusMessage ?? t("errors.unknown"),
         }),
+        buttonText: t("common.close"),
+      },
+      (e, c) => c(),
+    );
+  }
+}
+
+// ── Import receipt ──────────────────────────────────────────────────
+interface ImportReceiptData {
+  id: string;
+  createdAt: string;
+  fileCount: number;
+  totalSizeBytes: string;
+  chunkCount: number;
+  dllSwapApplied: boolean;
+  dllSwapName?: string | null;
+  warnings: string[];
+  phaseTimings: unknown;
+}
+const receiptVersionId = ref<string | null>(null);
+const receiptLoading = ref(false);
+const receiptData = ref<ImportReceiptData | null>(null);
+
+const receiptPhases = computed<Array<{ name: string; durationMs: number }>>(
+  () => {
+    const raw = receiptData.value?.phaseTimings;
+    if (!Array.isArray(raw)) return [];
+    return raw.map((p) => ({
+      name: String((p as { name?: string }).name ?? "?"),
+      durationMs: Number((p as { durationMs?: number }).durationMs ?? 0),
+    }));
+  },
+);
+
+async function showReceipt(versionId: string) {
+  receiptVersionId.value = versionId;
+  receiptData.value = null;
+  receiptLoading.value = true;
+  try {
+    const { receipt } = await $dropFetch(
+      "/api/v1/admin/game/:id/versions/:versionId/receipt",
+      { params: { id: game.value.id, versionId } },
+    );
+    receiptData.value = receipt as ImportReceiptData | null;
+  } catch {
+    receiptData.value = null;
+  } finally {
+    receiptLoading.value = false;
+  }
+}
+
+async function revertVersion(versionId: string) {
+  const confirmed = window.confirm(
+    "Revert this version? This deletes the GameVersion and its import " +
+      "receipt, restores any .steam_backup DLL on disk, and regenerates " +
+      "the manifest for the remaining latest version.",
+  );
+  if (!confirmed) return;
+
+  try {
+    await $dropFetch("/api/v1/admin/import/revert/:versionId", {
+      method: "POST",
+      params: { versionId },
+    });
+    game.value.versions.splice(
+      game.value.versions.findIndex((e) => e.versionId === versionId),
+      1,
+    );
+    hasDeleted.value = true;
+    if (editingVersionId.value === versionId) editingVersionId.value = null;
+    if (receiptVersionId.value === versionId) receiptVersionId.value = null;
+  } catch (e) {
+    createModal(
+      ModalType.Notification,
+      {
+        title: "Failed to revert version",
+        description:
+          (e as H3Error)?.statusMessage ?? t("errors.unknown"),
         buttonText: t("common.close"),
       },
       (e, c) => c(),

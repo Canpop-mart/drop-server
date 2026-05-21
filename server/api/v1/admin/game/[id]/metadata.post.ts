@@ -42,7 +42,7 @@ export default defineEventHandler(async (h3) => {
     updateModel.mIconObjectId = id;
     await pull();
   } else {
-    dump();
+    await dump();
   }
 
   // If the API call doesn't provide values, don't set them

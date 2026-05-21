@@ -22,6 +22,7 @@ export const taskGroups = {
   "recalculate:achievements": { concurrency: false },
   "upgrade:gbe": { concurrency: false },
   "regenerate:manifests": { concurrency: false },
+  "restore:steam-backup": { concurrency: false },
 
   // ── System ─────────────────────────────────────────────────────────
   "recalculate:playtime": { concurrency: false },

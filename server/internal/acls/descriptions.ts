@@ -102,6 +102,10 @@ export const systemACLDescriptions: ObjectFromList<typeof systemACLs> = {
 
   "task:read": "Read all tasks currently running on server.",
   "task:start": "Manually execute scheduled tasks.",
+  "task:cancel": "Cancel a running task.",
+  "task:retry":
+    "Re-run a failed or cancelled task with the same arguments.",
+  "task:delete": "Permanently remove a finished task receipt from history.",
 
   "maintenance:read":
     "Read tasks and maintenance information, like updates available and cleanup.",

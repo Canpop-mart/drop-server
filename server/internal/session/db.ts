@@ -67,6 +67,21 @@ export default function createDBSessionHandler(): SessionProvider {
       });
       return count > 0;
     },
+    async removeSessionsByUser(userId) {
+      // Fetch tokens first so we can evict each from the in-memory cache —
+      // deleteMany alone would leave stale cached sessions readable until TTL.
+      const sessions = await prisma.session.findMany({
+        where: { userId },
+        select: { token: true },
+      });
+      for (const { token } of sessions) {
+        await cache.remove(token);
+      }
+      const { count } = await prisma.session.deleteMany({
+        where: { userId },
+      });
+      return count;
+    },
     async cleanupSessions() {
       const now = new Date();
 

@@ -16,6 +16,9 @@ import { type } from "arktype";
 import type { TaskRunContext } from "../tasks";
 import { logger } from "~/server/internal/logging";
 import type { NitroFetchOptions, NitroFetchRequest } from "nitropack";
+import metadataHttp from "./http";
+
+const PCGW_PROVIDER = "PCGamingWiki";
 
 interface PCGamingWikiParseRawPage {
   parse: {
@@ -107,14 +110,12 @@ export class PCGamingWikiProvider implements MetadataProvider {
   ) {
     const finalURL = `https://www.pcgamingwiki.com/w/api.php?${query.toString()}`;
 
-    // 20s hard cap on third-party MediaWiki requests. Without this an un-
-    // responsive upstream would stall the whole scraping pipeline — admins
-    // queueing metadata imports behind it would time out at the HTTP layer
-    // before seeing any useful error.
-    const response = await $fetch<T>(finalURL, {
-      timeout: 20_000,
-      retry: 1,
-      retryDelay: 1_000,
+    // Rate limiting (a polite 10 req/10s for this anonymous MediaWiki
+    // endpoint), 503 backoff, timeout and User-Agent are handled by
+    // metadataHttp. PCGamingWiki has no auth — these are plain
+    // unauthenticated GETs, so there is no session state to worry
+    // about; each request stands alone.
+    const response = await metadataHttp.fetch<T>(PCGW_PROVIDER, finalURL, {
       ...options,
     });
 
@@ -149,11 +150,27 @@ export class PCGamingWikiProvider implements MetadataProvider {
     const res = await this.request<PCGamingWikiParseRawPage>(searchParams);
     const $ = cheerio.load(res.parse.text["*"]);
     // get intro based on 'introduction' class
+    //
+    // PCGamingWiki periodically reskins its templates. Each selector
+    // below is logged on miss so that, when the DOM changes, an admin
+    // sees *exactly which* selector broke in the import task log rather
+    // than a silently-empty description. Keep these warn lines in sync
+    // with the selectors.
     const introductionEle = $(".introduction").first();
+    if (introductionEle.length === 0) {
+      logger.warn(
+        `[pcgamingwiki] parser: '.introduction' selector matched nothing for page ${pageID} — DOM may have changed`,
+      );
+    }
     // remove citations from intro
     introductionEle.find("sup").remove();
 
     const infoBoxEle = $(".template-infobox").first();
+    if (infoBoxEle.length === 0) {
+      logger.warn(
+        `[pcgamingwiki] parser: '.template-infobox' selector matched nothing for page ${pageID} — reviews will be skipped`,
+      );
+    }
     const receptionEle = infoBoxEle
       .find(".template-infobox-header")
       .filter((_, el) => $(el).text().trim() === "Reception");

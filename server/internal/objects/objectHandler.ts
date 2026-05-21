@@ -19,7 +19,9 @@ import { parse as getMimeTypeBuffer } from "file-type-mime";
 import type pino from "pino";
 import type { Writable } from "stream";
 import { Readable } from "stream";
+import { createHash } from "node:crypto";
 import { getMimeType as getMimeTypeStream } from "stream-mime-type";
+import type { ObjectStat } from "./backend";
 
 export type ObjectReference = string;
 
@@ -117,6 +119,43 @@ export class ObjectHandler {
     });
   }
 
+  /**
+   * Hash the source bytes and use the digest as the object id. Pure
+   * dedup — if the same image is uploaded twice, both callers reference
+   * the same object. Only useful for Buffer sources today because
+   * computing a content hash forces us to fully materialise the stream
+   * before writing; large uploads should stick with the random-uuid
+   * path.
+   *
+   * Behind a feature flag (`OBJECTS_CONTENT_HASH`) for now — see the
+   * audit doc for rollout plan. Existing random-UUID objects keep
+   * working; this just changes which id new objects get.
+   */
+  async createContentAddressed(
+    sourceFetcher: () => Promise<Buffer>,
+    metadata: { [key: string]: string },
+    permissions: Array<string>,
+  ): Promise<string> {
+    const buf = await sourceFetcher();
+    const id = createHash("sha256").update(buf).digest("hex");
+    // Short-circuit if an object with this content already exists. We
+    // still ensure the new permission set is at least a superset of the
+    // old one — overwriting metadata is the responsibility of the
+    // caller, not the dedup path.
+    const existing = await this.backend.fetchMetadata(id);
+    if (existing) return id;
+
+    const { mime } = await this.fetchMimeType(buf);
+    if (!mime)
+      throw new Error("Unable to calculate MIME type - is the source empty?");
+    await this.backend.create(id, buf, {
+      permissions,
+      userMetadata: metadata,
+      mime,
+    });
+    return id;
+  }
+
   async createWithStream(
     id: string,
     metadata: { [key: string]: string },
@@ -153,6 +192,52 @@ export class ObjectHandler {
         // Map to priority according to array
         .map((e) => ObjectPermissionPriority.findIndex((c) => c === e))
     );
+  }
+
+  /**
+   * Backend-agnostic existence check. Used by the admin object browser
+   * and the cleanup task to avoid touching `fs` in callers.
+   */
+  async exists(id: ObjectReference): Promise<boolean> {
+    const stat = await this.stat(id);
+    return stat !== undefined;
+  }
+
+  /**
+   * Backend-agnostic stat. Returns size + mtime so the admin browser
+   * can show "largest 20 objects" without falling back to `fs.statSync`
+   * in the page handler.
+   *
+   * Falls back to inspecting the readable stream length when the
+   * backend doesn't expose stat() — only the new-shape FsObjectBackend
+   * implements it directly today.
+   */
+  async stat(id: ObjectReference): Promise<ObjectStat | undefined> {
+    // Prefer the new-shape stat() if the backend exposes it.
+    const backend = this.backend as ObjectBackend & {
+      stat?: (id: string) => Promise<ObjectStat | undefined>;
+    };
+    if (typeof backend.stat === "function") {
+      return await backend.stat(id);
+    }
+    return undefined;
+  }
+
+  /**
+   * Backend-agnostic streaming read. Skips permission checks — only
+   * call this from server-internal contexts that already know they're
+   * allowed to read.
+   *
+   * Prefer this over reading the file off disk yourself. The HTTP GET
+   * endpoint uses `fetchWithPermissions` instead; this is for tasks /
+   * admin tooling that need raw streamed access.
+   */
+  async read(id: ObjectReference) {
+    const metadata = await this.backend.fetchMetadata(id);
+    if (!metadata) return undefined;
+    const stream = await this.backend.fetch(id);
+    if (!stream) return undefined;
+    return { mime: metadata.mime, stream };
   }
 
   /**
@@ -258,6 +343,45 @@ export class ObjectHandler {
    */
   async listAll() {
     return await this.backend.listAll();
+  }
+
+  /**
+   * Aggregate stats for the admin object browser. Reads (count, total
+   * size, top N largest) without exposing the backend implementation.
+   *
+   * If the backend has a native `statAll`, use it (FsObjectBackend
+   * batches stat calls). Otherwise stat() each id individually — fine
+   * for small instances but the native path is preferred.
+   */
+  async statAll(limit = 20): Promise<{
+    count: number;
+    totalSize: number;
+    top: Array<{ id: string; size: number; mtime: Date }>;
+  }> {
+    const backend = this.backend as ObjectBackend & {
+      statAll?: (
+        n?: number,
+      ) => Promise<{
+        count: number;
+        totalSize: number;
+        top: Array<{ id: string; size: number; mtime: Date }>;
+      }>;
+    };
+    if (typeof backend.statAll === "function") {
+      return await backend.statAll(limit);
+    }
+
+    const ids = await this.backend.listAll();
+    let totalSize = 0;
+    const entries: Array<{ id: string; size: number; mtime: Date }> = [];
+    for (const id of ids) {
+      const s = await this.stat(id);
+      if (!s) continue;
+      totalSize += s.size;
+      entries.push({ id, size: s.size, mtime: s.mtime });
+    }
+    entries.sort((a, b) => b.size - a.size);
+    return { count: ids.length, totalSize, top: entries.slice(0, limit) };
   }
 
   /**

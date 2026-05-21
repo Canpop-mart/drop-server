@@ -56,7 +56,7 @@
 
       <div class="text-sm leading-6">
         <NuxtLink
-          to="#"
+          to="/auth/forgot"
           class="font-semibold text-blue-600 hover:text-blue-500"
           >{{ $t("auth.signin.forgot") }}</NuxtLink
         >

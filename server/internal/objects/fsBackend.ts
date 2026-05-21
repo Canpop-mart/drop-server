@@ -1,9 +1,11 @@
 import type { ObjectMetadata, ObjectReference, Source } from "./objectHandler";
 import { ObjectBackend, objectMetadata } from "./objectHandler";
+import type { ObjectStat, ObjectStorageBackend } from "./backend";
 
 import fs from "fs";
 import path from "path";
 import { Readable } from "stream";
+import { pipeline } from "stream/promises";
 import { createHash } from "crypto";
 import prisma from "../db/database";
 import cacheHandler from "../cache";
@@ -12,7 +14,28 @@ import { type } from "arktype";
 import { logger } from "~/server/internal/logging";
 import type pino from "pino";
 
-export class FsObjectBackend extends ObjectBackend {
+/**
+ * Filesystem-backed object backend.
+ *
+ * Implements two interfaces:
+ *   - The legacy `ObjectBackend` shape consumed by `ObjectHandler` (write,
+ *     startWriteStream, fetchHash, cleanupMetadata, …).
+ *   - The new minimal `ObjectStorageBackend` formalised in `./backend.ts`
+ *     (exists / read / write / delete / stat). This is what the admin
+ *     browser, the GC task, and any future replacement (S3, …) talk to.
+ *
+ * The hand-rolled `write()` used to do `source.pipe(out, { end: true });
+ * await new Promise(r => source.on("end", r));` — which resolves *before*
+ * the destination's `finish` event, so the file could be incomplete when
+ * we returned. Switched to `stream.pipeline` so we await the full flush.
+ *
+ * `create()` also previously called `this.write()` without awaiting it, so
+ * `createFromSource` could return before the bytes hit disk. Now awaited.
+ */
+export class FsObjectBackend
+  extends ObjectBackend
+  implements ObjectStorageBackend
+{
   private baseObjectPath: string;
   private baseMetadataPath: string;
 
@@ -30,11 +53,32 @@ export class FsObjectBackend extends ObjectBackend {
     fs.mkdirSync(this.baseMetadataPath, { recursive: true });
   }
 
+  // ── New minimal ObjectStorageBackend surface ─────────────────────
+  async exists(id: ObjectReference): Promise<boolean> {
+    return fs.existsSync(path.join(this.baseObjectPath, id));
+  }
+
+  async read(id: ObjectReference): Promise<Readable | undefined> {
+    return this.fetch(id);
+  }
+
+  async stat(id: ObjectReference): Promise<ObjectStat | undefined> {
+    const objectPath = path.join(this.baseObjectPath, id);
+    try {
+      const s = await fs.promises.stat(objectPath);
+      return { size: s.size, mtime: s.mtime };
+    } catch {
+      return undefined;
+    }
+  }
+
+  // ── Legacy ObjectBackend surface (consumed by ObjectHandler) ─────
   async fetch(id: ObjectReference) {
     const objectPath = path.join(this.baseObjectPath, id);
     if (!fs.existsSync(objectPath)) return undefined;
     return fs.createReadStream(objectPath);
   }
+
   async write(id: ObjectReference, source: Source): Promise<boolean> {
     const objectPath = path.join(this.baseObjectPath, id);
     if (!fs.existsSync(objectPath)) return false;
@@ -43,14 +87,18 @@ export class FsObjectBackend extends ObjectBackend {
     await this.hashStore.delete(id);
 
     if (source instanceof Readable) {
+      // Use stream.pipeline so we wait for the destination's `finish`
+      // event before resolving — the previous implementation awaited
+      // `source.on("end")` which fires while bytes may still be
+      // buffered downstream, occasionally returning a half-written
+      // file.
       const outputStream = fs.createWriteStream(objectPath);
-      source.pipe(outputStream, { end: true });
-      await new Promise((r, _j) => source.on("end", r));
+      await pipeline(source, outputStream);
       return true;
     }
 
     if (source instanceof Buffer) {
-      fs.writeFileSync(objectPath, source);
+      await fs.promises.writeFile(objectPath, source);
       return true;
     }
 
@@ -79,8 +127,9 @@ export class FsObjectBackend extends ObjectBackend {
     // Create file so write passes
     fs.writeFileSync(objectPath, "");
 
-    // Call write
-    this.write(id, source);
+    // Call write — previously not awaited, so callers could observe
+    // a fully-registered metadata file with a zero-byte payload.
+    await this.write(id, source);
 
     return id;
   }
@@ -179,6 +228,29 @@ export class FsObjectBackend extends ObjectBackend {
 
   async listAll(): Promise<string[]> {
     return fs.readdirSync(this.baseObjectPath);
+  }
+
+  /**
+   * Aggregate stats for the admin browser. One stat() per file, so this
+   * is O(n) — fine for a few thousand objects, would need indexing if it
+   * grows orders of magnitude beyond that.
+   */
+  async statAll(): Promise<{
+    count: number;
+    totalSize: number;
+    top: Array<{ id: string; size: number; mtime: Date }>;
+  }> {
+    const ids = await this.listAll();
+    let totalSize = 0;
+    const entries: Array<{ id: string; size: number; mtime: Date }> = [];
+    for (const id of ids) {
+      const s = await this.stat(id);
+      if (!s) continue;
+      totalSize += s.size;
+      entries.push({ id, size: s.size, mtime: s.mtime });
+    }
+    entries.sort((a, b) => b.size - a.size);
+    return { count: ids.length, totalSize, top: entries.slice(0, 20) };
   }
 
   async cleanupMetadata(taskLogger: pino.Logger) {

@@ -2,7 +2,16 @@ import aclManager from "~/server/internal/acls";
 import objectHandler from "~/server/internal/objects";
 import sanitize from "sanitize-filename";
 
-// this request method is purely used by the browser to check if etag values are still valid
+/**
+ * HEAD /api/v1/object/:id
+ *
+ * Headers-only sibling of GET. Returns the same Cache-Control, ETag,
+ * and Content-Length headers a GET would set so a browser can decide
+ * whether its cached copy is still valid without downloading bytes.
+ *
+ * Honours `If-None-Match` against either the id-based ETag (the id
+ * itself) or the legacy MD5 hash.
+ */
 export default defineEventHandler(async (h3) => {
   const unsafeId = getRouterParam(h3, "id");
   if (!unsafeId)
@@ -11,18 +20,44 @@ export default defineEventHandler(async (h3) => {
   const userId = await aclManager.getUserIdACL(h3, ["object:read"]);
 
   const id = sanitize(unsafeId);
+
+  const ifNoneMatch = h3.headers.get("If-None-Match");
+  if (ifNoneMatch) {
+    if (ifNoneMatch === id || ifNoneMatch === `"${id}"`) {
+      setResponseStatus(h3, 304);
+      setHeader(h3, "ETag", `"${id}"`);
+      setHeader(
+        h3,
+        "Cache-Control",
+        "private, max-age=31536000, immutable",
+      );
+      return null;
+    }
+    const legacyHash = await objectHandler.fetchHash(id);
+    if (legacyHash && ifNoneMatch === legacyHash) {
+      setResponseStatus(h3, 304);
+      setHeader(h3, "ETag", `"${id}"`);
+      setHeader(
+        h3,
+        "Cache-Control",
+        "private, max-age=31536000, immutable",
+      );
+      return null;
+    }
+  }
+
   const object = await objectHandler.fetchWithPermissions(id, userId);
   if (!object)
     throw createError({ statusCode: 404, statusMessage: "Object not found" });
 
-  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/ETag
-  const etagRequestValue = h3.headers.get("If-None-Match");
-  const etagActualValue = await objectHandler.fetchHash(id);
-  if (etagRequestValue !== null && etagActualValue === etagRequestValue) {
-    // would compare if etag is valid, but objects should never change
-    setResponseStatus(h3, 304);
-    return null;
-  }
-
+  setHeader(h3, "ETag", `"${id}"`);
+  setHeader(h3, "Content-Type", object.mime);
+  setHeader(
+    h3,
+    "Cache-Control",
+    "private, max-age=31536000, immutable",
+  );
+  const stat = await objectHandler.stat(id);
+  if (stat) setHeader(h3, "Content-Length", stat.size);
   return null;
 });

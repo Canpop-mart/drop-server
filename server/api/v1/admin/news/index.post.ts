@@ -22,7 +22,13 @@ export default defineEventHandler(async (h3) => {
       statusMessage: "This endpoint requires multipart form data.",
     });
 
-  const uploadResult = await handleFileUpload(h3, {}, ["internal:read"], 1);
+  const uploadResult = await handleFileUpload(
+    h3,
+    {},
+    ["internal:read"],
+    1,
+    "newsImage",
+  );
   if (!uploadResult)
     throw createError({
       statusCode: 400,

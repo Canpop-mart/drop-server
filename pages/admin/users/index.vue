@@ -115,21 +115,68 @@
                   <td
                     class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6"
                   >
-                    <button
-                      v-if="user.id !== currentUser?.id"
-                      class="px-2 py-1 rounded bg-red-900/50 backdrop-blur-sm transition text-sm/6 font-semibold text-red-400 hover:text-red-100 inline-flex gap-x-2 items-center duration-200 hover:scale-105"
-                      @click="() => setUserToDelete(user)"
-                    >
-                      {{ $t("users.admin.delete") }}
-                    </button>
-
-                    <!--
-                    <NuxtLink to="#" class="text-blue-600 hover:text-blue-500"
-                      >Edit<span class="sr-only"
-                        >, {{ user.displayName }}</span
-                      ></NuxtLink
-                    >
-                    -->
+                    <Menu as="div" class="relative inline-block text-left">
+                      <MenuButton
+                        class="-m-2.5 block p-2.5 text-zinc-400 hover:text-zinc-300 transition-colors duration-200"
+                      >
+                        <span class="sr-only">
+                          {{ $t("users.admin.srUserActions") }}
+                        </span>
+                        <EllipsisHorizontalIcon
+                          class="h-5 w-5"
+                          aria-hidden="true"
+                        />
+                      </MenuButton>
+                      <transition
+                        enter-active-class="transition ease-out duration-100"
+                        enter-from-class="transform opacity-0 scale-95"
+                        enter-to-class="transform opacity-100 scale-100"
+                        leave-active-class="transition ease-in duration-75"
+                        leave-from-class="transform opacity-100 scale-100"
+                        leave-to-class="transform opacity-0 scale-95"
+                      >
+                        <MenuItems
+                          class="absolute right-0 z-10 mt-0.5 w-48 origin-top-right rounded-md bg-zinc-900 py-2 shadow-lg ring-1 ring-zinc-100/5 focus:outline-none"
+                        >
+                          <MenuItem v-slot="{ active }">
+                            <button
+                              :class="[
+                                active ? 'bg-zinc-800 outline-none' : '',
+                                'block w-full px-3 py-1 text-left text-sm/6 text-zinc-100 transition-colors duration-200',
+                              ]"
+                              @click="() => (userToResetLink = user)"
+                            >
+                              {{ $t("users.admin.generateResetLink") }}
+                            </button>
+                          </MenuItem>
+                          <MenuItem v-slot="{ active }">
+                            <button
+                              :class="[
+                                active ? 'bg-zinc-800 outline-none' : '',
+                                'block w-full px-3 py-1 text-left text-sm/6 text-zinc-100 transition-colors duration-200',
+                              ]"
+                              @click="() => (userToSetPassword = user)"
+                            >
+                              {{ $t("users.admin.setPasswordAction") }}
+                            </button>
+                          </MenuItem>
+                          <MenuItem
+                            v-if="user.id !== currentUser?.id"
+                            v-slot="{ active }"
+                          >
+                            <button
+                              :class="[
+                                active ? 'bg-zinc-800 outline-none' : '',
+                                'block w-full px-3 py-1 text-left text-sm/6 text-red-400 transition-colors duration-200',
+                              ]"
+                              @click="() => setUserToDelete(user)"
+                            >
+                              {{ $t("users.admin.delete") }}
+                            </button>
+                          </MenuItem>
+                        </MenuItems>
+                      </transition>
+                    </Menu>
                   </td>
                 </tr>
               </tbody>
@@ -139,10 +186,14 @@
       </div>
     </div>
     <ModalDeleteUser v-model="userToDelete" />
+    <ModalGenerateResetLink v-model="userToResetLink" />
+    <ModalSetUserPassword v-model="userToSetPassword" />
   </div>
 </template>
 
 <script setup lang="ts">
+import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/vue";
+import { EllipsisHorizontalIcon } from "@heroicons/vue/20/solid";
 import { useUsers } from "~/composables/users";
 import type { UserModel } from "~/prisma/client/models";
 
@@ -162,6 +213,8 @@ if (!users.value) {
 }
 
 const userToDelete = ref();
+const userToResetLink = ref<UserModel | undefined>();
+const userToSetPassword = ref<UserModel | undefined>();
 
 const setUserToDelete = (user: UserModel) => (userToDelete.value = user);
 </script>
