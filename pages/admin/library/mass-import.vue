@@ -60,9 +60,7 @@
             {{ r.receipt.fileCount }} files ·
             {{ formatBytes(r.receipt.totalSizeBytes) }} ·
             {{ r.receipt.dllSwapApplied ? "DLL swap" : "no swap" }}
-            <span
-              v-if="r.receipt.warnings.length"
-              class="text-yellow-400 ml-1"
+            <span v-if="r.receipt.warnings.length" class="text-yellow-400 ml-1"
               >· {{ r.receipt.warnings.length }} warning(s)</span
             >
           </span>

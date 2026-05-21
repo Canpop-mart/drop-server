@@ -62,10 +62,15 @@ export default defineEventHandler<{
 
   // Write the new credentials (version 2 = argon2id, matching signup).
   const newHash = await createHashArgon2(body.password);
-  await prisma.linkedAuthMec.update({
-    where: { userId_mec: { userId, mec: AuthMec.Simple } },
+  const updated = await prisma.linkedAuthMec.updateMany({
+    where: { userId, mec: AuthMec.Simple },
     data: { version: 2, credentials: newHash },
   });
+  if (updated.count === 0)
+    throw createError({
+      statusCode: 500,
+      statusMessage: "Failed to update credentials.",
+    });
 
   // Force-logout every existing session for this user so the old password
   // can no longer be used to stay signed in.

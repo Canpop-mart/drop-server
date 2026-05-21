@@ -25,12 +25,10 @@ export default defineEventHandler(async (h3) => {
       statusMessage: "No receipt with that id",
     });
 
-  const retryArgs = receipt.retryArgs as
-    | {
-        taskGroup: TaskGroup;
-        kind: "registered" | "ad-hoc";
-      }
-    | null;
+  const retryArgs = receipt.retryArgs as {
+    taskGroup: TaskGroup;
+    kind: "registered" | "ad-hoc";
+  } | null;
 
   if (!retryArgs || retryArgs.kind !== "registered") {
     throw createError({

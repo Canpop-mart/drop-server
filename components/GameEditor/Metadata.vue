@@ -376,11 +376,11 @@
             </h3>
             <p class="mt-1 text-sm text-zinc-400 max-w-lg">
               Controls whether Drop swaps a vanilla Valve
-              <code>steam_api[64].dll</code> for the cached GBE build at
-              import time. Pre-applied cracks (OnlineFix, CODEX, EMPRESS,
-              CreamAPI, …) and unrecognised customs are
-              <strong>never</strong> overwritten regardless of this
-              setting — this only gates whether the check runs at all.
+              <code>steam_api[64].dll</code> for the cached GBE build at import
+              time. Pre-applied cracks (OnlineFix, CODEX, EMPRESS, CreamAPI, …)
+              and unrecognised customs are <strong>never</strong> overwritten
+              regardless of this setting — this only gates whether the check
+              runs at all.
             </p>
           </div>
           <div class="mt-3 space-y-2">

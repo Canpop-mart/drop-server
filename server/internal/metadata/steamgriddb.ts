@@ -46,7 +46,8 @@ async function sgdbFetch<T>(path: string, apiKey: string): Promise<T | null> {
     );
     return json.data ?? null;
   } catch (e) {
-    const status = (e as { status?: number; statusCode?: number })?.status ??
+    const status =
+      (e as { status?: number; statusCode?: number })?.status ??
       (e as { statusCode?: number })?.statusCode;
     if (status === 404) return null;
     logger.warn(`SteamGridDB fetch failed for ${path}: ${e}`);

@@ -114,9 +114,7 @@ const validPassword = computed(
   () =>
     !((passwordValidator(password.value) as unknown) instanceof type.errors),
 );
-const passwordsMatch = computed(
-  () => password.value === confirmPassword.value,
-);
+const passwordsMatch = computed(() => password.value === confirmPassword.value);
 const canSubmit = computed(
   () => validPassword.value && passwordsMatch.value && !loading.value,
 );

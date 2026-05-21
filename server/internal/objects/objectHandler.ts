@@ -359,9 +359,7 @@ export class ObjectHandler {
     top: Array<{ id: string; size: number; mtime: Date }>;
   }> {
     const backend = this.backend as ObjectBackend & {
-      statAll?: (
-        n?: number,
-      ) => Promise<{
+      statAll?: (n?: number) => Promise<{
         count: number;
         totalSize: number;
         top: Array<{ id: string; size: number; mtime: Date }>;

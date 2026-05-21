@@ -48,11 +48,7 @@ export default defineEventHandler(async (h3) => {
     if (ifNoneMatch === id || ifNoneMatch === `"${id}"`) {
       setResponseStatus(h3, 304);
       setHeader(h3, "ETag", `"${id}"`);
-      setHeader(
-        h3,
-        "Cache-Control",
-        "private, max-age=31536000, immutable",
-      );
+      setHeader(h3, "Cache-Control", "private, max-age=31536000, immutable");
       return null;
     }
     // Legacy hash path — kept so already-cached clients keep getting
@@ -61,11 +57,7 @@ export default defineEventHandler(async (h3) => {
     if (legacyHash && ifNoneMatch === legacyHash) {
       setResponseStatus(h3, 304);
       setHeader(h3, "ETag", `"${id}"`);
-      setHeader(
-        h3,
-        "Cache-Control",
-        "private, max-age=31536000, immutable",
-      );
+      setHeader(h3, "Cache-Control", "private, max-age=31536000, immutable");
       return null;
     }
   }
@@ -76,11 +68,7 @@ export default defineEventHandler(async (h3) => {
 
   setHeader(h3, "ETag", `"${id}"`);
   setHeader(h3, "Content-Type", object.mime);
-  setHeader(
-    h3,
-    "Cache-Control",
-    "private, max-age=31536000, immutable",
-  );
+  setHeader(h3, "Cache-Control", "private, max-age=31536000, immutable");
 
   // Best-effort Content-Length so the browser can show a progress bar
   // on slower banners / screenshots. We only know the size on backends

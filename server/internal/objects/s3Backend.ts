@@ -25,40 +25,30 @@
  *   - Mime + hash caching should stay in `ObjectHandler` /
  *     `FsHashStore` so multiple backends share the same metadata cache.
  *     If S3 ever uses content-addressed IDs the hash is redundant.
+ *
+ * Method params are `_`-prefixed so the `no-unused-vars` rule accepts them
+ * while the bodies are unimplemented.
  */
 import type { Readable } from "stream";
-import type {
-  ObjectId,
-  ObjectStat,
-  ObjectStorageBackend,
-} from "./backend";
+import type { ObjectId, ObjectStat, ObjectStorageBackend } from "./backend";
 
 export class S3ObjectBackend implements ObjectStorageBackend {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async exists(_id: ObjectId): Promise<boolean> {
     throw new Error("[s3Backend] not yet implemented");
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async read(_id: ObjectId): Promise<Readable | undefined> {
     throw new Error("[s3Backend] not yet implemented");
   }
 
-  async write(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    _id: ObjectId,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    _source: Readable | Buffer,
-  ): Promise<boolean> {
+  async write(_id: ObjectId, _source: Readable | Buffer): Promise<boolean> {
     throw new Error("[s3Backend] not yet implemented");
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async delete(_id: ObjectId): Promise<boolean> {
     throw new Error("[s3Backend] not yet implemented");
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async stat(_id: ObjectId): Promise<ObjectStat | undefined> {
     throw new Error("[s3Backend] not yet implemented");
   }

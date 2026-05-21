@@ -72,10 +72,7 @@ export function enforceUploadLimit(
  * buffered (raw POST or multipart form) and you want a hard cap that
  * survives a missing Content-Length header.
  */
-export function assertWithinLimit(
-  bytes: number,
-  kind: UploadLimitKey,
-): void {
+export function assertWithinLimit(bytes: number, kind: UploadLimitKey): void {
   const max = UPLOAD_LIMITS[kind];
   if (bytes > max) {
     throw createError({

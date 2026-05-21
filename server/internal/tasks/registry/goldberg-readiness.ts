@@ -103,9 +103,7 @@ export default defineDropTask({
       // Known cracks and unidentifiable customs are LEFT IN PLACE so
       // we don't clobber pre-applied OnlineFix / CODEX / EMPRESS DLLs.
       const effectiveAutoSwap =
-        game.autoSwapSteamApiDll ??
-        game.library?.autoSwapSteamApiDll ??
-        true;
+        game.autoSwapSteamApiDll ?? game.library?.autoSwapSteamApiDll ?? true;
 
       const dllInfo = findSteamApiDll(versionDir);
       let needsGbeSwap = false;
@@ -142,8 +140,7 @@ export default defineDropTask({
         if (!hasAppIdFile) missing.push("steam_appid.txt");
         if (!hasAchievementsFile) missing.push("achievements.json");
         if (!hasDbRecords) missing.push("DB records");
-        if (needsGbeSwap)
-          missing.push("GBE DLL swap (vanilla Valve detected)");
+        if (needsGbeSwap) missing.push("GBE DLL swap (vanilla Valve detected)");
         logger.info(
           `${game.mName} — missing: ${missing.join(", ")}. ${dllNote ? dllNote + ". " : ""}Running setup...`,
         );

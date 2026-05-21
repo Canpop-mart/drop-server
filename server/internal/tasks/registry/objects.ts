@@ -61,7 +61,9 @@ export default defineDropTask({
 
     markPhase("scan");
     const objects = await objectHandler.listAll();
-    logger.info(`Scanning ${objects.length} object(s) against the reference registry`);
+    logger.info(
+      `Scanning ${objects.length} object(s) against the reference registry`,
+    );
     logger.info(
       `Reference columns: ${OBJECT_REFERENCE_COLUMNS.length} across ${new Set(OBJECT_REFERENCE_COLUMNS.map((c) => c.model)).size} model(s)`,
     );

@@ -6,30 +6,46 @@ import type {
 } from "nitropack/types";
 import type { FetchError } from "ofetch";
 
-interface DropFetch<
-  DefaultT = unknown,
-  DefaultR extends NitroFetchRequest = NitroFetchRequest,
-> {
+type DropFetchExtraOpts = {
+  failTitle?: string;
+  params?: { [key: string]: string };
+};
+
+interface DropFetch {
+  // Overload 1 — no explicit type argument: infer the response type from
+  // the route registry, exactly as a bare `$fetch` would. Unchanged from
+  // the original single-signature form.
   <
-    T = DefaultT,
-    R extends NitroFetchRequest = DefaultR,
+    R extends NitroFetchRequest = NitroFetchRequest,
     O extends NitroFetchOptions<R> = NitroFetchOptions<R>,
   >(
     request: R,
-    opts?: O & { failTitle?: string; params?: { [key: string]: string } },
+    opts?: O & DropFetchExtraOpts,
   ): Promise<
-    // sometimes there is an error, other times there isn't
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
+    // @ts-ignore Excessive stack depth comparing types
     TypedInternalResponse<
       R,
-      T,
+      unknown,
       NitroFetchOptions<R> extends O ? "get" : ExtractedRouteMethod<R, O>
     >
   >;
+  // Overload 2 — explicit type argument (`$dropFetch<Shape>(...)`): return
+  // it directly. An explicit `T` is a response-body shape, never assignable
+  // to `NitroFetchRequest`, so overload 1's `R` constraint rejects it and
+  // this overload is selected. This path never instantiates Nitro's
+  // `TypedInternalResponse`, so it cannot trip TS2589 ("excessively deep")
+  // however large the route registry grows.
+  <T>(
+    request: NitroFetchRequest,
+    opts?: NitroFetchOptions<NitroFetchRequest> & DropFetchExtraOpts,
+  ): Promise<T>;
 }
 
-export const $dropFetch: DropFetch = async (rawRequest, opts) => {
+export const $dropFetch: DropFetch = async (
+  rawRequest: NitroFetchRequest,
+  opts?: NitroFetchOptions<NitroFetchRequest> & DropFetchExtraOpts,
+) => {
   const requestParts = rawRequest.toString().split("/");
   requestParts.forEach((part, index) => {
     if (!part.startsWith(":")) {

@@ -55,7 +55,8 @@ export default defineEventHandler(async (h3) => {
   if (providers.length === 0) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Unknown provider — use goldberg, retroachievements or both.",
+      statusMessage:
+        "Unknown provider — use goldberg, retroachievements or both.",
     });
   }
 

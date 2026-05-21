@@ -87,20 +87,30 @@ export default defineEventHandler(async (h3): Promise<SerializedIpRule> => {
     }
   }
 
-  const rule = await prisma.ipRule.update({
+  const updated = await prisma.ipRule.updateMany({
     where: { id },
     data: {
       ...(body.enabled !== undefined && { enabled: body.enabled }),
       ...(body.notes !== undefined && { notes: body.notes.trim() || null }),
     },
+  });
+  if (updated.count === 0)
+    throw createError({ statusCode: 404, statusMessage: "IP rule not found" });
+
+  await reloadIpRules();
+
+  // Re-fetch with the relation for serialization — updateMany returns only
+  // a row count, not the updated record.
+  const rule = await prisma.ipRule.findUnique({
+    where: { id },
     include: {
       createdByUser: {
         select: { id: true, username: true, displayName: true },
       },
     },
   });
-
-  await reloadIpRules();
+  if (!rule)
+    throw createError({ statusCode: 404, statusMessage: "IP rule not found" });
 
   return serializeIpRule(rule);
 });

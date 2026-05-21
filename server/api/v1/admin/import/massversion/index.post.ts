@@ -65,7 +65,10 @@ export default defineEventHandler(async (h3) => {
         ok: false,
         reason: `no auto-discovered executables for ${entry.version.name}`,
       };
-    return { ok: true, launches: pickLaunchesFromPreload(preload, entry.setupMode) };
+    return {
+      ok: true,
+      launches: pickLaunchesFromPreload(preload, entry.setupMode),
+    };
   };
 
   // ── Dry-run: plan every version synchronously, write nothing ─────────
@@ -149,7 +152,9 @@ export default defineEventHandler(async (h3) => {
             continue;
           }
 
-          logger.info(`[mass-import] (#${index}) importing ${entry.version.name}`);
+          logger.info(
+            `[mass-import] (#${index}) importing ${entry.version.name}`,
+          );
           try {
             await libraryManager.importVersion(
               entry.id,

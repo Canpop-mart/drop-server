@@ -31,8 +31,14 @@ export default defineEventHandler<{ body: typeof ImportGameBody.infer }>(
     const allowed = await aclManager.allowSystemACL(h3, ["import:game:new"]);
     if (!allowed) throw createError({ statusCode: 403 });
 
-    const { library, path, metadata, type, discFolders, autoImportFirstVersion } =
-      await readDropValidatedBody(h3, ImportGameBody);
+    const {
+      library,
+      path,
+      metadata,
+      type,
+      discFolders,
+      autoImportFirstVersion,
+    } = await readDropValidatedBody(h3, ImportGameBody);
 
     if (!path)
       throw createError({

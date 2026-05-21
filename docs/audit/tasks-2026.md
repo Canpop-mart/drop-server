@@ -55,6 +55,7 @@ key on `gameId + libraryPath`).
 ### 4. Scheduling
 
 **Before:** Two paths.
+
 1. The legacy `dailyScheduledTasks` / `weeklyScheduledTasks` arrays
    inside `TaskHandler`, fired by `server/tasks/dailyTasks.ts` (Nitro
    scheduled task) and replayed at boot by `server/plugins/tasks.ts`.
@@ -63,6 +64,7 @@ key on `gameId + libraryPath`).
 
 **After:** A declarative `schedule?: DropTaskSchedule` field on each
 `BuildTask`. Two flavours:
+
 - `{ intervalMs: number }` — registered by `tasks/scheduler.ts` at boot
   using `setInterval`. Single-flight + concurrency:false still prevent
   overlap if the previous run hasn't finished.
@@ -144,12 +146,12 @@ follow-up once admin clients on stale builds have rotated.
 
 ## New endpoints
 
-| Method | Path                                       | ACL              |
-| ------ | ------------------------------------------ | ---------------- |
-| GET    | `/api/v1/admin/task/receipts`              | `task:read`      |
-| POST   | `/api/v1/admin/task/[id]/cancel`           | `task:cancel`    |
-| POST   | `/api/v1/admin/task/[id]/retry`            | `task:retry`     |
-| DELETE | `/api/v1/admin/task/[id]`                  | `task:delete`    |
+| Method | Path                             | ACL           |
+| ------ | -------------------------------- | ------------- |
+| GET    | `/api/v1/admin/task/receipts`    | `task:read`   |
+| POST   | `/api/v1/admin/task/[id]/cancel` | `task:cancel` |
+| POST   | `/api/v1/admin/task/[id]/retry`  | `task:retry`  |
+| DELETE | `/api/v1/admin/task/[id]`        | `task:delete` |
 
 ## Files changed
 

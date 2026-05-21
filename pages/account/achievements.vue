@@ -726,7 +726,7 @@ async function runDiagnostic() {
   try {
     const res = (await $dropFetch(
       `/api/v1/user/achievements/debug/${debugGameId.value}`,
-    )) as typeof debugResult.value;
+    )) as unknown as typeof debugResult.value;
     debugResult.value = res;
   } catch (e) {
     debugError.value = `Diagnostic failed: ${e}`;

@@ -82,10 +82,8 @@ export default defineEventHandler<{
     });
 
   // Persist the new credentials, always upgrading to argon2id (version 2).
-  await prisma.linkedAuthMec.update({
-    where: {
-      userId_mec: { userId, mec: AuthMec.Simple },
-    },
+  await prisma.linkedAuthMec.updateMany({
+    where: { userId, mec: AuthMec.Simple },
     data: {
       version: 2,
       credentials: await createHashArgon2(body.newPassword),

@@ -1060,8 +1060,7 @@ async function revertVersion(versionId: string) {
       ModalType.Notification,
       {
         title: "Failed to revert version",
-        description:
-          (e as H3Error)?.statusMessage ?? t("errors.unknown"),
+        description: (e as H3Error)?.statusMessage ?? t("errors.unknown"),
         buttonText: t("common.close"),
       },
       (e, c) => c(),

@@ -71,7 +71,9 @@ export default defineEventHandler(async (h3) => {
   // Build the URL the same way the self-service forgot flow does.
   const url = `${systemConfig.getExternalUrl()}/auth/reset/${token}`;
 
-  logger.info(`[AUTH] Admin generated a password reset link for user ${userId}.`);
+  logger.info(
+    `[AUTH] Admin generated a password reset link for user ${userId}.`,
+  );
 
   return { url, expiresAt };
 });

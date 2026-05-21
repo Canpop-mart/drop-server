@@ -30,9 +30,10 @@ const PHASE = "[PHASE:validate]";
  * A file may be split across multiple chunks, so its true size is the
  * sum of every chunk entry's `length` for that filename.
  */
-function declaredFileSizes(
-  manifest: ManifestResult["manifest"],
-): { sizes: Map<string, number>; chunkCount: number } {
+function declaredFileSizes(manifest: ManifestResult["manifest"]): {
+  sizes: Map<string, number>;
+  chunkCount: number;
+} {
   const sizes = new Map<string, number>();
   const chunkKeys = Object.keys(manifest.chunks ?? {});
   for (const key of chunkKeys) {
