@@ -12,6 +12,13 @@ const CreateLibrarySource = type({
   name: "string",
   backend: "string",
   options: "object",
+  // Optional — defaults to true at the DB level. Lets the create modal
+  // opt the new library out of the GBE auto-swap up-front (useful for
+  // libraries of pre-fixed games).
+  autoSwapSteamApiDll: "boolean?",
+  // Optional — defaults to true. When false, version imports for this
+  // library skip the whole emulator-setup phase.
+  autoEmulatorSetup: "boolean?",
 }).configure(throwingArktype);
 
 export default defineEventHandler<{ body: typeof CreateLibrarySource.infer }>(
@@ -49,6 +56,12 @@ export default defineEventHandler<{ body: typeof CreateLibrarySource.infer }>(
           name: body.name,
           backend,
           options: body.options,
+          ...(body.autoSwapSteamApiDll === undefined
+            ? {}
+            : { autoSwapSteamApiDll: body.autoSwapSteamApiDll }),
+          ...(body.autoEmulatorSetup === undefined
+            ? {}
+            : { autoEmulatorSetup: body.autoEmulatorSetup }),
         },
       });
 

@@ -48,6 +48,7 @@ export interface SessionProvider {
   ) => Promise<SessionWithToken | undefined>;
   updateSession: (token: string, data: Session) => Promise<boolean>;
   removeSession: (token: string) => Promise<boolean>;
+  removeSessionsByUser: (userId: string) => Promise<number>;
   cleanupSessions: () => Promise<void>;
   findSessions: (options: SessionSearchTerms) => Promise<SessionWithToken[]>;
   getNumberActiveSessions: () => Promise<number>;

@@ -168,6 +168,7 @@ import {
   TrophyIcon,
   BugAntIcon,
   BeakerIcon,
+  PhotoIcon,
 } from "@heroicons/vue/24/outline";
 import type { NavigationItem } from "~/composables/types";
 import { useCurrentNavigationIndex } from "~/composables/current-page-engine";
@@ -225,6 +226,12 @@ const navigation: Array<NavigationItem & { icon: Component }> = [
     route: "/admin/bugreports",
     prefix: "/admin/bugreports",
     icon: BugAntIcon,
+  },
+  {
+    label: "Objects",
+    route: "/admin/objects",
+    prefix: "/admin/objects",
+    icon: PhotoIcon,
   },
   {
     label: $t("header.admin.settings.title"),

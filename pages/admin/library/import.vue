@@ -445,6 +445,16 @@ async function importGame(useMetadata: boolean) {
       : undefined;
   const option = games.value.unimportedGames[currentlySelectedGame.value];
 
+  // One-click flow: outside bulk mode, offer to also import the first
+  // version. Confirmed here behind a single modal; the server only
+  // auto-imports when exactly one unimported version is discovered.
+  const autoImportFirstVersion =
+    !bulkImportMode.value &&
+    window.confirm(
+      "Also import the game's first version automatically? " +
+        "This only happens if exactly one version is found.",
+    );
+
   const { taskId } = await $dropFetch("/api/v1/admin/import/game", {
     method: "POST",
     body: {
@@ -452,6 +462,7 @@ async function importGame(useMetadata: boolean) {
       library: option.library.id,
       metadata,
       type: importMode.value,
+      autoImportFirstVersion,
       ...(option.discGroup
         ? { discFolders: option.discGroup.folders }
         : undefined),

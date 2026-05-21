@@ -1,6 +1,8 @@
 import { logger } from "~/server/internal/logging";
+import metadataHttp from "./http";
 
 const SGDB_BASE = "https://www.steamgriddb.com/api/v2";
+const SGDB_PROVIDER = "SteamGridDB";
 
 interface SGDBGame {
   id: number;
@@ -32,28 +34,21 @@ export function getSteamGridDBApiKey(): string | null {
 
 async function sgdbFetch<T>(path: string, apiKey: string): Promise<T | null> {
   try {
-    // 15s hard cap — SGDB is used at scrape time for cover/logo art and is
-    // called N-times-per-game, so we don't want a hung request to stall a
-    // whole library import.
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15_000);
-    let res: Response;
-    try {
-      res = await fetch(`${SGDB_BASE}${path}`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeoutId);
-    }
-    if (!res.ok) {
-      if (res.status === 404) return null;
-      logger.warn(`SteamGridDB API error: ${res.status} for ${path}`);
-      return null;
-    }
-    const json = await res.json();
+    // Timeout, rate limiting and 429/503 backoff are handled by
+    // metadataHttp. SGDB is called N-times-per-game at scrape time so
+    // the per-provider token bucket matters here. A genuine 404 (game
+    // not on SGDB) is the common case — treat it as "no result", not an
+    // error.
+    const json = await metadataHttp.fetch<{ data?: T }>(
+      SGDB_PROVIDER,
+      `${SGDB_BASE}${path}`,
+      { headers: { Authorization: `Bearer ${apiKey}` } },
+    );
     return json.data ?? null;
   } catch (e) {
+    const status = (e as { status?: number; statusCode?: number })?.status ??
+      (e as { statusCode?: number })?.statusCode;
+    if (status === 404) return null;
     logger.warn(`SteamGridDB fetch failed for ${path}: ${e}`);
     return null;
   }

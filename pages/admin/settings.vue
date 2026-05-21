@@ -44,6 +44,7 @@ import {
   CodeBracketIcon,
   ServerIcon,
   ServerStackIcon,
+  ShieldCheckIcon,
 } from "@heroicons/vue/24/outline";
 
 const navigation: Array<NavigationItem & { icon: Component }> = [
@@ -70,6 +71,12 @@ const navigation: Array<NavigationItem & { icon: Component }> = [
     route: "/admin/settings/services",
     prefix: "/admin/settings/services",
     icon: ServerStackIcon,
+  },
+  {
+    label: $t("header.admin.settings.security"),
+    route: "/admin/settings/security",
+    prefix: "/admin/settings/security",
+    icon: ShieldCheckIcon,
   },
 ];
 

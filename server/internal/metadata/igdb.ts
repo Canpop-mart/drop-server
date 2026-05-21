@@ -14,6 +14,9 @@ import * as jdenticon from "jdenticon";
 import type { TaskRunContext } from "../tasks";
 import { logger } from "~/server/internal/logging";
 import type { NitroFetchOptions, NitroFetchRequest } from "nitropack";
+import metadataHttp, { type ProviderHealthStatus } from "./http";
+
+const IGDB_PROVIDER = "IGDB";
 
 type IGDBID = number;
 
@@ -170,21 +173,34 @@ export class IGDBProvider implements MetadataProvider {
       grant_type: "client_credentials",
     });
 
-    const response = await $fetch<TwitchAuthResponse>(
-      `https://id.twitch.tv/oauth2/token?${params.toString()}`,
-      {
-        method: "POST",
-      },
-    );
+    try {
+      const response = await metadataHttp.fetch<TwitchAuthResponse>(
+        IGDB_PROVIDER,
+        `https://id.twitch.tv/oauth2/token?${params.toString()}`,
+        { method: "POST" },
+      );
 
-    this.accessToken = response.access_token;
-    this.accessTokenExpiry = DateTime.now().plus({
-      seconds: response.expires_in,
-    });
-
-    logger.info("IGDB done authorizing with twitch");
+      this.accessToken = response.access_token;
+      this.accessTokenExpiry = DateTime.now().plus({
+        seconds: response.expires_in,
+      });
+      metadataHttp.setStatus(IGDB_PROVIDER, null);
+      logger.info("IGDB done authorizing with twitch");
+    } catch (e) {
+      // Surface bad credentials to the admin health page rather than
+      // failing silently on every later request.
+      metadataHttp.setStatus(IGDB_PROVIDER, "unauthenticated");
+      throw e;
+    }
   }
 
+  /**
+   * Refreshes the Twitch OAuth token only when it's within a day of
+   * expiry. The token is cached on the instance — this is NOT re-fetched
+   * on every call (Twitch tokens last ~60 days). The instance is a
+   * singleton created once at plugin init, so the cache survives for the
+   * process lifetime.
+   */
   private async refreshCredentials() {
     const futureTime = DateTime.now().plus({
       day: 1,
@@ -209,52 +225,42 @@ export class IGDBProvider implements MetadataProvider {
 
     const finalURL = `https://api.igdb.com/v4/${resource}`;
 
-    const overlay: NitroFetchOptions<NitroFetchRequest, "post"> = {
-      baseURL: "",
-      method: "POST",
-      body,
-      headers: {
-        Accept: "application/json",
-        "Client-ID": this.clientId,
-        Authorization: `Bearer ${this.accessToken}`,
-        "content-type": "text/plain",
+    // Rate limiting, 429/503 backoff and the request timeout are all
+    // handled by metadataHttp now — the old hand-rolled retry loop is
+    // gone. IGDB publishes a 4 req/sec ceiling; the token bucket in
+    // http.ts is configured to match.
+    const response = await metadataHttp.fetch<T[] | IGDBErrorResponse[]>(
+      IGDB_PROVIDER,
+      finalURL,
+      {
+        ...options,
+        method: "POST",
+        body,
+        headers: {
+          Accept: "application/json",
+          "Client-ID": this.clientId,
+          Authorization: `Bearer ${this.accessToken}`,
+          "content-type": "text/plain",
+        },
       },
-      // 20s hard cap per IGDB request. The outer loop retries on 429; this
-      // timeout catches a different failure mode — a hung socket with no
-      // response at all.
-      timeout: 20_000,
-    };
-    // Retry with exponential backoff on 429 (rate limit)
-    const maxRetries = 3;
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const response = await $fetch<T[] | IGDBErrorResponse[]>(
-          finalURL,
-          Object.assign({}, options, overlay),
-        );
+    );
 
-        // should not have an error object if the status code is 200
-        return <T[]>response;
-      } catch (e: unknown) {
-        const err = e as {
-          response?: { status?: number };
-          statusCode?: number;
-        };
-        const status = err?.response?.status ?? err?.statusCode;
-        if (status === 429 && attempt < maxRetries) {
-          const delay = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
-          logger.warn(
-            `IGDB rate limited on ${resource}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`,
-          );
-          await new Promise((r) => setTimeout(r, delay));
-          continue;
-        }
-        throw e;
-      }
+    // should not have an error object if the status code is 200
+    return <T[]>response;
+  }
+
+  /**
+   * Health probe — does a token refresh (no-op if the cached token is
+   * still fresh) and reports auth state. Cheap: only hits Twitch if the
+   * token is genuinely near expiry.
+   */
+  async health(): Promise<ProviderHealthStatus> {
+    try {
+      await this.refreshCredentials();
+      return metadataHttp.status(IGDB_PROVIDER);
+    } catch {
+      return "unauthenticated";
     }
-
-    // Unreachable, but satisfies TypeScript
-    throw new Error("IGDB request failed after retries");
   }
 
   private async _getMediaInternal(

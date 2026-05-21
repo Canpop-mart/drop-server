@@ -1,4 +1,4 @@
-import { type } from "arktype";
+import { ArkErrors, type } from "arktype";
 import { Platform } from "~/prisma/client/enums";
 import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
 import aclManager from "~/server/internal/acls";
@@ -36,11 +36,36 @@ export const ImportVersion = type({
     .default(() => []),
 }).configure(throwingArktype);
 
+/** Query params — `?dryRun=true` previews the import without writing. */
+const ImportVersionQuery = type({
+  dryRun: "string?",
+});
+
 export default defineEventHandler(async (h3) => {
   const allowed = await aclManager.allowSystemACL(h3, ["import:version:new"]);
   if (!allowed) throw createError({ statusCode: 403 });
 
+  const query = ImportVersionQuery(getQuery(h3));
+  if (query instanceof ArkErrors)
+    throw createError({ statusCode: 400, message: query.summary });
+  const dryRun = query.dryRun === "true" || query.dryRun === "1";
+
   const body = await readDropValidatedBody(h3, ImportVersion);
+
+  // ── Dry-run: synchronous, returns a receipt-shaped JSON, no task ─────
+  if (dryRun) {
+    const receipt = await libraryManager.dryRunVersionImport(
+      body.id,
+      body.version,
+      body,
+    );
+    if (!receipt)
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Invalid options for import",
+      });
+    return { dryRun: true, receipt };
+  }
 
   const taskId = await libraryManager.importVersion(
     body.id,
@@ -53,5 +78,5 @@ export default defineEventHandler(async (h3) => {
       statusMessage: "Invalid options for import",
     });
 
-  return { taskId: taskId };
+  return { taskId };
 });

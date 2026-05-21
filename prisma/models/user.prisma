@@ -24,6 +24,8 @@ model User {
     tokens   APIToken[]
     sessions Session[]
 
+    passwordResetTokens PasswordResetToken[]
+
     screenshots Screenshot[]
     playtime      Playtime[]
     playSessions  PlaySession[]
@@ -42,6 +44,8 @@ model User {
 
     cloudSaves CloudSave[]
     streamingSessions StreamingSession[]
+
+    ipRules IpRule[] @relation(name: "ipRulesCreated")
 }
 
 model FavoriteGame {

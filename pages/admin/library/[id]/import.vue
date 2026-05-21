@@ -294,13 +294,64 @@
         </Switch>
       </SwitchGroup>
 
-      <LoadingButton
-        class="w-fit ml-auto"
-        :loading="importLoading"
-        @click="startImport"
+      <div class="flex items-center gap-x-2 ml-auto">
+        <button
+          type="button"
+          :disabled="previewLoading"
+          class="inline-flex w-fit items-center gap-x-2 rounded-md bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 px-3 py-1.5 text-sm font-semibold font-display text-white shadow-sm"
+          @click="previewImport"
+        >
+          {{ previewLoading ? "Previewing..." : "Preview import" }}
+        </button>
+        <LoadingButton
+          class="w-fit"
+          :loading="importLoading"
+          @click="startImport"
+        >
+          {{ $t("library.admin.import.import") }}
+        </LoadingButton>
+      </div>
+
+      <!-- Dry-run preview result -->
+      <div
+        v-if="previewReceipt"
+        class="mt-2 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 p-4 text-sm"
       >
-        {{ $t("library.admin.import.import") }}
-      </LoadingButton>
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-sm font-semibold text-white font-display">
+            Dry-run preview — nothing was written
+          </h3>
+          <button
+            class="text-xs text-zinc-400 hover:text-zinc-200"
+            @click="previewReceipt = undefined"
+          >
+            Dismiss
+          </button>
+        </div>
+        <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-zinc-300">
+          <dt class="text-zinc-500">Files</dt>
+          <dd>{{ previewReceipt.fileCount }}</dd>
+          <dt class="text-zinc-500">Total size</dt>
+          <dd>{{ previewReceipt.totalSizeBytes }} bytes</dd>
+          <dt class="text-zinc-500">Chunks</dt>
+          <dd>{{ previewReceipt.chunkCount }}</dd>
+          <dt class="text-zinc-500">DLL swap</dt>
+          <dd>
+            {{
+              previewReceipt.dllSwapApplied
+                ? `yes (${previewReceipt.dllSwapName ?? "?"})`
+                : "no"
+            }}
+          </dd>
+        </dl>
+        <ul
+          v-if="previewReceipt.warnings.length"
+          class="mt-2 list-disc pl-5 text-yellow-400 text-xs"
+        >
+          <li v-for="(w, i) in previewReceipt.warnings" :key="i">{{ w }}</li>
+        </ul>
+      </div>
+
       <div v-if="importError" class="mt-4 w-fit rounded-md bg-red-600/10 p-4">
         <div class="flex">
           <div class="flex-shrink-0">
@@ -414,12 +465,26 @@ async function updateCurrentlySelectedVersion(value: number) {
   }
 }
 
+function importErrorMessage(error: unknown): string {
+  if (error instanceof FetchError) {
+    return (
+      error.data?.message ??
+      error.data?.statusMessage ??
+      error.statusMessage ??
+      error.message ??
+      t("errors.unknown")
+    );
+  }
+  if (error instanceof Error) return error.message || error.toString();
+  return String(error);
+}
+
 async function startImport() {
   importLoading.value = true;
 
   if (!versionSettings.value) return;
   try {
-    const taskId = await $dropFetch("/api/v1/admin/import/version", {
+    const result = await $dropFetch("/api/v1/admin/import/version", {
       method: "POST",
       body: {
         ...versionSettings.value,
@@ -427,23 +492,53 @@ async function startImport() {
         version: versions[currentlySelectedVersion.value],
       },
     });
-    router.push(`/admin/task/${taskId.taskId}`);
+    if ("taskId" in result && result.taskId) {
+      router.push(`/admin/task/${result.taskId}`);
+    }
   } catch (error) {
     console.error("[IMPORT] Version import failed:", error);
-    if (error instanceof FetchError) {
-      importError.value =
-        error.data?.message ??
-        error.data?.statusMessage ??
-        error.statusMessage ??
-        error.message ??
-        t("errors.unknown");
-    } else if (error instanceof Error) {
-      importError.value = error.message || error.toString();
-    } else {
-      importError.value = String(error);
-    }
+    importError.value = importErrorMessage(error);
   } finally {
     importLoading.value = false;
+  }
+}
+
+// ── Dry-run preview ─────────────────────────────────────────────────
+interface PreviewReceipt {
+  fileCount: number;
+  totalSizeBytes: number;
+  chunkCount: number;
+  dllSwapApplied: boolean;
+  dllSwapName?: string;
+  warnings: string[];
+}
+const previewLoading = ref(false);
+const previewReceipt = ref<PreviewReceipt | undefined>();
+
+async function previewImport() {
+  if (!versionSettings.value) return;
+  previewLoading.value = true;
+  previewReceipt.value = undefined;
+  importError.value = undefined;
+  try {
+    const result = await $dropFetch(
+      "/api/v1/admin/import/version?dryRun=true",
+      {
+        method: "POST",
+        body: {
+          ...versionSettings.value,
+          id: gameId,
+          version: versions[currentlySelectedVersion.value],
+        },
+      },
+    );
+    if ("receipt" in result) {
+      previewReceipt.value = result.receipt as PreviewReceipt;
+    }
+  } catch (error) {
+    importError.value = importErrorMessage(error);
+  } finally {
+    previewLoading.value = false;
   }
 }
 </script>

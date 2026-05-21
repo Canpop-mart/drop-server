@@ -18,7 +18,13 @@ export default defineEventHandler(async (h3) => {
   if (!company)
     throw createError({ statusCode: 400, statusMessage: "Invalid company id" });
 
-  const result = await handleFileUpload(h3, {}, ["internal:read"], 1);
+  const result = await handleFileUpload(
+    h3,
+    {},
+    ["internal:read"],
+    1,
+    "companyImage",
+  );
   if (!result)
     throw createError({
       statusCode: 400,
@@ -43,7 +49,7 @@ export default defineEventHandler(async (h3) => {
     },
   });
   if (count == 0) {
-    dump();
+    await dump();
     throw createError({ statusCode: 404, message: "Company not found" });
   }
 

@@ -110,4 +110,12 @@ export class FilesystemProvider
   fsStats() {
     return fsStats(this.config.baseDir);
   }
+
+  rootMtimeMs(): number | undefined {
+    try {
+      return fs.statSync(this.config.baseDir).mtimeMs;
+    } catch {
+      return undefined;
+    }
+  }
 }

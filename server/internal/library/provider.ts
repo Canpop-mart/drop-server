@@ -61,6 +61,15 @@ export abstract class LibraryProvider<CFG> {
   ): Promise<{ size: number } | undefined>;
 
   abstract fsStats(): { freeSpace: number; totalSpace: number } | undefined;
+
+  /**
+   * Optional: modification time (epoch ms) of the library root
+   * directory. Used as a cheap cache-busting key for the unimported-game
+   * scan — the directory's mtime changes when a top-level game folder is
+   * added or removed. Providers without a stable root return `undefined`
+   * and simply don't get cached.
+   */
+  rootMtimeMs?(): number | undefined;
 }
 
 export class GameNotFoundError extends Error {}

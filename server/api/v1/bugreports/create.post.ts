@@ -31,6 +31,7 @@ export default defineEventHandler(async (h3) => {
       { type: "bug-report-screenshot" },
       ["internal:read"],
       1,
+      "bugReportScreenshot",
     );
 
     if (uploadResult) {

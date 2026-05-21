@@ -14,6 +14,9 @@ import TurndownService from "turndown";
 import { DateTime } from "luxon";
 import type { TaskRunContext } from "../tasks";
 import type { NitroFetchOptions, NitroFetchRequest } from "nitropack";
+import metadataHttp, { type ProviderHealthStatus } from "./http";
+
+const GIANTBOMB_PROVIDER = "GiantBomb";
 
 interface GiantBombResponseType<T> {
   error: "OK" | string;
@@ -130,15 +133,16 @@ export class GiantBombProvider implements MetadataProvider {
 
     const finalURL = `https://www.giantbomb.com/api/${resource}/${url}?${queryString}`;
 
-    // 20s hard cap so a hung GiantBomb endpoint doesn't freeze the scraping
-    // pipeline. Retry once on transient failures — GiantBomb has been known
-    // to 502 under spiky load.
-    const response = await $fetch<GiantBombResponseType<T>>(finalURL, {
-      timeout: 20_000,
-      retry: 1,
-      retryDelay: 1_000,
-      ...options,
-    });
+    // Rate limit (GiantBomb's TOS allows 200/resource/hour; we cap at a
+    // conservative 60/min), 502/503 backoff, timeout and User-Agent are
+    // all handled by metadataHttp now. GiantBomb is particularly strict
+    // about User-Agent — requests without one get blocked, which the
+    // shared client always sets.
+    const response = await metadataHttp.fetch<GiantBombResponseType<T>>(
+      GIANTBOMB_PROVIDER,
+      finalURL,
+      { ...options },
+    );
     return response;
   }
 
@@ -147,6 +151,25 @@ export class GiantBombProvider implements MetadataProvider {
   }
   source() {
     return MetadataSource.GiantBomb;
+  }
+
+  /**
+   * Health probe. GiantBomb rejects a bad/missing API key with a JSON
+   * body carrying a non-OK `error` string (HTTP is still 200), so we
+   * check the field rather than the status code.
+   */
+  async health(): Promise<ProviderHealthStatus> {
+    try {
+      const res = await this.request<Array<unknown>>("search", "", {
+        query: "portal",
+        resources: "game",
+        limit: "1",
+      });
+      if (res.error !== "OK") return "unauthenticated";
+      return "up";
+    } catch {
+      return metadataHttp.status(GIANTBOMB_PROVIDER);
+    }
   }
 
   async search(query: string): Promise<GameMetadataSearchResult[]> {

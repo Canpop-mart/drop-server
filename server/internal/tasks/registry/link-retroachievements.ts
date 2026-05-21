@@ -2,6 +2,8 @@ import { defineDropTask } from "..";
 import prisma from "../../db/database";
 import { ExternalAccountProvider } from "~/prisma/client/enums";
 import { createRAClient, resolveRACredentials } from "../../retroachievements";
+import { achievementsRepo } from "../../achievements";
+import { raAchievementsToDefinitions } from "../../achievements/retroachievements";
 
 /**
  * Searches RetroAchievements for every unlinked game and imports its
@@ -77,51 +79,16 @@ export default defineDropTask({
           },
         });
 
-        let achCount = 0;
-        let order = 0;
-        for (const [externalId, achievement] of Object.entries(
-          info.Achievements || {},
-        )) {
-          const iconUrl = achievement.BadgeName
-            ? `https://media.retroachievements.org/Badge/${achievement.BadgeName}.png`
-            : "";
-          const iconLockedUrl = achievement.BadgeName
-            ? `https://media.retroachievements.org/Badge/${achievement.BadgeName}_lock.png`
-            : "";
-
-          await prisma.achievement.upsert({
-            where: {
-              gameId_provider_externalId: {
-                gameId: game.id,
-                provider: ExternalAccountProvider.RetroAchievements,
-                externalId,
-              },
-            },
-            create: {
-              gameId: game.id,
-              provider: ExternalAccountProvider.RetroAchievements,
-              externalId,
-              title: achievement.Title || externalId,
-              description: achievement.Description || "",
-              iconUrl,
-              iconLockedUrl,
-              displayOrder: order,
-            },
-            update: {
-              title: achievement.Title || externalId,
-              description: achievement.Description || "",
-              iconUrl,
-              iconLockedUrl,
-              displayOrder: order,
-            },
-          });
-
-          achCount++;
-          order++;
-        }
+        // Canonical definition write path — shared with the RA scan
+        // endpoint and the achievements module.
+        const achCount = await achievementsRepo.upsertDefinitions(
+          game.id,
+          ExternalAccountProvider.RetroAchievements,
+          raAchievementsToDefinitions(info),
+        );
 
         logger.info(
-          `${gameName} → RA: ${match.Title} (${match.ID}), ${achCount} achievements`,
+          `[ACH:ra] ${gameName} → RA: ${match.Title} (${match.ID}), ${achCount} achievements`,
         );
         matched++;
       } catch (e) {

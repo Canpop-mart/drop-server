@@ -2,6 +2,18 @@ import fs from "fs";
 import path from "path";
 import prisma from "~/server/internal/db/database";
 import { ExternalAccountProvider } from "~/prisma/client/enums";
+import { logger as defaultLogger } from "~/server/internal/logging";
+
+/**
+ * Logger surface accepted by setupGoldberg. We deliberately keep this
+ * loose so a pino instance, a task-context logger, or a plain test
+ * shim can all be passed in — the swap path emits via this so that
+ * version-import progress is visible to the admin running the import.
+ */
+export type GoldbergLogger = {
+  info: (msg: string) => void;
+  warn: (msg: string) => void;
+};
 
 /**
  * Goldberg Steam Emulator achievement utilities.
@@ -89,24 +101,24 @@ export async function resolveGameVersionDir(
   });
 
   if (!game || game.versions.length === 0) {
-    console.log(
-      `[ACH-SCAN] resolveGameVersionDir: no game or no versions for ${gameId}`,
+    defaultLogger.warn(
+      `[PHASE:emulator] resolveGameVersionDir: no game or no versions for ${gameId}`,
     );
     return undefined;
   }
 
   const backend = game.library.backend;
   if (backend !== "Filesystem" && backend !== "FlatFilesystem") {
-    console.log(
-      `[ACH-SCAN] resolveGameVersionDir: unsupported backend "${backend}"`,
+    defaultLogger.warn(
+      `[PHASE:emulator] resolveGameVersionDir: unsupported backend "${backend}"`,
     );
     return undefined;
   }
 
   const options = game.library.options as { baseDir?: string };
   if (!options.baseDir) {
-    console.log(
-      `[ACH-SCAN] resolveGameVersionDir: no baseDir in library options`,
+    defaultLogger.warn(
+      `[PHASE:emulator] resolveGameVersionDir: no baseDir in library options`,
     );
     return undefined;
   }
@@ -115,15 +127,15 @@ export async function resolveGameVersionDir(
 
   if (backend === "FlatFilesystem") {
     const resolved = path.join(options.baseDir, game.libraryPath);
-    console.log(
-      `[ACH-SCAN] resolveGameVersionDir: FlatFilesystem => ${resolved}`,
+    defaultLogger.info(
+      `[PHASE:emulator] resolveGameVersionDir: FlatFilesystem => ${resolved}`,
     );
     return resolved;
   }
 
   const resolved = path.join(options.baseDir, game.libraryPath, versionPath);
-  console.log(
-    `[ACH-SCAN] resolveGameVersionDir: Filesystem => baseDir="${options.baseDir}" libraryPath="${game.libraryPath}" versionPath="${versionPath}" => ${resolved}`,
+  defaultLogger.info(
+    `[PHASE:emulator] resolveGameVersionDir: Filesystem => baseDir="${options.baseDir}" libraryPath="${game.libraryPath}" versionPath="${versionPath}" => ${resolved}`,
   );
   return resolved;
 }
@@ -175,22 +187,22 @@ export async function fetchSteamAchievements(
 ): Promise<GoldbergAchievementDef[]> {
   const apiKey = process.env.STEAM_API_KEY;
   if (!apiKey) {
-    console.log(
-      `[GOLDBERG] STEAM_API_KEY not set, cannot fetch achievements for AppID ${appId}`,
+    defaultLogger.warn(
+      `[PHASE:emulator] STEAM_API_KEY not set, cannot fetch achievements for AppID ${appId}`,
     );
     return [];
   }
 
   const url = `https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=${apiKey}&appid=${appId}`;
-  console.log(
-    `[GOLDBERG] Fetching achievements from Steam API for AppID ${appId}`,
+  defaultLogger.info(
+    `[PHASE:emulator] Fetching achievements from Steam API for AppID ${appId}`,
   );
 
   try {
     const res = await fetch(url);
     if (!res.ok) {
-      console.log(
-        `[GOLDBERG] Steam API returned ${res.status} for AppID ${appId}`,
+      defaultLogger.warn(
+        `[PHASE:emulator] Steam API returned ${res.status} for AppID ${appId}`,
       );
       return [];
     }
@@ -212,14 +224,14 @@ export async function fetchSteamAchievements(
 
     const achievements = json.game?.availableGameStats?.achievements;
     if (!achievements || achievements.length === 0) {
-      console.log(
-        `[GOLDBERG] No achievements in Steam API response for AppID ${appId}`,
+      defaultLogger.info(
+        `[PHASE:emulator] No achievements in Steam API response for AppID ${appId}`,
       );
       return [];
     }
 
-    console.log(
-      `[GOLDBERG] Got ${achievements.length} achievements from Steam API for AppID ${appId}`,
+    defaultLogger.info(
+      `[PHASE:emulator] Got ${achievements.length} achievements from Steam API for AppID ${appId}`,
     );
 
     return achievements.map((a) => ({
@@ -231,7 +243,9 @@ export async function fetchSteamAchievements(
       hidden: a.hidden,
     }));
   } catch (e) {
-    console.log(`[GOLDBERG] Steam API fetch failed for AppID ${appId}: ${e}`);
+    defaultLogger.warn(
+      `[PHASE:emulator] Steam API fetch failed for AppID ${appId}: ${e}`,
+    );
     return [];
   }
 }
@@ -260,8 +274,21 @@ export async function fetchSteamAchievements(
 export async function setupGoldberg(
   gameId: string,
   versionDir: string,
-  options?: { forceRefreshAchievements?: boolean },
+  options?: {
+    forceRefreshAchievements?: boolean;
+    /**
+     * Logger that receives every status message. Defaults to the global
+     * server logger; pass the task-context logger when running inside an
+     * admin task so the swap progress shows up in the live task log.
+     */
+    logger?: GoldbergLogger;
+  },
 ): Promise<void> {
+  const log: GoldbergLogger = options?.logger ?? {
+    info: (msg) => defaultLogger.info(msg),
+    warn: (msg) => defaultLogger.warn(msg),
+  };
+
   try {
     // Resolve the actual directory containing the Steam API DLL.
     // GBE expects steam_settings/ next to the DLL, which may be in a
@@ -277,11 +304,31 @@ export async function setupGoldberg(
       const staleSettings = path.join(versionDir, "steam_settings");
       if (fs.existsSync(staleSettings)) {
         fs.rmSync(staleSettings, { recursive: true, force: true });
-        console.log(
+        log.info(
           `[GOLDBERG] Removed stale steam_settings/ at version root (DLL is in ${settingsRoot})`,
         );
       }
     }
+
+    // ── 0. Look up the per-game / per-library swap policy up-front ──────
+    // We need this BEFORE the swap step so we can short-circuit cleanly
+    // when an admin has opted the game (or its library) out of auto-swap.
+    const gameRow = await prisma.game.findUnique({
+      where: { id: gameId },
+      select: {
+        metadataSource: true,
+        metadataId: true,
+        autoSwapSteamApiDll: true,
+        library: { select: { autoSwapSteamApiDll: true } },
+      },
+    });
+
+    // Effective swap policy: game override wins, otherwise inherit library.
+    // Default to TRUE if for some reason both are missing.
+    const autoSwapEnabled =
+      gameRow?.autoSwapSteamApiDll ??
+      gameRow?.library?.autoSwapSteamApiDll ??
+      true;
 
     // ── 1. Resolve the AppID ─────────────────────────────────────────────
     // Try the local file first, then fall back to an existing DB link.
@@ -299,33 +346,27 @@ export async function setupGoldberg(
       });
       if (existingLink) {
         appId = existingLink.externalGameId;
-        console.log(
-          `[GOLDBERG] No steam_appid.txt, using DB link AppID ${appId}`,
-        );
+        log.info(`[GOLDBERG] No steam_appid.txt, using DB link AppID ${appId}`);
       }
     }
 
     // Fall back to the game's metadata — if it was imported from Steam,
     // metadataId IS the Steam AppID.
     if (!appId) {
-      const game = await prisma.game.findUnique({
-        where: { id: gameId },
-        select: { metadataSource: true, metadataId: true },
-      });
-      if (game?.metadataSource === "Steam" && game.metadataId) {
-        appId = game.metadataId;
-        console.log(
+      if (gameRow?.metadataSource === "Steam" && gameRow.metadataId) {
+        appId = gameRow.metadataId;
+        log.info(
           `[GOLDBERG] No steam_appid.txt or DB link, using Steam metadata AppID ${appId}`,
         );
       }
     }
 
     if (!appId) {
-      console.log(`[GOLDBERG] No AppID for ${versionDir}, skipping`);
+      log.info(`[GOLDBERG] No AppID for ${versionDir}, skipping`);
       return;
     }
 
-    console.log(
+    log.info(
       `[GOLDBERG] Setting up game=${gameId} appId=${appId} dir=${settingsRoot}`,
     );
 
@@ -333,58 +374,81 @@ export async function setupGoldberg(
     const steamSettings = path.join(settingsRoot, "steam_settings");
     if (!fs.existsSync(steamSettings)) {
       fs.mkdirSync(steamSettings, { recursive: true });
-      console.log(`[GOLDBERG] Created ${steamSettings}`);
+      log.info(`[GOLDBERG] Created ${steamSettings}`);
     }
 
     const appIdPath = path.join(steamSettings, "steam_appid.txt");
     if (!fs.existsSync(appIdPath)) {
       fs.writeFileSync(appIdPath, appId, "utf-8");
-      console.log(`[GOLDBERG] Wrote steam_appid.txt (${appId})`);
+      log.info(`[GOLDBERG] Wrote steam_appid.txt (${appId})`);
     }
 
     // ── 2b. Create the runtime save directory (drop-goldberg/<AppID>/) ───
     const saveDir = path.join(settingsRoot, "drop-goldberg", appId);
     if (!fs.existsSync(saveDir)) {
       fs.mkdirSync(saveDir, { recursive: true });
-      console.log(`[GOLDBERG] Created save dir ${saveDir}`);
+      log.info(`[GOLDBERG] Created save dir ${saveDir}`);
     }
 
     // ── 2c. Ensure steam_api DLL is a GBE build ──────────────────────────
-    // setupGoldberg owns this swap so config and binary are guaranteed
-    // consistent. Historically the swap only happened at version-import
-    // time via autoUpgradeSteamDrmIfNeeded, which silently skipped when
-    // steam_settings/ already existed — leaving games stuck on Valve's
-    // original steam_api64.dll. That DLL tries to reach a real Steam
-    // pipe, fails, and the game exits with no visible error.
+    // The swap is **opt-in**:
+    //  - Library / game must have autoSwapSteamApiDll enabled.
+    //  - DLL must be positively identified as vanilla Valve Steamworks
+    //    (or already a GBE build, in which case no work is done).
+    //  - Known-crack DLLs (OnlineFix, CODEX, EMPRESS, CreamAPI, …) and
+    //    unidentifiable customs are LEFT IN PLACE.
+    //
+    // Historically this was opt-out: anything not matching a Goldberg
+    // signature was assumed to be Valve and clobbered, destroying
+    // pre-applied crack DLLs on every import. See `identifySteamApiDll`
+    // in gbe.ts for the new fingerprinting model.
     let didSwapDll = false;
-    if (dllInfo) {
+    if (!dllInfo) {
+      log.info(
+        `[GOLDBERG] No steam_api DLL found in ${settingsRoot}, skipping swap`,
+      );
+    } else if (!autoSwapEnabled) {
+      log.info(
+        `[GOLDBERG] autoSwapSteamApiDll is disabled for this game/library ` +
+          `(game=${gameRow?.autoSwapSteamApiDll ?? "inherit"}, ` +
+          `library=${gameRow?.library?.autoSwapSteamApiDll ?? "n/a"}). ` +
+          `Leaving ${dllInfo.dllName} at ${dllInfo.dllDir} untouched.`,
+      );
+    } else {
       const { ensureGbeDll } = await import("./gbe");
-      const swapLogger = {
-        info: (msg: string) => console.log(msg),
-        warn: (msg: string) => console.log(msg),
-      };
       const result = await ensureGbeDll(
         dllInfo.dllDir,
         dllInfo.dllName,
         appId,
-        swapLogger,
+        log,
       );
       if (result.swapped) {
-        console.log(
-          `[GOLDBERG] Swapped ${dllInfo.dllName} to GBE (original backed up as ${dllInfo.dllName}.steam_backup)`,
+        log.info(
+          `[GOLDBERG] Swapped ${dllInfo.dllName} to GBE for game=${gameId} ` +
+            `(appId=${appId}, dir=${dllInfo.dllDir}, ` +
+            `fingerprint="${result.identification?.fingerprint ?? "n/a"}"). ` +
+            `Original preserved as ${dllInfo.dllName}.steam_backup.`,
         );
         didSwapDll = true;
       } else if (result.alreadyGbe) {
-        console.log(`[GOLDBERG] ${dllInfo.dllName} is already a GBE build`);
+        log.info(
+          `[GOLDBERG] ${dllInfo.dllName} is already a GBE build for game=${gameId} ` +
+            `— no swap needed (${result.identification?.fingerprint ?? "n/a"})`,
+        );
+      } else if (result.skipped) {
+        log.warn(
+          `[GOLDBERG] DLL swap NOT performed for ${dllInfo.dllName} (game=${gameId}, ` +
+            `appId=${appId}, path=${dllInfo.dllDir}). ` +
+            `Reason: ${result.identification?.fingerprint ?? "skipped"}. ` +
+            `The game's pre-existing DLL has been left in place. ` +
+            `If the game does not launch, flip its autoSwapSteamApiDll override on ` +
+            `(see the per-game admin panel) to force the swap, or re-apply the crack manually.`,
+        );
       } else {
-        console.log(
-          `[GOLDBERG] DLL swap skipped for ${dllInfo.dllName}: ${result.error ?? "unknown"}`,
+        log.warn(
+          `[GOLDBERG] DLL swap failed for ${dllInfo.dllName} (game=${gameId}): ${result.error ?? "unknown"}`,
         );
       }
-    } else {
-      console.log(
-        `[GOLDBERG] No steam_api DLL found in ${settingsRoot}, skipping swap`,
-      );
     }
 
     // ── 3. Fetch/read achievement definitions ────────────────────────────
@@ -392,7 +456,7 @@ export async function setupGoldberg(
     let definitions = forceRefresh ? [] : readGoldbergDefinitions(settingsRoot);
 
     if (definitions.length === 0) {
-      console.log(
+      log.info(
         forceRefresh
           ? `[GOLDBERG] Force-refreshing achievements from Steam API`
           : `[GOLDBERG] No local achievements.json, fetching from Steam API`,
@@ -428,11 +492,11 @@ export async function setupGoldberg(
           JSON.stringify(runtimeMap, null, 2),
           "utf-8",
         );
-        console.log(
+        log.info(
           `[GOLDBERG] Wrote ${definitions.length} achievements: definitions to steam_settings/, runtime seed (map format) to drop-goldberg/${appId}/`,
         );
       } else {
-        console.log(
+        log.info(
           `[GOLDBERG] Wrote ${definitions.length} definitions to steam_settings/ (runtime file already exists, preserved)`,
         );
       }
@@ -457,44 +521,30 @@ export async function setupGoldberg(
     });
 
     // ── 5. Upsert achievement definitions in DB ──────────────────────────
+    // Goes through the canonical achievementsRepo.upsertDefinitions so
+    // the DB write path is identical to the RA scanner and the admin
+    // scan orchestrator (see server/internal/achievements/repo.ts and
+    // docs/audit/achievements-2026.md). Imported lazily to avoid a
+    // circular import — the achievements module imports setupGoldberg.
     let count = 0;
     if (definitions.length === 0) {
-      console.log(`[GOLDBERG] No achievements found for AppID ${appId}`);
+      log.info(`[GOLDBERG] No achievements found for AppID ${appId}`);
     } else {
-      for (const def of definitions) {
-        const apiName = def.name ?? "";
-        if (!apiName) continue;
+      const { achievementsRepo } = await import("./achievements/repo");
+      count = await achievementsRepo.upsertDefinitions(
+        gameId,
+        ExternalAccountProvider.Goldberg,
+        definitions.map((def, i) => ({
+          externalId: def.name ?? "",
+          title: def.displayName ?? def.name ?? "",
+          description: def.description ?? "",
+          iconUrl: def.icon ?? "",
+          iconLockedUrl: def.icon_gray ?? "",
+          displayOrder: i,
+        })),
+      );
 
-        await prisma.achievement.upsert({
-          where: {
-            gameId_provider_externalId: {
-              gameId,
-              provider: ExternalAccountProvider.Goldberg,
-              externalId: apiName,
-            },
-          },
-          create: {
-            gameId,
-            provider: ExternalAccountProvider.Goldberg,
-            externalId: apiName,
-            title: def.displayName ?? apiName,
-            description: def.description ?? "",
-            iconUrl: def.icon ?? "",
-            iconLockedUrl: def.icon_gray ?? "",
-            displayOrder: count,
-          },
-          update: {
-            title: def.displayName ?? apiName,
-            description: def.description ?? "",
-            iconUrl: def.icon ?? "",
-            iconLockedUrl: def.icon_gray ?? "",
-            displayOrder: count,
-          },
-        });
-        count++;
-      }
-
-      console.log(
+      log.info(
         `[GOLDBERG] Done: ${count} achievements for game=${gameId} appId=${appId}`,
       );
     }
@@ -506,28 +556,24 @@ export async function setupGoldberg(
     if (didSwapDll) {
       try {
         const { libraryManager } = await import("./library");
-        const regenLogger = {
-          info: (msg: string) => console.log(msg),
-          warn: (msg: string) => console.log(msg),
-        };
         const regenOk = await libraryManager.regenerateManifestForLatestVersion(
           gameId,
-          regenLogger,
+          log,
         );
         if (regenOk) {
-          console.log(
+          log.info(
             `[GOLDBERG] Regenerated manifest for game=${gameId} after DLL swap`,
           );
         } else {
-          console.log(
+          log.warn(
             `[GOLDBERG] Manifest regen FAILED for game=${gameId} — clients may hit checksum mismatches on next download`,
           );
         }
       } catch (e) {
-        console.log(`[GOLDBERG] Manifest regen threw for game=${gameId}: ${e}`);
+        log.warn(`[GOLDBERG] Manifest regen threw for game=${gameId}: ${e}`);
       }
     }
   } catch (e) {
-    console.log(`[GOLDBERG] Setup failed for game=${gameId}: ${e}`);
+    log.warn(`[GOLDBERG] Setup failed for game=${gameId}: ${e}`);
   }
 }

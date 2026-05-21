@@ -10,6 +10,8 @@ import type {
   InternalGameMetadataResult,
   CompanyMetadata,
   GameMetadataRating,
+  IMetadataProvider,
+  ProviderHealth,
 } from "./types";
 import { ObjectTransactionalHandler } from "../objects/transactional";
 import { PriorityListIndexed } from "../utils/prioritylist";
@@ -19,8 +21,10 @@ import taskHandler, { wrapTaskContext } from "../tasks";
 import { randomUUID } from "crypto";
 import { fuzzy } from "fast-fuzzy";
 import { logger } from "~/server/internal/logging";
-import { createGameImportTaskId } from "../library";
+import { createGameImportTaskId, libraryManager } from "../library";
 import type { GameTagModel } from "~/prisma/client/models";
+import metadataHttp from "./http";
+import metadataCache from "./cache";
 
 export class MissingMetadataProviderConfig extends Error {
   private providerName: string;
@@ -35,10 +39,19 @@ export class MissingMetadataProviderConfig extends Error {
   }
 }
 
-// TODO: add useragent to all outbound api calls (best practice)
+// Kept for back-compat with provider files that still import the constant.
+// The shared HTTP client (./http.ts) sets this automatically on every
+// outbound request.
 export const DropUserAgent = `Drop/${systemConfig.getDropVersion()}`;
 
-export abstract class MetadataProvider {
+/**
+ * Re-export the canonical interface so existing imports of
+ * `MetadataProvider` keep working. The abstract class form is kept as a
+ * convenience base; new providers should `implements MetadataProvider`
+ * directly and call into `./http` + `./cache`.
+ */
+export type MetadataProvider = IMetadataProvider;
+export abstract class AbstractMetadataProvider implements IMetadataProvider {
   abstract name(): string;
   abstract source(): MetadataSource;
 
@@ -88,7 +101,26 @@ export class MetadataHandler {
           systemConfig.getMetadataTimeout(),
         );
         try {
-          const results = await provider.search(query);
+          // Provider-level cache: admin search box re-typing the same
+          // query hits the cache rather than re-burning the per-provider
+          // rate budget. TTL is 1h per cache.ts.
+          const cacheKey = query.toLowerCase().trim();
+          const cached = metadataCache.get<GameMetadataSearchResult[]>(
+            provider.source(),
+            "search",
+            cacheKey,
+          );
+          const results = cached.hit
+            ? cached.value
+            : await provider.search(query);
+          if (!cached.hit) {
+            metadataCache.set(
+              provider.source(),
+              "search",
+              cacheKey,
+              results,
+            );
+          }
           const mappedResults: InternalGameMetadataResult[] = results.map(
             (result) =>
               Object.assign({}, result, {
@@ -98,7 +130,7 @@ export class MetadataHandler {
           );
           resolve(mappedResults);
         } catch (e) {
-          logger.warn(e);
+          logger.warn(`[metadata:${provider.source()}] search failed: ${e}`);
           reject(e);
         }
       });
@@ -119,11 +151,45 @@ export class MetadataHandler {
     return successfulResults;
   }
 
+  /**
+   * Per-provider health status. Used by `pages/admin/metadata/index.vue`
+   * and exposed via `GET /api/v1/admin/metadata/health`.
+   *
+   * Status reflects the shared HTTP client's tally + any explicit override
+   * from `metadataHttp.setStatus` (e.g. "unauthenticated" if a provider
+   * constructor noticed missing creds, "rate-limited" after a 429).
+   */
+  async healthCheck(): Promise<ProviderHealth[]> {
+    const results: ProviderHealth[] = [];
+    for (const provider of this.providers.values()) {
+      const status = provider.health
+        ? await provider.health().catch(() => "down" as const)
+        : metadataHttp.status(provider.name());
+      results.push({
+        source: provider.source(),
+        name: provider.name(),
+        status,
+        stats: metadataHttp.getStatsSnapshot(provider.name()),
+      });
+    }
+    return results;
+  }
+
+  /**
+   * Cache hit-rate snapshot for the admin debug page. The cache is
+   * process-local so this is a per-instance number, not a cluster
+   * aggregate.
+   */
+  cacheStats() {
+    return metadataCache.stats();
+  }
+
   async createGameWithoutMetadata(
     libraryId: string,
     libraryPath: string,
     type: GameType,
     discFolders?: string[],
+    parentTask?: TaskRunContext,
   ) {
     return await this.createGame(
       {
@@ -135,6 +201,7 @@ export class MetadataHandler {
       libraryPath,
       type,
       discFolders,
+      parentTask,
     );
   }
 
@@ -200,21 +267,34 @@ export class MetadataHandler {
     return results;
   }
 
+  /**
+   * Creates a Game row (+ objects) inside an import task, walking the
+   * provider fallback chain for metadata.
+   *
+   * Returns `{ taskId, gameId }` — the gameId is generated up-front so
+   * callers can chain a first-version import without waiting to read it
+   * back. Returns `undefined` for a duplicate (metadataKey collision).
+   *
+   * `parentTask` is optional and trailing — passing it nests the import
+   * under an existing task (used by the one-click "import game + first
+   * version" flow). Existing callers that omit it are unaffected.
+   */
   async createGame(
     result: { sourceId: string; id: string; name: string },
     libraryId: string,
     libraryPath: string,
     type: GameType,
     discFolders?: string[],
-  ) {
-    const provider = this.providers.get(result.sourceId);
-    if (!provider)
+    parentTask?: TaskRunContext,
+  ): Promise<{ taskId: string; gameId: string } | undefined> {
+    const primary = this.providers.get(result.sourceId);
+    if (!primary)
       throw new Error(`Invalid metadata provider for ID "${result.sourceId}"`);
 
     const existing = await prisma.game.findUnique({
       where: {
         metadataKey: {
-          metadataSource: provider.source(),
+          metadataSource: primary.source(),
           metadataId: result.id,
         },
       },
@@ -223,27 +303,58 @@ export class MetadataHandler {
 
     const gameId = randomUUID();
 
+    // Fallback chain: try the user-selected provider first, then walk
+    // every other configured provider (skipping Manual — that always
+    // succeeds with a no-op and would mask real failures). The first one
+    // that returns a usable result wins. Each failure is logged loudly
+    // so admins can see why their chosen provider didn't work.
+    //
+    // Note: secondary providers are only useful if they can find the
+    // game by *name*, since the `id` we have is specific to the primary
+    // provider's namespace. We pass the search result name through and
+    // each provider's `fetchGame` is expected to accept that as a query
+    // when its id-shaped argument doesn't match — pcgamingwiki/giantbomb
+    // both already handle this, IGDB falls back to its numeric-id check.
+    const fallbackChain: MetadataProvider[] = [primary];
+    for (const p of this.providers.values()) {
+      if (
+        p.source() !== primary.source() &&
+        p.source() !== MetadataSource.Manual
+      ) {
+        fallbackChain.push(p);
+      }
+    }
+
     const key = createGameImportTaskId(libraryId, libraryPath);
-    return await taskHandler.create({
-      name: `Import game "${result.name}" (${libraryPath})`,
-      key,
-      taskGroup: "import:game",
-      acls: ["system:import:game:read"],
-      async run(context) {
+    const taskId = await taskHandler.create(
+      {
+        name: `Import game "${result.name}" (${libraryPath})`,
+        key,
+        taskGroup: "import:game",
+        acls: ["system:import:game:read"],
+        async run(context) {
         const { progress, logger } = context;
 
         progress(0);
 
-        const [createObject, pullObjects, dumpObjects] =
-          metadataHandler.objectHandler.new(
-            {},
-            ["internal:read"],
-            wrapTaskContext(context, {
-              min: 60,
-              max: 95,
-              prefix: "[object import] ",
-            }),
-          );
+        // The transactional handler is re-issued per fallback attempt
+        // so a failed provider's half-registered image refs don't leak
+        // into the successful provider's payload. We keep a single ref
+        // object pointing at the current transaction so the close-over
+        // `company` callback always uses the live createObject.
+        const tx = (() => {
+          const [createObject, pullObjects, dumpObjects] =
+            metadataHandler.objectHandler.new(
+              {},
+              ["internal:read"],
+              wrapTaskContext(context, {
+                min: 60,
+                max: 95,
+                prefix: "[object import] ",
+              }),
+            );
+          return { createObject, pullObjects, dumpObjects };
+        })();
 
         const companyLookupCache: {
           [key: string]: Awaited<
@@ -251,30 +362,69 @@ export class MetadataHandler {
           >;
         } = {};
         let metadata: GameMetadata | undefined = undefined;
-        try {
-          metadata = await provider.fetchGame(
-            {
-              id: result.id,
-              name: result.name,
-              // wrap in anonymous functions to keep references to this
-              company: async (name: string) => {
-                if (companyLookupCache[name]) return companyLookupCache[name];
+        let chosen: MetadataProvider | undefined = undefined;
+        const chainErrors: string[] = [];
+        for (const candidate of fallbackChain) {
+          try {
+            const fetchId =
+              candidate.source() === primary.source() ? result.id : result.name;
+            logger.info(
+              `[fallback] trying ${candidate.name()} (id="${fetchId}")`,
+            );
+            metadata = await candidate.fetchGame(
+              {
+                id: fetchId,
+                name: result.name,
+                company: async (name: string) => {
+                  if (companyLookupCache[name]) return companyLookupCache[name];
 
-                const companyData = await metadataHandler.fetchCompany(name);
-                companyLookupCache[name] = companyData;
-                return companyData;
+                  const companyData = await metadataHandler.fetchCompany(name);
+                  companyLookupCache[name] = companyData;
+                  return companyData;
+                },
+                createObject: (data) => tx.createObject(data),
               },
-              createObject,
-            },
-            wrapTaskContext(context, {
-              min: 0,
-              max: 60,
-              prefix: "[metadata import] ",
-            }),
+              wrapTaskContext(context, {
+                min: 0,
+                max: 60,
+                prefix: `[metadata:${candidate.name()}] `,
+              }),
+            );
+            chosen = candidate;
+            break;
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            chainErrors.push(`${candidate.name()}: ${msg}`);
+            logger.warn(
+              `[fallback] ${candidate.name()} failed: ${msg} — trying next provider`,
+            );
+            // Reset the transaction so the next provider starts clean.
+            await tx.dumpObjects();
+            const [createObject, pullObjects, dumpObjects] =
+              metadataHandler.objectHandler.new(
+                {},
+                ["internal:read"],
+                wrapTaskContext(context, {
+                  min: 60,
+                  max: 95,
+                  prefix: "[object import] ",
+                }),
+              );
+            tx.createObject = createObject;
+            tx.pullObjects = pullObjects;
+            tx.dumpObjects = dumpObjects;
+          }
+        }
+        if (!metadata || !chosen) {
+          await tx.dumpObjects();
+          throw new Error(
+            `All ${fallbackChain.length} metadata providers failed for "${result.name}":\n  ${chainErrors.join("\n  ")}`,
           );
-        } catch (e) {
-          dumpObjects();
-          throw e;
+        }
+        if (chosen.source() !== primary.source()) {
+          logger.info(
+            `[fallback] primary "${primary.name()}" failed; succeeded with "${chosen.name()}"`,
+          );
         }
 
         context?.progress(60);
@@ -282,14 +432,14 @@ export class MetadataHandler {
         logger.info(`Successfully fetched all metadata.`);
         logger.info(`Importing objects...`);
 
-        await pullObjects();
+        await tx.pullObjects();
 
         progress(95);
 
         await prisma.game.create({
           data: {
             id: gameId,
-            metadataSource: provider.source(),
+            metadataSource: chosen.source(),
             metadataId: metadata.id,
 
             mName: metadata.name,
@@ -328,16 +478,30 @@ export class MetadataHandler {
           },
         });
 
+        // The game is now imported — drop the unimported-games scan
+        // cache so it stops appearing in the admin import picker.
+        libraryManager.bustUnimportedGamesCache(libraryId);
+
         logger.info(`Finished game import.`);
         progress(100);
 
         context.addAction(`View Game:/admin/library/${gameId}`);
+        },
       },
-    });
+      parentTask,
+    );
+    return { taskId, gameId };
   }
 
   // Careful with this function, it has no typechecking
   // Type-checking this thing is impossible
+  //
+  // `fetchCompany` walks every provider until one resolves the company.
+  // The 2026 audit added a miss cache: a single import of a multi-studio
+  // game used to re-ask all providers about a genuinely-unknown indie
+  // publisher once per related game. We now cache misses for 1 day
+  // (cache.ts → "company-miss"). Hits are still served from Postgres
+  // (`metadataOriginalQuery`) so they never go stale.
   private async fetchCompany(query: string) {
     const existing = await prisma.company.findFirst({
       where: {
@@ -345,6 +509,20 @@ export class MetadataHandler {
       },
     });
     if (existing) return existing;
+
+    // Don't re-ask providers for a company we recently failed to find.
+    const cacheKey = query.toLowerCase().trim();
+    const missCached = metadataCache.get<true>(
+      "metadataHandler",
+      "company-miss",
+      cacheKey,
+    );
+    if (missCached.hit) {
+      logger.info(
+        `[metadata] skipping company lookup for "${query}" — recent miss is cached`,
+      );
+      return undefined;
+    }
 
     for (const provider of this.providers.values()) {
       // don't allow manual provider to "fetch" metadata
@@ -363,8 +541,12 @@ export class MetadataHandler {
           );
         }
       } catch (e) {
-        logger.warn(e);
-        dumpObjects();
+        logger.warn(
+          `[metadata:${provider.source()}] company lookup for "${query}" failed: ${
+            e instanceof Error ? e.message : e
+          }`,
+        );
+        await dumpObjects();
         continue;
       }
 
@@ -399,6 +581,12 @@ export class MetadataHandler {
       return object;
     }
 
+    // Every provider struck out — remember the miss so the next imported
+    // game with this same company doesn't repeat the whole walk.
+    metadataCache.set("metadataHandler", "company-miss", cacheKey, true);
+    logger.warn(
+      `[metadata] no provider could resolve company "${query}" — caching miss for 1 day`,
+    );
     return undefined;
   }
 }

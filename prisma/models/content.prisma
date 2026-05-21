@@ -55,6 +55,16 @@ model Game {
   // the library base dir. Empty for single-disc games.
   discFolders String[] @default([])
 
+  // Per-game override for the library's autoSwapSteamApiDll setting.
+  //   null  → inherit Library.autoSwapSteamApiDll (default)
+  //   true  → force-attempt the GBE swap even if the library has it off
+  //   false → never swap this game's steam_api DLL, even if the library
+  //           has it on (use for pre-fixed games with crack DLLs we don't
+  //           positively identify yet)
+  // The actual swap still requires positive Valve identification — this
+  // flag only gates whether ensureGbeDll is even consulted.
+  autoSwapSteamApiDll Boolean?
+
   collections CollectionEntry[]
   screenshots Screenshot[]
   tags        GameTag[]
@@ -150,6 +160,8 @@ model GameVersion {
   requiredContent  GameVersion[] @relation(name: "requiredContent")
   requiringContent GameVersion[] @relation(name: "requiredContent")
 
+  importReceipt ImportReceipt?
+
   // PostgreSQL does not auto-index FK columns. Without this, cascade deletes
   // from Game and every "list versions for this game" query full-scans the
   // table. The compound (gameId, versionIndex DESC) also covers the
@@ -157,6 +169,40 @@ model GameVersion {
   // hot query on the client sync path.
   @@index([gameId])
   @@index([gameId, versionIndex(sort: Desc)])
+}
+
+/// Structured, queryable record of a single completed version import.
+/// Written once at the end of `importVersion` (the persist phase). The
+/// admin version detail page surfaces it so operators can see exactly
+/// what happened: per-phase timings, file/chunk counts, whether a GBE
+/// DLL swap was applied, and any non-fatal warnings collected en route.
+///
+/// One-to-one with GameVersion. Cascade-deleted with the version (and
+/// explicitly deleted by the import-revert endpoint).
+model ImportReceipt {
+  id            String      @id @default(uuid())
+  gameVersionId String      @unique
+  gameVersion   GameVersion @relation(fields: [gameVersionId], references: [versionId], onDelete: Cascade, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+
+  /// Phase timings captured via TaskRunContext.markPhase().
+  /// Shape: [{ name: string, startedAt: ISO, endedAt: ISO, durationMs: number }]
+  phaseTimingsJson Json
+
+  fileCount      Int
+  totalSizeBytes BigInt
+  chunkCount     Int
+
+  /// True if the import swapped a steam_api DLL for a GBE build.
+  dllSwapApplied Boolean @default(false)
+  /// Which DLL was swapped (e.g. "steam_api64.dll"), null when none.
+  dllSwapName    String?
+
+  /// Non-fatal warnings collected during the import.
+  warnings String[] @default([])
+
+  @@index([gameVersionId])
 }
 
 model SetupConfiguration {

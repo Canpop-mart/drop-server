@@ -6,7 +6,13 @@ export default defineEventHandler(async (h3) => {
   const userId = await aclManager.getUserIdACL(h3, ["object:update"]);
   if (!userId) throw createError({ statusCode: 403 });
 
-  const uploadResult = await handleFileUpload(h3, {}, ["internal:read"], 1);
+  const uploadResult = await handleFileUpload(
+    h3,
+    {},
+    ["internal:read"],
+    1,
+    "profileAvatar",
+  );
   if (!uploadResult) {
     throw createError({
       statusCode: 400,

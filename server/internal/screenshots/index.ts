@@ -66,12 +66,22 @@ class ScreenshotManager {
   }
 
   /**
-   * Allows a user to upload a screenshot
-   * @param userId
-   * @param gameId
-   * @param inputStream
+   * Allows a user to upload a screenshot.
+   *
+   * `maxBytes` (optional) enforces a streaming byte cap: as data flows
+   * from the HTTP body into the object store, we count bytes and
+   * destroy the stream the moment we cross the limit. This is the
+   * only safeguard against a client that omits Content-Length and
+   * uploads forever; without it the screenshot endpoint is a disk-
+   * fill DoS. Throws `Error("ScreenshotTooLarge")` so the caller can
+   * map to a 413.
    */
-  async upload(userId: string, gameId: string, inputStream: IncomingMessage) {
+  async upload(
+    userId: string,
+    gameId: string,
+    inputStream: IncomingMessage,
+    maxBytes?: number,
+  ) {
     const objectId = randomUUID();
     const saveStream = await objectHandler.createWithStream(
       objectId,
@@ -87,8 +97,29 @@ class ScreenshotManager {
         statusMessage: "Failed to create writing stream to storage backend.",
       });
 
-    // pipe into object store
-    await stream.pipeline(inputStream, saveStream);
+    // Wire a streaming byte counter between the HTTP body and the
+    // backend stream so we abort overlarge uploads mid-flight.
+    let received = 0;
+    let aborted: Error | undefined;
+    if (maxBytes && maxBytes > 0) {
+      inputStream.on("data", (chunk: Buffer) => {
+        received += chunk.length;
+        if (received > maxBytes) {
+          aborted = new Error("ScreenshotTooLarge");
+          inputStream.destroy(aborted);
+        }
+      });
+    }
+
+    try {
+      // pipe into object store
+      await stream.pipeline(inputStream, saveStream);
+    } catch (err) {
+      // Clean up the partial object so the GC doesn't have to.
+      await objectHandler.deleteAsSystem(objectId).catch(() => undefined);
+      if (aborted) throw aborted;
+      throw err;
+    }
 
     await prisma.screenshot.create({
       data: {

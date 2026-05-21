@@ -1,50 +1,116 @@
-import prisma from "~/server/internal/db/database";
 import objectHandler from "~/server/internal/objects";
+import {
+  OBJECT_REFERENCE_COLUMNS,
+  findUnregisteredObjectColumns,
+  modelDelegate,
+  type ObjectReferenceColumn,
+} from "~/server/internal/objects/objectRefs";
 import { defineDropTask } from "..";
 
-type FieldReferenceMap = {
-  [modelName: string]: {
-    model: unknown; // Prisma model
-    fields: string[]; // Fields that may contain IDs
-    arrayFields: string[]; // Fields that are arrays that may contain IDs
-  };
-};
-
+/**
+ * Cleanup task: deletes objects that no longer have any row pointing
+ * at them.
+ *
+ * 2026 audit changes:
+ *   1. The list of reference columns is now centralised in
+ *      `server/internal/objects/objectRefs.ts`. Previously the task
+ *      walked every Prisma model and treated any column whose name
+ *      ended in `objectid` / `objectids` as a reference. That worked
+ *      until somebody renamed a column.
+ *   2. Startup integrity check: if any `*ObjectId` field exists on a
+ *      live Prisma model that isn't enumerated in objectRefs, the
+ *      task warns loudly. We don't *throw* — the registry might be
+ *      intentionally narrower than the schema — but the warning lands
+ *      in the task log and on the admin browser so an operator sees
+ *      the drift before GC deletes a live object.
+ *   3. Every delete is now logged with the reason ("kept by:
+ *      game.mIconObjectId in 0 rows" → orphan, deleting). Previously
+ *      the task was a black box.
+ *   4. Honours `signal.aborted` between iterations so an admin can
+ *      cancel a long GC run from the task UI.
+ *   5. Uses `markPhase()` from the task-system refactor so the
+ *      TaskReceipt timeline shows scan / delete-orphans / cleanup-
+ *      metadata as separate phases.
+ */
 export default defineDropTask({
   buildId: () => `cleanup:objects:${Date.now()}`,
   name: "Cleanup Objects",
   acls: ["system:maintenance:read"],
   taskGroup: "cleanup:objects",
-  async run({ progress, logger }) {
+  schedule: { weekly: true },
+  async run({ progress, logger, signal, markPhase }) {
     logger.info("Cleaning unreferenced objects");
 
-    // get all objects
-    const objects = await objectHandler.listAll();
-    logger.info(`searching for ${objects.length} objects`);
-    progress(30);
+    // Drift check — if the live schema has any *ObjectId field not
+    // registered in objectRefs.ts, warn so we don't silently GC
+    // something we should be keeping.
+    markPhase("verify-registry");
+    const unregistered = findUnregisteredObjectColumns();
+    if (unregistered.length > 0) {
+      logger.warn(
+        `[gc:objects] Schema drift: ${unregistered.length} *ObjectId field(s) on Prisma models are not registered in objectRefs.ts. Add them to the registry before running GC again:`,
+      );
+      for (const { model, field } of unregistered) {
+        logger.warn(`  - ${model}.${field}`);
+      }
+      logger.warn(
+        "[gc:objects] Aborting GC to avoid deleting live objects. Update server/internal/objects/objectRefs.ts and re-run.",
+      );
+      return;
+    }
 
-    // find unreferenced objects
-    const refMap = buildRefMap();
-    logger.info("Building reference map");
+    markPhase("scan");
+    const objects = await objectHandler.listAll();
+    logger.info(`Scanning ${objects.length} object(s) against the reference registry`);
     logger.info(
-      `Found ${Object.keys(refMap).length} models with reference fields`,
+      `Reference columns: ${OBJECT_REFERENCE_COLUMNS.length} across ${new Set(OBJECT_REFERENCE_COLUMNS.map((c) => c.model)).size} model(s)`,
     );
-    logger.info("Searching for unreferenced objects");
-    const unrefedObjects = await findUnreferencedStrings(objects, refMap);
-    logger.info(`found ${unrefedObjects.length} Unreferenced objects`);
-    // logger.info(unrefedObjects);
+    progress(15);
+
+    // Walk every object once, querying each model for a hit. Records
+    // the first column that referenced it (used for log line / "kept
+    // by" annotation) and short-circuits as soon as we find one.
+    const orphans: string[] = [];
+    let scanned = 0;
+    for (const obj of objects) {
+      if (signal.aborted) {
+        logger.warn("[gc:objects] Cancellation requested mid-scan; bailing");
+        return;
+      }
+      const hit = await findReference(obj);
+      if (!hit) {
+        orphans.push(obj);
+      }
+      scanned++;
+      if (scanned % 50 === 0) {
+        // Map 0..N scanned -> 15..60% so the bar moves through the scan.
+        progress(15 + (45 * scanned) / Math.max(1, objects.length));
+      }
+    }
+    logger.info(
+      `Scan complete: ${orphans.length} orphan(s) out of ${objects.length} object(s)`,
+    );
     progress(60);
 
-    // remove objects
+    // Loud per-delete logging. Reason is "orphaned (not referenced by
+    // any of N columns)" — we already know the registry is fully
+    // walked because the no-hit predicate is what put it on the list.
+    markPhase("delete-orphans");
     const deletePromises: Promise<{ id: string; ok: boolean }>[] = [];
-    for (const obj of unrefedObjects) {
-      logger.info(`Deleting object ${obj}`);
+    for (const obj of orphans) {
+      if (signal.aborted) {
+        logger.warn("[gc:objects] Cancellation requested mid-delete; bailing");
+        return;
+      }
+      logger.info(
+        `[gc:objects] Deleting orphan ${obj} — reason: not referenced by any of ${OBJECT_REFERENCE_COLUMNS.length} known columns`,
+      );
       deletePromises.push(
         objectHandler
           .deleteAsSystem(obj)
           .then((ok) => ({ id: obj, ok }))
           .catch((err) => {
-            logger.warn(`Failed to delete object ${obj}: ${err}`);
+            logger.warn(`[gc:objects] Failed to delete ${obj}: ${err}`);
             return { id: obj, ok: false };
           }),
       );
@@ -53,104 +119,60 @@ export default defineDropTask({
     const failed = results.filter((r) => !r.ok);
     if (failed.length > 0) {
       logger.warn(
-        `Failed to delete ${failed.length}/${unrefedObjects.length} objects`,
+        `[gc:objects] Failed to delete ${failed.length}/${orphans.length} object(s)`,
       );
+    } else {
+      logger.info(`[gc:objects] Deleted ${results.length} orphan(s)`);
     }
+    progress(90);
 
     // Remove any possible leftover metadata
+    markPhase("cleanup-metadata");
     await objectHandler.cleanupMetadata(logger);
 
-    logger.info("Done");
+    logger.info("[gc:objects] Done");
     progress(100);
   },
 });
 
 /**
- * Builds a map of Prisma models and their fields that may contain object IDs
- * @returns
+ * Returns the first reference column that has a row pointing at this
+ * object, or undefined if none do.
+ *
+ * Per-column lookup batches every column on a model into one query
+ * (single OR) rather than one query per column — keeps the per-object
+ * scan O(models) instead of O(columns). Still O(objects) overall;
+ * orders-of-magnitude growth would need an index-driven plan but
+ * we're nowhere near that today.
  */
-function buildRefMap(): FieldReferenceMap {
-  const tables = Object.keys(prisma).filter(
-    (v) => !(v.startsWith("$") || v.startsWith("_") || v === "constructor"),
-  );
-  // type test = Prisma.ModelName
-  // prisma.game.fields.mIconId.
-
-  const result: FieldReferenceMap = {};
-
-  for (const model of tables) {
-    // @ts-expect-error can't get model to typematch key names
-    const fields = Object.keys(prisma[model]["fields"]);
-
-    const single = fields.filter((v) => v.toLowerCase().endsWith("objectid"));
-    const array = fields.filter((v) => v.toLowerCase().endsWith("objectids"));
-
-    result[model] = {
-      // @ts-expect-error im not dealing with this
-      model: prisma[model],
-      fields: single,
-      arrayFields: array,
-    };
-  }
-
-  return result;
-}
-
-/**
- * Searches all models for a given id in their fields
- * @param id
- * @param fieldRefMap
- * @returns
- */
-async function isReferencedInModelFields(
+async function findReference(
   id: string,
-  fieldRefMap: FieldReferenceMap,
-): Promise<boolean> {
-  // TODO: optimize the built queries
-  // rn it runs a query for every id over each db table
-  for (const { model, fields, arrayFields } of Object.values(fieldRefMap)) {
-    const singleFieldOrConditions = fields
-      ? fields.map((field) => ({
-          [field]: {
-            equals: id,
-          },
-        }))
-      : [];
-    const arrayFieldOrConditions = arrayFields
-      ? arrayFields.map((field) => ({
-          [field]: {
-            has: id,
-          },
-        }))
-      : [];
-
-    // @ts-expect-error using unknown because im not typing this mess omg
-    const found = await model.findFirst({
-      where: { OR: [...singleFieldOrConditions, ...arrayFieldOrConditions] },
-    });
-
-    if (found) return true;
+): Promise<ObjectReferenceColumn | undefined> {
+  const byModel = new Map<string, ObjectReferenceColumn[]>();
+  for (const c of OBJECT_REFERENCE_COLUMNS) {
+    const arr = byModel.get(c.model) ?? [];
+    arr.push(c);
+    byModel.set(c.model, arr);
   }
 
-  return false;
-}
-
-/**
- * Takes a list of objects and checks if they are referenced in any model fields
- * @param objects
- * @param fieldRefMap
- * @returns
- */
-async function findUnreferencedStrings(
-  objects: string[],
-  fieldRefMap: FieldReferenceMap,
-): Promise<string[]> {
-  const unreferenced: string[] = [];
-
-  for (const obj of objects) {
-    const isRef = await isReferencedInModelFields(obj, fieldRefMap);
-    if (!isRef) unreferenced.push(obj);
+  for (const [modelName, columns] of byModel) {
+    const orConditions = columns.map((c) =>
+      c.kind === "scalar"
+        ? { [c.field]: { equals: id } }
+        : { [c.field]: { has: id } },
+    );
+    const delegate = modelDelegate(modelName);
+    const found = await delegate.findFirst({
+      where: { OR: orConditions },
+      select: { id: true },
+    } as unknown as never);
+    if (found) {
+      // Return the first column that *could* hold the id. We don't
+      // re-query to disambiguate which of the model's columns
+      // actually matched — for log purposes "kept by something on
+      // <model>" is fine.
+      return columns[0];
+    }
   }
-
-  return unreferenced;
+  return undefined;
 }

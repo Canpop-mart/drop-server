@@ -230,6 +230,19 @@ export class SessionHandler {
   }
 
   /**
+   * Revoke every session belonging to a user.
+   * @Note Used after a credential change (e.g. password reset) so any
+   * pre-existing sessions — including an attacker's — are forcibly logged out.
+   * Does not touch the current request's cookie; callers that want the acting
+   * user to stay signed in must re-issue a session afterwards.
+   * @param userId
+   * @returns number of sessions removed
+   */
+  async signoutAllByUser(userId: string) {
+    return await this.sessionProvider.removeSessionsByUser(userId);
+  }
+
+  /**
    * Clean up expired sessions
    */
   async cleanupSessions() {

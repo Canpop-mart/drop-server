@@ -1,22 +1,20 @@
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
-import prisma from "~/server/internal/db/database";
-import { ExternalAccountProvider } from "~/prisma/client/enums";
-import {
-  createRAClient,
-  resolveRACredentials,
-} from "~/server/internal/retroachievements";
 import { logger } from "~/server/internal/logging";
+import { retroAchievementsProvider } from "~/server/internal/achievements/retroachievements";
 
 /**
  * Called by the game client when a play session ends.
- * Achievement sync is handled client-side via the achievements-report endpoint
- * (Goldberg reads local save files and reports them directly).
  *
- * This endpoint handles RetroAchievements syncing:
- * - Checks if game has a RA link
- * - Checks if user has a RA account linked
- * - Fetches recent unlocks from RA
- * - Creates UserAchievement records for newly unlocked achievements
+ * Goldberg unlocks are reported separately via `achievements-report`
+ * (the client reads the local save file and POSTs them directly). This
+ * endpoint only handles the RetroAchievements side: it asks the RA
+ * provider to pull the user's progress for this game and record any new
+ * unlocks.
+ *
+ * Unlock recording goes through `unlocksRepo.recordUnlock` inside the
+ * provider, which upserts on `(userId, achievementId)` — so a session-end
+ * sync can never double-credit an unlock the live `ra-poll` already
+ * recorded mid-session.
  */
 export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const user = await fetchUser();
@@ -25,145 +23,21 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   if (!gameId)
     throw createError({ statusCode: 400, statusMessage: "No game ID." });
 
-  let syncedCount = 0;
-
   try {
-    // Check if game has a RA link
-    const raLink = await prisma.gameExternalLink.findUnique({
-      where: {
-        gameId_provider: {
-          gameId,
-          provider: ExternalAccountProvider.RetroAchievements,
-        },
-      },
-    });
-
-    if (!raLink) {
-      return { synced: 0 };
-    }
-
-    // Resolve RA credentials: env vars first, then user's linked RA account
-    const raCreds = await resolveRACredentials(user.id);
-    if (!raCreds) {
-      logger.warn("[RA Sync] No RA credentials available for user " + user.id);
-      return { synced: 0 };
-    }
-
-    // Check if user has a linked RA account (needed for username to query progress)
-    const userRaAccount = await prisma.userExternalAccount.findUnique({
-      where: {
-        userId_provider: {
-          userId: user.id,
-          provider: ExternalAccountProvider.RetroAchievements,
-        },
-      },
-    });
-
-    if (!userRaAccount) {
-      return { synced: 0 };
-    }
-
-    const raClient = createRAClient(raCreds.username, raCreds.apiKey);
-
-    // Fetch user's progress for this game
-    const raGameId = parseInt(raLink.externalGameId, 10);
-    const userProgress = await raClient.getUserGameProgress(
-      userRaAccount.externalId,
-      userRaAccount.token,
-      raGameId,
+    const { newlyUnlocked } = await retroAchievementsProvider.syncUnlocks(
+      gameId,
+      user.id,
     );
-
-    if (!userProgress || !userProgress.Achievements) {
-      logger.warn(
-        `[RA Sync] Empty progress from RA API for user=${userRaAccount.externalId} raGame=${raGameId}`,
-      );
-      return { synced: 0 };
-    }
-
-    const raAchievements = Object.entries(userProgress.Achievements);
-    const raUnlocked = raAchievements.filter(
-      ([, a]) => a.DateEarned || a.DateEarnedHardcore,
-    );
-    logger.info(
-      `[RA Sync] Session-end: RA API returned ${raAchievements.length} achievements, ${raUnlocked.length} unlocked for user=${userRaAccount.externalId} raGame=${raGameId}`,
-    );
-
-    // Get all achievements for this game (RA provider only)
-    const achievements = await prisma.achievement.findMany({
-      where: {
-        gameId,
-        provider: ExternalAccountProvider.RetroAchievements,
-      },
-    });
-
-    // Build a map of externalId -> achievement
-    const achievementMap = new Map(achievements.map((a) => [a.externalId, a]));
-
-    // Get existing unlocks for this user
-    const existingUnlocks = await prisma.userAchievement.findMany({
-      where: {
-        userId: user.id,
-        achievement: {
-          gameId,
-          provider: ExternalAccountProvider.RetroAchievements,
-        },
-      },
-      select: { achievementId: true },
-    });
-    const alreadyUnlockedIds = new Set(
-      existingUnlocks.map((u) => u.achievementId),
-    );
-
-    // Process each achievement from RA
-    for (const [externalId, raAchievement] of Object.entries(
-      userProgress.Achievements,
-    )) {
-      if (!raAchievement.DateEarned && !raAchievement.DateEarnedHardcore) {
-        // Not unlocked
-        continue;
-      }
-
-      const achievement = achievementMap.get(externalId);
-      if (!achievement) {
-        logger.warn(
-          `[RA Sync] Achievement not found in DB: gameId=${gameId} externalId=${externalId}`,
-        );
-        continue;
-      }
-
-      const wasAlreadyUnlocked = alreadyUnlockedIds.has(achievement.id);
-      if (wasAlreadyUnlocked) {
-        continue;
-      }
-
-      // Create the unlock record
-      const unlockedAt = new Date(
-        raAchievement.DateEarned ||
-          raAchievement.DateEarnedHardcore ||
-          Date.now(),
-      );
-
-      await prisma.userAchievement.create({
-        data: {
-          userId: user.id,
-          achievementId: achievement.id,
-          unlockedAt,
-        },
-      });
-
-      syncedCount++;
-    }
-
-    if (syncedCount > 0) {
+    if (newlyUnlocked > 0) {
       logger.info(
-        `[RA Sync] Synced ${syncedCount} achievements for user ${user.id} game ${gameId}`,
+        `[ACH:ra] session-end: synced ${newlyUnlocked} unlock(s) for user=${user.id} game=${gameId}`,
       );
     }
+    return { synced: newlyUnlocked };
   } catch (error) {
     logger.error(
-      `[RA Sync] Error during sync: ${error instanceof Error ? error.message : String(error)}`,
+      `[ACH:ra] session-end sync error: ${error instanceof Error ? error.message : String(error)}`,
     );
+    return { synced: 0 };
   }
-
-  return { synced: syncedCount };
 });

@@ -85,6 +85,17 @@
           "title": "WebAuthn"
         }
       },
+      "password": {
+        "confirmLabel": "Confirm new password",
+        "confirmMismatch": "Passwords do not match",
+        "currentLabel": "Current password",
+        "description": "Change the password used to sign in to your Drop account.",
+        "newLabel": "New password",
+        "passwordFormat": "Must be 8 or more characters",
+        "submit": "Update password",
+        "success": "Your password has been updated.",
+        "title": "Change password"
+      },
       "title": "Security"
     },
     "settings": "Settings",
@@ -206,6 +217,15 @@
     "confirmPassword": "Confirm @:auth.password",
     "displayName": "Display Name",
     "email": "Email",
+    "forgot": {
+      "backToSignin": "{arrow} Back to sign in",
+      "emailLabel": "Email address",
+      "genericResponse": "If an account exists for that email address, we've sent a link to reset your password.",
+      "submit": "Send reset link",
+      "subtitle": "Enter your account email and we'll send you a link to reset your password.",
+      "successTitle": "Check your email",
+      "title": "Forgot your password?"
+    },
     "password": "Password",
     "register": {
       "confirmPasswordFormat": "Must be the same as above",
@@ -214,6 +234,22 @@
       "subheader": "Fill in your details below to create your account.",
       "title": "Create your Drop account",
       "usernameFormat": "Must be 5 or more characters, and lowercase"
+    },
+    "reset": {
+      "checking": "Checking your reset link...",
+      "confirmLabel": "Confirm new password",
+      "confirmMismatch": "Passwords do not match",
+      "expiredDescription": "This password reset link is invalid or has expired. Reset links are valid for one hour and can only be used once.",
+      "expiredTitle": "Link expired",
+      "goToSignin": "Go to sign in",
+      "newPasswordLabel": "New password",
+      "passwordFormat": "Must be 8 or more characters",
+      "requestNew": "Request a new link",
+      "submit": "Set new password",
+      "subtitle": "Choose a new password for your account.",
+      "successDescription": "Your password has been updated. You can now sign in with your new password.",
+      "successTitle": "Password updated",
+      "title": "Reset your password"
     },
     "signin": {
       "externalProvider": "external provider",
@@ -368,12 +404,16 @@
     },
     "auth": {
       "disabled": "Invalid or disabled account. Please contact the server administrator.",
+      "invalidCurrentPassword": "Current password is incorrect.",
       "invalidInvite": "Invalid or expired invitation",
       "invalidPassState": "Invalid password state. Please contact the server administrator.",
       "invalidUserOrPass": "Invalid username or password.",
       "inviteIdRequired": "id required in fetching invitation",
       "method": {
         "signinDisabled": "Sign in method not enabled"
+      },
+      "reset": {
+        "invalidToken": "This password reset link is invalid or has expired."
       },
       "usernameTaken": "Username already taken."
     },
@@ -493,6 +533,7 @@
       "metadata": "Meta",
       "settings": {
         "general": "General Settings",
+        "security": "Security",
         "store": "Store",
         "title": "Settings",
         "tokens": "API tokens"
@@ -1115,7 +1156,29 @@
       "description": "Manage the users on your Drop instance, and configure your authentication methods.",
       "displayNameHeader": "Display Name",
       "emailHeader": "Email",
+      "generateResetLink": "Generate reset link",
       "normalUserLabel": "Normal user",
+      "resetLink": {
+        "copied": "Copied!",
+        "copy": "Copy",
+        "description": "Generate a single-use password reset link for {0}.",
+        "generateButton": "Generate link",
+        "hint": "Drop will generate a link you can hand to the user. They open it to set a new password — no email is sent.",
+        "singleUseWarning": "This link can only be used once and expires in 1 hour.",
+        "title": "Reset link for {0}",
+        "urlLabel": "Password reset link"
+      },
+      "setPassword": {
+        "confirmLabel": "Confirm password",
+        "confirmMismatch": "Passwords do not match.",
+        "description": "Set a new password for this user directly. Their existing sessions will be signed out.",
+        "passwordFormat": "Must be 8 or more characters",
+        "passwordLabel": "New password",
+        "submitButton": "Set password",
+        "success": "Password updated; the user's sessions were signed out.",
+        "title": "Set password for {0}"
+      },
+      "setPasswordAction": "Set password",
       "simple": {
         "adminInvitation": "Admin invitation",
         "createInvitation": "Create invitation",
@@ -1148,6 +1211,7 @@
         "userInvitation": "User invitation"
       },
       "srEditLabel": "Edit",
+      "srUserActions": "User actions",
       "usernameHeader": "Username"
     }
   },

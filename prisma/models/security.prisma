@@ -1,0 +1,35 @@
+// IP-based access control for the Drop server.
+//
+// An IpRule is either an Allow or a Deny entry, matched against the client
+// IP by the `ip-filter` Nitro middleware. The pattern is an exact IPv4/IPv6
+// address or a CIDR range (e.g. "192.168.1.0/24", "2001:db8::/32").
+//
+// Enforcement order (see server/middleware/ip-filter.ts):
+//   - If ANY enabled Allow rule exists, the server is in default-deny mode:
+//     only IPs matching an enabled Allow are admitted.
+//   - Otherwise, every IP is admitted unless it matches an enabled Deny.
+//
+// Localhost and health endpoints always bypass the filter so an operator
+// cannot lock themselves out of the box.
+
+enum IpRuleKind {
+    Allow
+    Deny
+}
+
+model IpRule {
+    id String @id @default(uuid())
+
+    kind    IpRuleKind
+    pattern String // exact IPv4/IPv6 address or CIDR range
+    notes   String?
+    enabled Boolean    @default(true)
+
+    createdAt DateTime @default(now())
+
+    createdByUserId String
+    createdByUser   User   @relation(name: "ipRulesCreated", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+    @@index([enabled])
+    @@index([createdByUserId])
+}

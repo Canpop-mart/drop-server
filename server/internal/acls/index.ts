@@ -101,6 +101,9 @@ export const systemACLs = [
 
   "task:read",
   "task:start",
+  "task:cancel",
+  "task:retry",
+  "task:delete",
 
   "maintenance:read",
 

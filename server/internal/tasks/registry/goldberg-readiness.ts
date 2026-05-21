@@ -7,7 +7,7 @@ import {
   resolveGameVersionDir,
   setupGoldberg,
 } from "../../goldberg";
-import { findSteamApiDll, isGbeDll } from "../../gbe";
+import { findSteamApiDll, identifySteamApiDll } from "../../gbe";
 import fs from "fs";
 import path from "path";
 
@@ -18,6 +18,14 @@ import path from "path";
  *
  * Split out of the former `scan:achievements` umbrella so a failure here
  * doesn't block definition refresh or RA linking.
+ *
+ * DLL-swap policy (changed alongside the gbe.ts inversion):
+ *   - Only flags "non-GBE DLL" as a readiness issue when the DLL was
+ *     **positively identified as Valve** AND the library/game has
+ *     auto-swap enabled. Pre-applied crack DLLs (OnlineFix, CODEX,
+ *     EMPRESS, CreamAPI…) and unidentifiable customs are explicitly NOT
+ *     flagged — that was the old opt-out behaviour that destroyed
+ *     working installs.
  */
 export default defineDropTask({
   buildId: () => `scan:goldberg-readiness:${new Date().toISOString()}`,
@@ -42,6 +50,8 @@ export default defineDropTask({
         mName: true,
         metadataSource: true,
         metadataId: true,
+        autoSwapSteamApiDll: true,
+        library: { select: { autoSwapSteamApiDll: true } },
         externalLinks: {
           where: { provider: ExternalAccountProvider.Goldberg },
           select: { externalGameId: true },
@@ -55,6 +65,7 @@ export default defineDropTask({
     let healthy = 0;
     let fixed = 0;
     let issues = 0;
+    let leftAlone = 0;
 
     for (let i = 0; i < games.length; i++) {
       const game = games[i];
@@ -83,25 +94,47 @@ export default defineDropTask({
         path.join(versionDir, "steam_settings"),
       );
 
-      // Also verify the steam_api DLL is a GBE build — if a game was
-      // imported before the setupGoldberg DLL-swap patch landed, the
-      // settings will be present but the DLL is still Valve's, so the
-      // game can't SteamAPI_Init() without a real Steam client running.
-      // If no DLL is present at all we can't fix it from here, so treat
-      // that as "not a readiness problem" (returns true).
+      // Verify whether the steam_api DLL needs the GBE swap. The check
+      // is now opt-in (positive identification required) — see
+      // identifySteamApiDll in gbe.ts. We only treat "should be GBE but
+      // isn't" as a readiness gap when:
+      //   1. The library / game has autoSwap enabled.
+      //   2. The DLL is positively identified as vanilla Valve.
+      // Known cracks and unidentifiable customs are LEFT IN PLACE so
+      // we don't clobber pre-applied OnlineFix / CODEX / EMPRESS DLLs.
+      const effectiveAutoSwap =
+        game.autoSwapSteamApiDll ??
+        game.library?.autoSwapSteamApiDll ??
+        true;
+
       const dllInfo = findSteamApiDll(versionDir);
-      const hasGbeDll = dllInfo
-        ? isGbeDll(path.join(dllInfo.dllDir, dllInfo.dllName))
-        : true;
+      let needsGbeSwap = false;
+      let dllNote = "";
+      if (dllInfo) {
+        const ident = identifySteamApiDll(
+          path.join(dllInfo.dllDir, dllInfo.dllName),
+        );
+        dllNote = `${dllInfo.dllName} kind=${ident.kind} (${ident.fingerprint})`;
+        if (!effectiveAutoSwap) {
+          dllNote += " — auto-swap disabled, treating as healthy regardless";
+        } else if (ident.kind === "valve") {
+          needsGbeSwap = true;
+        } else if (ident.kind === "known-crack" || ident.kind === "unknown") {
+          dllNote +=
+            " — leaving in place (refusing to overwrite pre-applied crack/unknown DLL)";
+          leftAlone++;
+        }
+      }
 
       const allGood =
         hasAppIdFile &&
         hasAchievementsFile &&
         hasDbRecords &&
         hasSteamSettings &&
-        hasGbeDll;
+        !needsGbeSwap;
 
       if (allGood) {
+        if (dllNote) logger.info(`${game.mName} — healthy. ${dllNote}`);
         healthy++;
       } else {
         const missing: string[] = [];
@@ -109,14 +142,16 @@ export default defineDropTask({
         if (!hasAppIdFile) missing.push("steam_appid.txt");
         if (!hasAchievementsFile) missing.push("achievements.json");
         if (!hasDbRecords) missing.push("DB records");
-        if (!hasGbeDll) missing.push("GBE DLL swap (currently non-GBE)");
+        if (needsGbeSwap)
+          missing.push("GBE DLL swap (vanilla Valve detected)");
         logger.info(
-          `${game.mName} — missing: ${missing.join(", ")}. Running setup...`,
+          `${game.mName} — missing: ${missing.join(", ")}. ${dllNote ? dllNote + ". " : ""}Running setup...`,
         );
 
         try {
           await setupGoldberg(game.id, versionDir, {
             forceRefreshAchievements: true,
+            logger,
           });
           const dbCount = await prisma.achievement.count({
             where: { gameId: game.id },
@@ -134,7 +169,9 @@ export default defineDropTask({
     }
 
     logger.info(
-      `Goldberg readiness: ${healthy} healthy, ${fixed} fixed, ${issues} issue(s) across ${games.length} game(s)`,
+      `Goldberg readiness: ${healthy} healthy, ${fixed} fixed, ` +
+        `${leftAlone} left alone (pre-existing crack / unknown DLL), ` +
+        `${issues} issue(s) across ${games.length} game(s)`,
     );
   },
 });

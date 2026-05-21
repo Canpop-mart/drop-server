@@ -86,3 +86,22 @@ model Session {
 
     data Json // misc extra data
 }
+
+model PasswordResetToken {
+    id String @id @default(uuid())
+
+    userId String
+    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    // SHA-256 hash of the raw token. The raw token is only ever in the reset
+    // link emailed to the user; we never store it so a DB leak can't be used
+    // to mint password resets.
+    tokenHash String @unique
+
+    expiresAt  DateTime
+    consumedAt DateTime?
+    createdAt  DateTime  @default(now())
+
+    @@index([userId])
+    @@index([expiresAt])
+}

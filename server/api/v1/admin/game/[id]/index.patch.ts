@@ -16,6 +16,10 @@ const GameUpdate = type({
   mCoverObjectId: "string?",
   mLogoObjectId: "string?",
   featured: "boolean?",
+  // Per-game override for the GBE auto-swap policy. null → inherit
+  // the library setting; true/false → force-on / force-off for this
+  // game regardless of the library default. See gbe.ts → ensureGbeDll.
+  autoSwapSteamApiDll: "boolean | null | undefined",
 }).configure(throwingArktype);
 
 export default defineEventHandler(async (h3) => {

@@ -7,6 +7,8 @@ import {
   createRAClient,
   resolveRACredentials,
 } from "~/server/internal/retroachievements";
+import { achievementsRepo } from "~/server/internal/achievements";
+import { raAchievementsToDefinitions } from "~/server/internal/achievements/retroachievements";
 import { logger } from "~/server/internal/logging";
 
 const LinkRAGame = type({
@@ -108,53 +110,15 @@ export default defineEventHandler(async (h3) => {
     );
   }
 
-  // Upsert achievement definitions
-  let achievementCount = 0;
-  let order = 0;
-
-  for (const [externalId, achievement] of Object.entries(
-    gameInfo.Achievements || {},
-  )) {
-    const iconUrl = achievement.BadgeName
-      ? `https://media.retroachievements.org/Badge/${achievement.BadgeName}.png`
-      : "";
-    const iconLockedUrl = achievement.BadgeName
-      ? `https://media.retroachievements.org/Badge/${achievement.BadgeName}_lock.png`
-      : "";
-
-    await prisma.achievement.upsert({
-      where: {
-        gameId_provider_externalId: {
-          gameId,
-          provider: ExternalAccountProvider.RetroAchievements,
-          externalId,
-        },
-      },
-      create: {
-        gameId,
-        provider: ExternalAccountProvider.RetroAchievements,
-        externalId,
-        title: achievement.Title || externalId,
-        description: achievement.Description || "",
-        iconUrl,
-        iconLockedUrl,
-        displayOrder: order,
-      },
-      update: {
-        title: achievement.Title || externalId,
-        description: achievement.Description || "",
-        iconUrl,
-        iconLockedUrl,
-        displayOrder: order,
-      },
-    });
-
-    achievementCount++;
-    order++;
-  }
+  // Upsert achievement definitions via the canonical write path.
+  const achievementCount = await achievementsRepo.upsertDefinitions(
+    gameId,
+    ExternalAccountProvider.RetroAchievements,
+    raAchievementsToDefinitions(gameInfo),
+  );
 
   logger.info(
-    `Linked game ${gameId} to RetroAchievements game ${body.raGameId} with ${achievementCount} achievements`,
+    `[ACH:ra] Linked game ${gameId} to RetroAchievements game ${body.raGameId} with ${achievementCount} achievements`,
   );
 
   return {

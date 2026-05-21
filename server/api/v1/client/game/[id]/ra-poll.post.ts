@@ -7,6 +7,7 @@ import {
 } from "~/server/internal/retroachievements";
 import { logger } from "~/server/internal/logging";
 import notificationSystem from "~/server/internal/notifications";
+import { unlocksRepo } from "~/server/internal/achievements";
 
 /**
  * Called by the desktop client during gameplay to poll for newly unlocked
@@ -142,20 +143,23 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
 
       if (alreadyUnlockedIds.has(achievement.id)) continue;
 
-      // Create the unlock record
       const unlockedAt = new Date(
         raAchievement.DateEarned ||
           raAchievement.DateEarnedHardcore ||
           Date.now(),
       );
 
-      await prisma.userAchievement.create({
-        data: {
-          userId: user.id,
-          achievementId: achievement.id,
-          unlockedAt,
-        },
+      // Canonical unlock write path — idempotent upsert keyed on
+      // (userId, achievementId). `created` is false if the
+      // client-report or session-end path already credited this
+      // unlock, so RA polling can never double-credit.
+      const { created } = await unlocksRepo.recordUnlock({
+        userId: user.id,
+        achievementId: achievement.id,
+        source: "ra-poll",
+        occurredAt: unlockedAt,
       });
+      if (!created) continue;
 
       newlyUnlocked.push({
         id: achievement.id,
@@ -175,7 +179,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
           acls: ["user:store:read"],
         })
         .catch((err) => {
-          logger.warn(`[RA-POLL] Failed to push notification: ${err}`);
+          logger.warn(`[ACH:ra] Failed to push notification: ${err}`);
         });
     }
 

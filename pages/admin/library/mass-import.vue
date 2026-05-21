@@ -11,7 +11,15 @@
           Quickly import a large amount of versions at once.
         </p>
       </div>
-      <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
+      <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none flex items-center gap-x-2">
+        <button
+          type="button"
+          :disabled="!hasSelected || previewLoading"
+          class="inline-flex w-fit items-center gap-x-2 rounded-md bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 px-3 py-1 text-sm font-semibold font-display text-white shadow-sm"
+          @click="previewImport"
+        >
+          {{ previewLoading ? "Previewing..." : "Preview import" }}
+        </button>
         <LoadingButton
           :loading="false"
           :disabled="!hasSelected"
@@ -20,6 +28,46 @@
           Import &rarr;
         </LoadingButton>
       </div>
+    </div>
+
+    <!-- Dry-run preview result -->
+    <div
+      v-if="previewReceipts"
+      class="mt-6 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 p-4"
+    >
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-white font-display">
+          Dry-run preview ({{ previewReceipts.length }} version(s))
+        </h2>
+        <button
+          class="text-xs text-zinc-400 hover:text-zinc-200"
+          @click="previewReceipts = undefined"
+        >
+          Dismiss
+        </button>
+      </div>
+      <ul class="divide-y divide-white/5 text-sm">
+        <li
+          v-for="(r, i) in previewReceipts"
+          :key="i"
+          class="py-2 flex items-center justify-between gap-x-4"
+        >
+          <span class="text-zinc-200 truncate">{{ r.version }}</span>
+          <span v-if="'error' in r" class="text-red-400 text-xs shrink-0">{{
+            r.error
+          }}</span>
+          <span v-else class="text-zinc-400 text-xs shrink-0">
+            {{ r.receipt.fileCount }} files ·
+            {{ formatBytes(r.receipt.totalSizeBytes) }} ·
+            {{ r.receipt.dllSwapApplied ? "DLL swap" : "no swap" }}
+            <span
+              v-if="r.receipt.warnings.length"
+              class="text-yellow-400 ml-1"
+              >· {{ r.receipt.warnings.length }} warning(s)</span
+            >
+          </span>
+        </li>
+      </ul>
     </div>
     <div class="mt-8 flow-root">
       <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
@@ -337,27 +385,79 @@ const globalState = computed({
 });
 
 const router = useRouter();
+
+/** Builds the `versions` request body from the currently-checked rows. */
+function selectedVersionsBody() {
+  return massImport.value
+    .map((game) =>
+      game.versions
+        .filter((version) => version.enabled)
+        .map((version) => ({
+          id: game.id,
+          version: {
+            type: version.type,
+            identifier: version.identifier,
+            name: version.name,
+          },
+          ...version.settings,
+        })),
+    )
+    .flat();
+}
+
+function formatBytes(bytes: number): string {
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let v = bytes;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+type PreviewRow =
+  | { version: string; error: string }
+  | {
+      version: string;
+      receipt: {
+        fileCount: number;
+        totalSizeBytes: number;
+        dllSwapApplied: boolean;
+        warnings: string[];
+      };
+    };
+
+const previewLoading = ref(false);
+const previewReceipts = ref<PreviewRow[] | undefined>();
+
+async function previewImport() {
+  previewLoading.value = true;
+  previewReceipts.value = undefined;
+  try {
+    const result = await $dropFetch(
+      "/api/v1/admin/import/massversion?dryRun=true",
+      {
+        method: "POST",
+        body: { versions: selectedVersionsBody() },
+      },
+    );
+    if ("receipts" in result) {
+      previewReceipts.value = result.receipts as PreviewRow[];
+    }
+  } finally {
+    previewLoading.value = false;
+  }
+}
+
 async function triggerImport() {
-  const { taskId } = await $dropFetch("/api/v1/admin/import/massversion", {
+  const result = await $dropFetch("/api/v1/admin/import/massversion", {
     method: "POST",
-    body: {
-      versions: massImport.value
-        .map((game) =>
-          game.versions
-            .filter((version) => version.enabled)
-            .map((version) => ({
-              id: game.id,
-              version: {
-                type: version.type,
-                identifier: version.identifier,
-                name: version.name,
-              },
-              ...version.settings,
-            })),
-        )
-        .flat(),
-    },
+    body: { versions: selectedVersionsBody() },
   });
-  router.push(`/admin/task/${taskId}`);
+  if ("taskId" in result && result.taskId) {
+    router.push(`/admin/task/${result.taskId}`);
+  }
 }
 </script>

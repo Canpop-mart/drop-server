@@ -38,17 +38,20 @@
           >{{ name }}</NuxtLink
         >
       </ul>
-      <NuxtLink
-        type="button"
-        :href="`/admin/task/${task.id}`"
-        class="mt-3 ml-1 rounded-md text-xs font-medium text-zinc-100 hover:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-100 focus:ring-offset-2"
-      >
-        <i18n-t keypath="tasks.admin.viewTask" tag="span" scope="global">
-          <template #arrow>
-            <span aria-hidden="true">{{ $t("chars.arrow") }}</span>
-          </template>
-        </i18n-t>
-      </NuxtLink>
+      <div class="mt-3 ml-1 flex items-center gap-x-3">
+        <NuxtLink
+          type="button"
+          :href="`/admin/task/${task.id}`"
+          class="rounded-md text-xs font-medium text-zinc-100 hover:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-100 focus:ring-offset-2"
+        >
+          <i18n-t keypath="tasks.admin.viewTask" tag="span" scope="global">
+            <template #arrow>
+              <span aria-hidden="true">{{ $t("chars.arrow") }}</span>
+            </template>
+          </i18n-t>
+        </NuxtLink>
+        <slot name="actions" />
+      </div>
     </div>
   </div>
   <div v-else>

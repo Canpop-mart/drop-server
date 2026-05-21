@@ -3,6 +3,18 @@ import prisma from "~/server/internal/db/database";
 import taskHandler from "~/server/internal/tasks";
 import type { TaskGroup } from "~/server/internal/tasks/group";
 
+/**
+ * Live overview consumed by the admin task index page:
+ *   - runningTasks: IDs the UI should subscribe to via the existing
+ *     websocket / useTask composable
+ *   - historicalTasks: legacy Task rows for the in-page recent list
+ *   - dailyTasks / weeklyTasks: scheduled task buckets
+ *   - library / achievements / system: on-demand admin buttons
+ *
+ * The full filterable history (status / search / since) lives at
+ * `/api/v1/admin/task/receipts` and is fetched separately by the
+ * "History" tab so this endpoint stays cheap.
+ */
 export default defineEventHandler(async (h3) => {
   const allowed = await aclManager.allowSystemACL(h3, ["task:read"]);
   if (!allowed) throw createError({ statusCode: 403 });
@@ -25,6 +37,7 @@ export default defineEventHandler(async (h3) => {
       actions: true,
       error: true,
       success: true,
+      taskGroup: true,
     },
     take: 32,
   });
@@ -45,6 +58,7 @@ export default defineEventHandler(async (h3) => {
     "link:retroachievements",
     "recalculate:achievements",
     "upgrade:gbe",
+    "restore:steam-backup",
   ];
   const system: TaskGroup[] = ["recalculate:playtime", "backup:export"];
 
