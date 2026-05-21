@@ -91,10 +91,11 @@ export default defineDropTask({
       if (restoredAny) {
         restoredGames.push(game.mName);
         try {
-          const regenOk = await libraryManager.regenerateManifestForLatestVersion(
-            game.id,
-            logger,
-          );
+          const regenOk =
+            await libraryManager.regenerateManifestForLatestVersion(
+              game.id,
+              logger,
+            );
           if (regenOk) {
             regenerated++;
             logger.info(`${game.mName} — manifest regenerated`);

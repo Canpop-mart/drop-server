@@ -192,11 +192,10 @@ const error = ref<string | undefined>(undefined);
 
 const passwordValidator = type("string >= 8");
 const validPassword = computed(
-  () => !((passwordValidator(password.value) as unknown) instanceof type.errors),
+  () =>
+    !((passwordValidator(password.value) as unknown) instanceof type.errors),
 );
-const passwordsMatch = computed(
-  () => password.value === confirmPassword.value,
-);
+const passwordsMatch = computed(() => password.value === confirmPassword.value);
 const canSubmit = computed(
   () => validPassword.value && passwordsMatch.value && !loading.value,
 );

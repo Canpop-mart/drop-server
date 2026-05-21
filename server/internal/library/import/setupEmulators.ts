@@ -37,9 +37,6 @@ import type { ImportContext, EmulatorSetupResult } from "./types";
 
 const PHASE = "[PHASE:emulator]";
 
-/** Backup suffix used for the SSE → GBE swap (matches gbe.ts). */
-const SSE_BACKUP_SUFFIX = ".sse_backup";
-
 /**
  * Swaps an SSE steam_api DLL for the cached GBE build and writes the
  * `steam_settings/` config from the parsed SSE ini. Re-implemented here
@@ -194,11 +191,7 @@ export async function setupEmulators(
         const hasSettings = fs.existsSync(
           path.join(detection.dllDir, "steam_settings"),
         );
-        if (
-          !hasSettings &&
-          ctx.steamAppId &&
-          hasSteamDrmMarker(versionDir)
-        ) {
+        if (!hasSettings && ctx.steamAppId && hasSteamDrmMarker(versionDir)) {
           logger.info(
             `${PHASE} Steam DRM markers present (AppID ${ctx.steamAppId}); ` +
               `checking ${detection.dllName} fingerprint before swap`,
@@ -240,9 +233,7 @@ export async function setupEmulators(
     if (!dllSwapApplied) {
       const post = findSteamApiDll(versionDir);
       if (post) {
-        const ident = identifySteamApiDll(
-          path.join(post.dllDir, post.dllName),
-        );
+        const ident = identifySteamApiDll(path.join(post.dllDir, post.dllName));
         if (ident.kind === "gbe") {
           // It's GBE now. We can't be 100% sure setupGoldberg swapped it
           // this run vs. a prior run, so only flag it when a backup file

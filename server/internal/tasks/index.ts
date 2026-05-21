@@ -29,11 +29,7 @@ import backupExport from "./registry/backup-export";
 type TaskActionLink = `${string}:${string}`;
 
 // ── Receipt helpers ────────────────────────────────────────────────
-export type TaskReceiptStatus =
-  | "success"
-  | "failed"
-  | "cancelled"
-  | "orphaned";
+export type TaskReceiptStatus = "success" | "failed" | "cancelled" | "orphaned";
 
 export type TaskPhase = {
   name: string;
@@ -441,8 +437,7 @@ class TaskHandler {
           status = "failed";
           taskEntry.error = {
             title: "An error occurred",
-            description:
-              error instanceof Error ? error.message : String(error),
+            description: error instanceof Error ? error.message : String(error),
           };
         }
         logger.warn(

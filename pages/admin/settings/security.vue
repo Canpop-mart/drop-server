@@ -12,8 +12,8 @@
         >
           Restrict which IP addresses can reach this server. If any Allow rule
           exists, only matching addresses are admitted; otherwise every address
-          is admitted unless it matches a Deny rule. Localhost and health
-          checks are always allowed.
+          is admitted unless it matches a Deny rule. Localhost and health checks
+          are always allowed.
         </p>
       </div>
       <div class="shrink-0">

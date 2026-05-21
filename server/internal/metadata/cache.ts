@@ -139,7 +139,9 @@ class MetadataCache {
       }
     }
     if (removed > 0)
-      logger.info(`[metadata-cache] dropped ${removed} entries for ${provider}`);
+      logger.info(
+        `[metadata-cache] dropped ${removed} entries for ${provider}`,
+      );
   }
 
   stats() {

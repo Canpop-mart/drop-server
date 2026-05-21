@@ -107,9 +107,7 @@ class EmailManager {
         text: message.text,
         html: message.html,
       });
-      logger.info(
-        `[EMAIL] sent to=${message.to} subject="${message.subject}"`,
-      );
+      logger.info(`[EMAIL] sent to=${message.to} subject="${message.subject}"`);
       return true;
     } catch (e) {
       logger.error(

@@ -54,8 +54,8 @@
             IP address or CIDR range
           </label>
           <p class="text-zinc-400 block text-xs leading-6">
-            Exact address (192.168.1.5, 2001:db8::1) or CIDR
-            (10.0.0.0/8, 2001:db8::/32).
+            Exact address (192.168.1.5, 2001:db8::1) or CIDR (10.0.0.0/8,
+            2001:db8::/32).
           </p>
           <input
             id="ip-pattern"

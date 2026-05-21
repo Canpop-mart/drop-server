@@ -11,9 +11,7 @@
     <!-- Stat tiles ──────────────────────────────────────────────── -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div class="rounded-lg bg-zinc-800 border border-zinc-700 p-4">
-        <div class="text-xs uppercase tracking-wide text-zinc-500">
-          Objects
-        </div>
+        <div class="text-xs uppercase tracking-wide text-zinc-500">Objects</div>
         <div class="mt-1 text-2xl font-semibold">
           {{ data.count.toLocaleString() }}
         </div>
@@ -60,8 +58,8 @@
         {{ data.drift.length }} Prisma column(s) hold object IDs but aren't
         registered in
         <code class="text-xs">server/internal/objects/objectRefs.ts</code>. GC
-        will refuse to run until they're added; otherwise it would delete
-        live objects.
+        will refuse to run until they're added; otherwise it would delete live
+        objects.
       </p>
       <ul class="mt-2 text-xs text-amber-100 list-disc list-inside">
         <li v-for="d in data.drift" :key="`${d.model}.${d.field}`">
@@ -113,11 +111,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-zinc-700/50">
-            <tr
-              v-for="o in data.top"
-              :key="o.id"
-              class="hover:bg-zinc-700/30"
-            >
+            <tr v-for="o in data.top" :key="o.id" class="hover:bg-zinc-700/30">
               <td class="px-3 py-2 font-mono text-xs truncate max-w-md">
                 <NuxtLink
                   :href="`/api/v1/object/${o.id}`"
@@ -149,8 +143,8 @@
       </h2>
       <p class="mt-1 text-xs text-zinc-500">
         Source of truth lives in
-        <code>server/internal/objects/objectRefs.ts</code>. Add a new column
-        to the registry whenever you add one to the schema.
+        <code>server/internal/objects/objectRefs.ts</code>. Add a new column to
+        the registry whenever you add one to the schema.
       </p>
       <div
         class="mt-3 rounded-lg border border-zinc-700 bg-zinc-800 overflow-hidden"

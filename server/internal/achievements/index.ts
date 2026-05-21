@@ -42,9 +42,7 @@ export function getProvider(
 }
 
 /** Normalise a free-form query value to a ProviderName list. */
-export function parseProviders(
-  value: string | undefined,
-): ProviderName[] {
+export function parseProviders(value: string | undefined): ProviderName[] {
   const v = (value ?? "both").toLowerCase();
   if (v === "both" || v === "all") return ["goldberg", "retroachievements"];
   if (v === "goldberg") return ["goldberg"];

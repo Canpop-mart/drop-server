@@ -39,9 +39,7 @@ export function raAchievementsToDefinitions(
 ): AchievementDefinition[] {
   const defs: AchievementDefinition[] = [];
   let order = 0;
-  for (const [externalId, ach] of Object.entries(
-    gameInfo.Achievements || {},
-  )) {
+  for (const [externalId, ach] of Object.entries(gameInfo.Achievements || {})) {
     defs.push({
       externalId,
       title: ach.Title || externalId,

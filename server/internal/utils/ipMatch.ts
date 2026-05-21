@@ -230,7 +230,11 @@ export function ipMatchesPattern(
   const rule = normalizeForMatch(trimmed);
   if (!rule) return false;
   if (rule.family !== client.family) return false;
-  return bytesMatchPrefix(client.bytes, rule.bytes, rule.family === 4 ? 32 : 128);
+  return bytesMatchPrefix(
+    client.bytes,
+    rule.bytes,
+    rule.family === 4 ? 32 : 128,
+  );
 }
 
 /** Render a ParsedCidr's network bytes back to a plain IP string. */

@@ -21,16 +21,16 @@ live code:
 
 Real usage:
 
-| Caller                                        | ACLs                                 | Intent                                          |
-| --------------------------------------------- | ------------------------------------ | ----------------------------------------------- |
-| `auth/signup/simple`                          | `internal:read`, `<userId>:read`     | Avatar — readable by any authenticated user.    |
-| `auth/oidc`                                   | `internal:read`, `<userId>:read`     | Same.                                           |
-| `metadata` (game / company import)            | `internal:read`                      | Game art — readable by any authenticated user.  |
-| `screenshots` upload                          | `<userId>:read`                      | Private to that user.                           |
-| `admin/news`, `admin/game/image/index.post`   | `internal:read`                      | News / game image — authenticated users only.   |
-| `admin/company/[id]/banner`, `…/icon`         | `internal:read`                      | Company art.                                    |
-| `user/avatar`, `user/banner`                  | `internal:read`                      | Profile chrome — anyone signed in.              |
-| `bugreports/create`                           | `internal:read`                      | Bug-report screenshot — anyone signed in.       |
+| Caller                                      | ACLs                             | Intent                                         |
+| ------------------------------------------- | -------------------------------- | ---------------------------------------------- |
+| `auth/signup/simple`                        | `internal:read`, `<userId>:read` | Avatar — readable by any authenticated user.   |
+| `auth/oidc`                                 | `internal:read`, `<userId>:read` | Same.                                          |
+| `metadata` (game / company import)          | `internal:read`                  | Game art — readable by any authenticated user. |
+| `screenshots` upload                        | `<userId>:read`                  | Private to that user.                          |
+| `admin/news`, `admin/game/image/index.post` | `internal:read`                  | News / game image — authenticated users only.  |
+| `admin/company/[id]/banner`, `…/icon`       | `internal:read`                  | Company art.                                   |
+| `user/avatar`, `user/banner`                | `internal:read`                  | Profile chrome — anyone signed in.             |
+| `bugreports/create`                         | `internal:read`                  | Bug-report screenshot — anyone signed in.      |
 
 Verdict: every existing call site enforces what it intends.
 `anonymous:read` is never used in practice — the entire object subsystem
@@ -50,7 +50,7 @@ that defaults to the object id itself (since ids are unique per
 content). The legacy MD5 hash is still consulted on `If-None-Match`
 so already-cached clients keep getting 304s during the rotation.
 
-The 304 path now short-circuits *before* opening the payload stream —
+The 304 path now short-circuits _before_ opening the payload stream —
 the previous code fetched the object even when it was about to respond
 304, which negated half the point of caching.
 
@@ -87,7 +87,7 @@ column. The GC task:
 
 1. Calls `findUnregisteredObjectColumns()` at start. If any
    `*ObjectId` field on a live Prisma model isn't in the registry, GC
-   logs a loud warning *and refuses to run* until the registry is
+   logs a loud warning _and refuses to run_ until the registry is
    updated. Surfaced on the admin object browser as a drift banner.
 2. Walks objects against the centralised registry. Each delete logs
    the reason ("orphaned (not referenced by any of N known columns)")
@@ -99,22 +99,22 @@ column. The GC task:
 
 Reference columns currently tracked (count = 13):
 
-| Model                | Field                       | Kind   |
-| -------------------- | --------------------------- | ------ |
-| game                 | mIconObjectId               | scalar |
-| game                 | mBannerObjectId             | scalar |
-| game                 | mCoverObjectId              | scalar |
-| game                 | mLogoObjectId               | scalar |
-| game                 | mImageCarouselObjectIds     | array  |
-| game                 | mImageLibraryObjectIds      | array  |
-| company              | mLogoObjectId               | scalar |
-| company              | mBannerObjectId             | scalar |
-| user                 | profilePictureObjectId      | scalar |
-| user                 | bannerObjectId              | scalar |
-| screenshot           | objectId                    | scalar |
-| article              | imageObjectId               | scalar |
-| bugReport            | screenshotObjectId          | scalar |
-| applicationSettings  | mLogoObjectId               | scalar |
+| Model               | Field                   | Kind   |
+| ------------------- | ----------------------- | ------ |
+| game                | mIconObjectId           | scalar |
+| game                | mBannerObjectId         | scalar |
+| game                | mCoverObjectId          | scalar |
+| game                | mLogoObjectId           | scalar |
+| game                | mImageCarouselObjectIds | array  |
+| game                | mImageLibraryObjectIds  | array  |
+| company             | mLogoObjectId           | scalar |
+| company             | mBannerObjectId         | scalar |
+| user                | profilePictureObjectId  | scalar |
+| user                | bannerObjectId          | scalar |
+| screenshot          | objectId                | scalar |
+| article             | imageObjectId           | scalar |
+| bugReport           | screenshotObjectId      | scalar |
+| applicationSettings | mLogoObjectId           | scalar |
 
 ### 6. Transactional creation
 
@@ -147,18 +147,19 @@ back to the legacy methods otherwise.
 
 Centralised in `server/internal/objects/uploadLimits.ts`:
 
-| Key                   | Limit |
-| --------------------- | ----- |
-| profileAvatar         |  5 MB |
-| profileBanner         | 10 MB |
-| gameImage             | 20 MB |
-| companyImage          | 20 MB |
-| newsImage             | 10 MB |
-| bugReportScreenshot   | 10 MB |
-| screenshot            | 50 MB |
-| rawObject (fallback)  | 50 MB |
+| Key                  | Limit |
+| -------------------- | ----- |
+| profileAvatar        | 5 MB  |
+| profileBanner        | 10 MB |
+| gameImage            | 20 MB |
+| companyImage         | 20 MB |
+| newsImage            | 10 MB |
+| bugReportScreenshot  | 10 MB |
+| screenshot           | 50 MB |
+| rawObject (fallback) | 50 MB |
 
 Two enforcement points:
+
 - `enforceUploadLimit(h3, key)` — Content-Length pre-check. Rejects
   oversized uploads with 413 before reading the body.
 - `assertWithinLimit(bytes, key)` — post-buffer check. Survives a
@@ -167,7 +168,7 @@ Two enforcement points:
 Wired into `handleFileUpload` (multipart) and the raw object POST
 endpoint. Screenshot uploads — which stream straight from
 `h3.node.req` into the backend without buffering — also enforce a
-*streaming* cap inside `ScreenshotManager.upload`: bytes are counted
+_streaming_ cap inside `ScreenshotManager.upload`: bytes are counted
 as they flow, and the upstream is destroyed mid-flight on the first
 chunk that crosses the limit. A partial object is cleaned up on
 abort so GC doesn't have to chase it.
@@ -194,10 +195,10 @@ content-hash objects coexist freely.
 
 ## New endpoints
 
-| Method | Path                              | ACL                  |
-| ------ | --------------------------------- | -------------------- |
-| GET    | `/api/v1/admin/objects`           | `maintenance:read`   |
-| POST   | `/api/v1/admin/objects/gc`        | `task:start`         |
+| Method | Path                       | ACL                |
+| ------ | -------------------------- | ------------------ |
+| GET    | `/api/v1/admin/objects`    | `maintenance:read` |
+| POST   | `/api/v1/admin/objects/gc` | `task:start`       |
 
 ## New files
 

@@ -91,7 +91,11 @@
               to="/auth/signin"
               class="font-semibold text-blue-600 hover:text-blue-500"
             >
-              <i18n-t keypath="auth.forgot.backToSignin" tag="span" scope="global">
+              <i18n-t
+                keypath="auth.forgot.backToSignin"
+                tag="span"
+                scope="global"
+              >
                 <template #arrow>
                   <span aria-hidden="true">{{ $t("chars.arrow") }}</span>
                 </template>

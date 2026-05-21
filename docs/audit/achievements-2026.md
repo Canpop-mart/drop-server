@@ -31,11 +31,11 @@ pipeline phases.
 ## Decision: `goldberg.ts` stays at `server/internal/goldberg.ts`
 
 The brief allowed moving `goldberg.ts` into `server/internal/achievements/`
-*or* leaving it if the import-pipeline coupling made a move risky. **It
+_or_ leaving it if the import-pipeline coupling made a move risky. **It
 was left in place.** Reasons:
 
 - It's imported by 10 files, including `server/internal/library/import/
-  setupEmulators.ts`, which calls `setupGoldberg` as an import phase.
+setupEmulators.ts`, which calls `setupGoldberg` as an import phase.
 - The `fix/gbe-swap-detection` branch already has uncommitted changes to
   `goldberg.ts`, `gbe.ts` and `setupEmulators.ts` from five parallel
   refactors. Moving the file mid-refactor would maximise merge pain for
@@ -45,7 +45,7 @@ was left in place.** Reasons:
   `scanGame` calls the existing `setupGoldberg`. The streamline goal
   (one provider interface, one write path) is met without the move.
 
-`retroachievements.ts` was *also* left at `server/internal/
+`retroachievements.ts` was _also_ left at `server/internal/
 retroachievements.ts` for symmetry and because `RetroAchievementsClient`
 is imported by several endpoints — the new
 `server/internal/achievements/retroachievements.ts` is the provider
@@ -78,7 +78,7 @@ There were **three** writers, not two: `achievements-report.post.ts`
 (Goldberg client reports), `ra-poll.post.ts` (live RA poll), and
 `session-end.post.ts` (RA sync at session end). `ra-poll` and
 `session-end` both used `prisma.userAchievement.create()` — a raw create
-that would *throw* a P2002 unique violation if the other path had
+that would _throw_ a P2002 unique violation if the other path had
 already recorded the unlock.
 
 **Now:** all three go through `unlocksRepo.recordUnlock(userId,
@@ -92,7 +92,7 @@ achievementId, source, occurredAt)`. It upserts against the **existing**
 Double-credit is therefore structurally impossible. A `source` column
 (`"client-report" | "ra-poll" | "session-end"`) was added to
 `UserAchievement` for provenance/diagnostics — it does **not** widen the
-unique key (widening it would have *allowed* per-source duplicates,
+unique key (widening it would have _allowed_ per-source duplicates,
 which is the opposite of the goal).
 
 ### 3. `debug/[gameId].get.ts` ACL — VERIFIED CORRECT

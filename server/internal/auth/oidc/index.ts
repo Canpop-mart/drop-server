@@ -450,6 +450,8 @@ export class OIDCManager {
       await objectHandler.createFromSource(
         profilePictureId,
         async () =>
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore Route-registry type inference exceeds TS's depth limit (TS2589)
           await $fetch<Readable>(picture, {
             responseType: "stream",
           }),

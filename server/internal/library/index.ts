@@ -760,9 +760,7 @@ class LibraryManager {
 
     // Effective swap policy: game override → library default → true.
     const autoSwapDll =
-      game.autoSwapSteamApiDll ??
-      game.library?.autoSwapSteamApiDll ??
-      true;
+      game.autoSwapSteamApiDll ?? game.library?.autoSwapSteamApiDll ?? true;
     // autoEmulatorSetup is library-only; default true.
     const autoEmulatorSetup = game.library?.autoEmulatorSetup ?? true;
 

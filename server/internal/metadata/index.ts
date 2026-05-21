@@ -114,12 +114,7 @@ export class MetadataHandler {
             ? cached.value
             : await provider.search(query);
           if (!cached.hit) {
-            metadataCache.set(
-              provider.source(),
-              "search",
-              cacheKey,
-              results,
-            );
+            metadataCache.set(provider.source(), "search", cacheKey, results);
           }
           const mappedResults: InternalGameMetadataResult[] = results.map(
             (result) =>
@@ -333,73 +328,16 @@ export class MetadataHandler {
         taskGroup: "import:game",
         acls: ["system:import:game:read"],
         async run(context) {
-        const { progress, logger } = context;
+          const { progress, logger } = context;
 
-        progress(0);
+          progress(0);
 
-        // The transactional handler is re-issued per fallback attempt
-        // so a failed provider's half-registered image refs don't leak
-        // into the successful provider's payload. We keep a single ref
-        // object pointing at the current transaction so the close-over
-        // `company` callback always uses the live createObject.
-        const tx = (() => {
-          const [createObject, pullObjects, dumpObjects] =
-            metadataHandler.objectHandler.new(
-              {},
-              ["internal:read"],
-              wrapTaskContext(context, {
-                min: 60,
-                max: 95,
-                prefix: "[object import] ",
-              }),
-            );
-          return { createObject, pullObjects, dumpObjects };
-        })();
-
-        const companyLookupCache: {
-          [key: string]: Awaited<
-            ReturnType<typeof metadataHandler.fetchCompany>
-          >;
-        } = {};
-        let metadata: GameMetadata | undefined = undefined;
-        let chosen: MetadataProvider | undefined = undefined;
-        const chainErrors: string[] = [];
-        for (const candidate of fallbackChain) {
-          try {
-            const fetchId =
-              candidate.source() === primary.source() ? result.id : result.name;
-            logger.info(
-              `[fallback] trying ${candidate.name()} (id="${fetchId}")`,
-            );
-            metadata = await candidate.fetchGame(
-              {
-                id: fetchId,
-                name: result.name,
-                company: async (name: string) => {
-                  if (companyLookupCache[name]) return companyLookupCache[name];
-
-                  const companyData = await metadataHandler.fetchCompany(name);
-                  companyLookupCache[name] = companyData;
-                  return companyData;
-                },
-                createObject: (data) => tx.createObject(data),
-              },
-              wrapTaskContext(context, {
-                min: 0,
-                max: 60,
-                prefix: `[metadata:${candidate.name()}] `,
-              }),
-            );
-            chosen = candidate;
-            break;
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            chainErrors.push(`${candidate.name()}: ${msg}`);
-            logger.warn(
-              `[fallback] ${candidate.name()} failed: ${msg} — trying next provider`,
-            );
-            // Reset the transaction so the next provider starts clean.
-            await tx.dumpObjects();
+          // The transactional handler is re-issued per fallback attempt
+          // so a failed provider's half-registered image refs don't leak
+          // into the successful provider's payload. We keep a single ref
+          // object pointing at the current transaction so the close-over
+          // `company` callback always uses the live createObject.
+          const tx = (() => {
             const [createObject, pullObjects, dumpObjects] =
               metadataHandler.objectHandler.new(
                 {},
@@ -410,82 +348,143 @@ export class MetadataHandler {
                   prefix: "[object import] ",
                 }),
               );
-            tx.createObject = createObject;
-            tx.pullObjects = pullObjects;
-            tx.dumpObjects = dumpObjects;
+            return { createObject, pullObjects, dumpObjects };
+          })();
+
+          const companyLookupCache: {
+            [key: string]: Awaited<
+              ReturnType<typeof metadataHandler.fetchCompany>
+            >;
+          } = {};
+          let metadata: GameMetadata | undefined = undefined;
+          let chosen: MetadataProvider | undefined = undefined;
+          const chainErrors: string[] = [];
+          for (const candidate of fallbackChain) {
+            try {
+              const fetchId =
+                candidate.source() === primary.source()
+                  ? result.id
+                  : result.name;
+              logger.info(
+                `[fallback] trying ${candidate.name()} (id="${fetchId}")`,
+              );
+              metadata = await candidate.fetchGame(
+                {
+                  id: fetchId,
+                  name: result.name,
+                  company: async (name: string) => {
+                    if (companyLookupCache[name])
+                      return companyLookupCache[name];
+
+                    const companyData =
+                      await metadataHandler.fetchCompany(name);
+                    companyLookupCache[name] = companyData;
+                    return companyData;
+                  },
+                  createObject: (data) => tx.createObject(data),
+                },
+                wrapTaskContext(context, {
+                  min: 0,
+                  max: 60,
+                  prefix: `[metadata:${candidate.name()}] `,
+                }),
+              );
+              chosen = candidate;
+              break;
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              chainErrors.push(`${candidate.name()}: ${msg}`);
+              logger.warn(
+                `[fallback] ${candidate.name()} failed: ${msg} — trying next provider`,
+              );
+              // Reset the transaction so the next provider starts clean.
+              await tx.dumpObjects();
+              const [createObject, pullObjects, dumpObjects] =
+                metadataHandler.objectHandler.new(
+                  {},
+                  ["internal:read"],
+                  wrapTaskContext(context, {
+                    min: 60,
+                    max: 95,
+                    prefix: "[object import] ",
+                  }),
+                );
+              tx.createObject = createObject;
+              tx.pullObjects = pullObjects;
+              tx.dumpObjects = dumpObjects;
+            }
           }
-        }
-        if (!metadata || !chosen) {
-          await tx.dumpObjects();
-          throw new Error(
-            `All ${fallbackChain.length} metadata providers failed for "${result.name}":\n  ${chainErrors.join("\n  ")}`,
-          );
-        }
-        if (chosen.source() !== primary.source()) {
-          logger.info(
-            `[fallback] primary "${primary.name()}" failed; succeeded with "${chosen.name()}"`,
-          );
-        }
+          if (!metadata || !chosen) {
+            await tx.dumpObjects();
+            throw new Error(
+              `All ${fallbackChain.length} metadata providers failed for "${result.name}":\n  ${chainErrors.join("\n  ")}`,
+            );
+          }
+          if (chosen.source() !== primary.source()) {
+            logger.info(
+              `[fallback] primary "${primary.name()}" failed; succeeded with "${chosen.name()}"`,
+            );
+          }
 
-        context?.progress(60);
+          context?.progress(60);
 
-        logger.info(`Successfully fetched all metadata.`);
-        logger.info(`Importing objects...`);
+          logger.info(`Successfully fetched all metadata.`);
+          logger.info(`Importing objects...`);
 
-        await tx.pullObjects();
+          await tx.pullObjects();
 
-        progress(95);
+          progress(95);
 
-        await prisma.game.create({
-          data: {
-            id: gameId,
-            metadataSource: chosen.source(),
-            metadataId: metadata.id,
+          await prisma.game.create({
+            data: {
+              id: gameId,
+              metadataSource: chosen.source(),
+              metadataId: metadata.id,
 
-            mName: metadata.name,
-            mShortDescription: metadata.shortDescription,
-            mDescription: metadata.description,
-            mReleased: metadata.released,
+              mName: metadata.name,
+              mShortDescription: metadata.shortDescription,
+              mDescription: metadata.description,
+              mReleased: metadata.released,
 
-            mIconObjectId: metadata.icon,
-            mBannerObjectId: metadata.bannerId,
-            mCoverObjectId: metadata.coverId,
-            mLogoObjectId: metadata.logoId,
-            mImageLibraryObjectIds: metadata.images,
-            // Auto-populate carousel with gameplay screenshots only (no
-            // banners, covers, or promotional artwork)
-            mImageCarouselObjectIds: metadata.screenshots.slice(0, 10),
+              mIconObjectId: metadata.icon,
+              mBannerObjectId: metadata.bannerId,
+              mCoverObjectId: metadata.coverId,
+              mLogoObjectId: metadata.logoId,
+              mImageLibraryObjectIds: metadata.images,
+              // Auto-populate carousel with gameplay screenshots only (no
+              // banners, covers, or promotional artwork)
+              mImageCarouselObjectIds: metadata.screenshots.slice(0, 10),
 
-            publishers: {
-              connect: metadata.publishers,
+              publishers: {
+                connect: metadata.publishers,
+              },
+              developers: {
+                connect: metadata.developers,
+              },
+
+              ratings: {
+                connectOrCreate: metadataHandler.parseRatings(metadata.reviews),
+              },
+              tags: {
+                connect: await metadataHandler.parseTags(metadata.tags),
+              },
+
+              libraryId,
+              libraryPath,
+              discFolders: discFolders ?? [],
+
+              type,
             },
-            developers: {
-              connect: metadata.developers,
-            },
+          });
 
-            ratings: {
-              connectOrCreate: metadataHandler.parseRatings(metadata.reviews),
-            },
-            tags: {
-              connect: await metadataHandler.parseTags(metadata.tags),
-            },
+          // The game is now imported — drop the unimported-games scan
+          // cache so it stops appearing in the admin import picker.
+          libraryManager.bustUnimportedGamesCache(libraryId);
 
-            libraryId,
-            libraryPath,
-            discFolders: discFolders ?? [],
+          logger.info(`Finished game import.`);
+          progress(100);
 
-            type,
-          },
-        });
-
-        // The game is now imported — drop the unimported-games scan
-        // cache so it stops appearing in the admin import picker.
-        libraryManager.bustUnimportedGamesCache(libraryId);
-
-        logger.info(`Finished game import.`);
-        progress(100);
-
-        context.addAction(`View Game:/admin/library/${gameId}`);
+          context.addAction(`View Game:/admin/library/${gameId}`);
         },
       },
       parentTask,

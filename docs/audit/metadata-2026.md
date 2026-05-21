@@ -33,13 +33,13 @@ implement it; Steam / PCGamingWiki fall back to stats-inferred health.
 
 ### 2. Auth + secrets
 
-| Provider     | Secret(s)                            | Env var(s)                            |
-| ------------ | ------------------------------------ | ------------------------------------- |
-| Steam        | none — undocumented public endpoints | —                                     |
-| IGDB         | Twitch OAuth client credentials      | `IGDB_CLIENT_ID`, `IGDB_CLIENT_SECRET`|
-| GiantBomb    | API key                              | `GIANT_BOMB_API_KEY`                  |
-| SteamGridDB  | API key                              | `STEAMGRIDDB_API_KEY`                 |
-| PCGamingWiki | none — anonymous MediaWiki           | —                                     |
+| Provider     | Secret(s)                            | Env var(s)                             |
+| ------------ | ------------------------------------ | -------------------------------------- |
+| Steam        | none — undocumented public endpoints | —                                      |
+| IGDB         | Twitch OAuth client credentials      | `IGDB_CLIENT_ID`, `IGDB_CLIENT_SECRET` |
+| GiantBomb    | API key                              | `GIANT_BOMB_API_KEY`                   |
+| SteamGridDB  | API key                              | `STEAMGRIDDB_API_KEY`                  |
+| PCGamingWiki | none — anonymous MediaWiki           | —                                      |
 
 Each provider constructor throws `MissingMetadataProviderConfig` when its
 env vars are absent; `03.metadata-init.ts` catches that and skips the

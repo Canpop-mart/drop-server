@@ -90,7 +90,9 @@
               :key="task.id"
               class="col-span-1 divide-y divide-gray-200 rounded-lg bg-zinc-800 border border-zinc-700 shadow-sm"
             >
-              <div class="flex w-full items-center justify-between space-x-6 p-2">
+              <div
+                class="flex w-full items-center justify-between space-x-6 p-2"
+              >
                 <div class="flex-1 truncate">
                   <div class="flex items-center space-x-1">
                     <div>
@@ -222,7 +224,8 @@
                   <div class="text-xs text-zinc-500 mt-1">
                     {{ formatDate(receipt.startedAt) }}
                     <span v-if="receipt.endedAt">
-                      &middot; {{ duration(receipt.startedAt, receipt.endedAt) }}
+                      &middot;
+                      {{ duration(receipt.startedAt, receipt.endedAt) }}
                     </span>
                   </div>
                   <p
@@ -373,7 +376,13 @@ const historyGroup = ref("");
 const historyStatus = ref("");
 
 const availableGroups = computed(() => [
-  ...new Set([...dailyTasks, ...weeklyTasks, ...library, ...achievements, ...system]),
+  ...new Set([
+    ...dailyTasks,
+    ...weeklyTasks,
+    ...library,
+    ...achievements,
+    ...system,
+  ]),
 ]);
 
 async function loadReceipts() {

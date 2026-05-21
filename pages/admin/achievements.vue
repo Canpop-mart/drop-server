@@ -111,9 +111,10 @@
           </button>
         </div>
         <p class="text-sm text-zinc-400">
-          Reads <code class="text-zinc-300">steam_settings/achievements.json</code>
-          from the game's files, falling back to the Steam Web API, then
-          writes the definitions to the DB.
+          Reads
+          <code class="text-zinc-300">steam_settings/achievements.json</code>
+          from the game's files, falling back to the Steam Web API, then writes
+          the definitions to the DB.
         </p>
 
         <div v-if="goldbergLink" class="bg-zinc-900/50 p-3 rounded-lg">
@@ -163,9 +164,7 @@
     <template v-if="activeTab === 'retroachievements' && selectedGameId">
       <div class="bg-zinc-800/50 rounded-xl p-6 ring-1 ring-white/5 space-y-4">
         <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold text-zinc-100">
-            RetroAchievements
-          </h2>
+          <h2 class="text-lg font-semibold text-zinc-100">RetroAchievements</h2>
           <button
             v-if="raLink"
             class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors disabled:opacity-50"
@@ -240,9 +239,7 @@
           <!-- Manual RA game ID entry -->
           <div class="flex items-end gap-3 pt-3 border-t border-zinc-700/50">
             <div class="flex-1">
-              <label class="block text-xs text-zinc-400 mb-1"
-                >RA game ID</label
-              >
+              <label class="block text-xs text-zinc-400 mb-1">RA game ID</label>
               <input
                 v-model="raGameIdInput"
                 type="number"

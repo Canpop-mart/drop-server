@@ -19,23 +19,21 @@ import { resolveClientIp } from "~/server/internal/security/ipRules";
 import { serializeIpRule } from "~/server/internal/security/serialize";
 import type { IpRulesListResponse } from "~/server/internal/security/types";
 
-export default defineEventHandler(
-  async (h3): Promise<IpRulesListResponse> => {
-    const allowed = await aclManager.allowSystemACL(h3, []);
-    if (!allowed) throw createError({ statusCode: 403 });
+export default defineEventHandler(async (h3): Promise<IpRulesListResponse> => {
+  const allowed = await aclManager.allowSystemACL(h3, []);
+  if (!allowed) throw createError({ statusCode: 403 });
 
-    const rules = await prisma.ipRule.findMany({
-      orderBy: { createdAt: "desc" },
-      include: {
-        createdByUser: {
-          select: { id: true, username: true, displayName: true },
-        },
+  const rules = await prisma.ipRule.findMany({
+    orderBy: { createdAt: "desc" },
+    include: {
+      createdByUser: {
+        select: { id: true, username: true, displayName: true },
       },
-    });
+    },
+  });
 
-    return {
-      currentIp: resolveClientIp(h3),
-      rules: rules.map(serializeIpRule),
-    };
-  },
-);
+  return {
+    currentIp: resolveClientIp(h3),
+    rules: rules.map(serializeIpRule),
+  };
+});

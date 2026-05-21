@@ -79,6 +79,8 @@ export class ObjectTransactionalHandler {
           id,
           () => {
             if (typeof data === "string") {
+              // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+              // @ts-ignore Route-registry type inference exceeds TS's depth limit (TS2589)
               return $fetch<Readable>(data, { responseType: "stream" });
             }
             return (async () => data)();

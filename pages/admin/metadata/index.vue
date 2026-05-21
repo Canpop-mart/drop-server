@@ -183,8 +183,7 @@
       >
         <div class="text-sm text-zinc-300">
           <span class="font-semibold">{{ testResult.totalResults }}</span>
-          result(s) for "{{ testResult.query }}" in
-          {{ testResult.elapsedMs }}ms
+          result(s) for "{{ testResult.query }}" in {{ testResult.elapsedMs }}ms
         </div>
         <div class="mt-2 flex flex-wrap gap-2">
           <span

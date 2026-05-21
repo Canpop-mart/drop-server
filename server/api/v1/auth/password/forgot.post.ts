@@ -7,9 +7,7 @@ import {
   hashResetToken,
   RESET_TOKEN_TTL_MS,
 } from "~/server/internal/auth/passwordReset";
-import emailManager, {
-  buildPasswordResetEmail,
-} from "~/server/internal/email";
+import emailManager, { buildPasswordResetEmail } from "~/server/internal/email";
 import { systemConfig } from "~/server/internal/config/sys-conf";
 import { logger } from "~/server/internal/logging";
 import {

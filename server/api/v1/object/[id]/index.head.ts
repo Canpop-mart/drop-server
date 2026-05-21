@@ -26,22 +26,14 @@ export default defineEventHandler(async (h3) => {
     if (ifNoneMatch === id || ifNoneMatch === `"${id}"`) {
       setResponseStatus(h3, 304);
       setHeader(h3, "ETag", `"${id}"`);
-      setHeader(
-        h3,
-        "Cache-Control",
-        "private, max-age=31536000, immutable",
-      );
+      setHeader(h3, "Cache-Control", "private, max-age=31536000, immutable");
       return null;
     }
     const legacyHash = await objectHandler.fetchHash(id);
     if (legacyHash && ifNoneMatch === legacyHash) {
       setResponseStatus(h3, 304);
       setHeader(h3, "ETag", `"${id}"`);
-      setHeader(
-        h3,
-        "Cache-Control",
-        "private, max-age=31536000, immutable",
-      );
+      setHeader(h3, "Cache-Control", "private, max-age=31536000, immutable");
       return null;
     }
   }
@@ -52,11 +44,7 @@ export default defineEventHandler(async (h3) => {
 
   setHeader(h3, "ETag", `"${id}"`);
   setHeader(h3, "Content-Type", object.mime);
-  setHeader(
-    h3,
-    "Cache-Control",
-    "private, max-age=31536000, immutable",
-  );
+  setHeader(h3, "Cache-Control", "private, max-age=31536000, immutable");
   const stat = await objectHandler.stat(id);
   if (stat) setHeader(h3, "Content-Length", stat.size);
   return null;

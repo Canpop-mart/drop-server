@@ -172,11 +172,11 @@
                 >Auto-swap steam_api DLL to GBE</label
               >
               <p class="text-zinc-400 block text-xs font-medium leading-6">
-                When enabled, Drop will replace a positively-identified
-                vanilla Valve <code>steam_api[64].dll</code> with the cached
-                GBE build at import time. Leaves OnlineFix / CODEX / EMPRESS /
-                CreamAPI / unknown custom DLLs untouched. Disable for
-                libraries of pre-fixed games.
+                When enabled, Drop will replace a positively-identified vanilla
+                Valve <code>steam_api[64].dll</code> with the cached GBE build
+                at import time. Leaves OnlineFix / CODEX / EMPRESS / CreamAPI /
+                unknown custom DLLs untouched. Disable for libraries of
+                pre-fixed games.
               </p>
             </div>
           </div>
@@ -196,11 +196,10 @@
                 >Run emulator setup on import</label
               >
               <p class="text-zinc-400 block text-xs font-medium leading-6">
-                When enabled, version imports run the emulator-setup phase
-                (SSE detection, Goldberg achievement scaffolding and the
-                gated DLL swap). Disable to make that phase a complete no-op
-                for every game in this library — broader than the DLL-swap
-                toggle above.
+                When enabled, version imports run the emulator-setup phase (SSE
+                detection, Goldberg achievement scaffolding and the gated DLL
+                swap). Disable to make that phase a complete no-op for every
+                game in this library — broader than the DLL-swap toggle above.
               </p>
             </div>
           </div>

@@ -64,16 +64,14 @@ export default defineEventHandler<{
   // Atomically: write the new credentials (version 2 = argon2id, matching
   // signup) and mark the token consumed so it cannot be replayed.
   await prisma.$transaction([
-    prisma.linkedAuthMec.update({
-      where: {
-        userId_mec: { userId: resetToken.userId, mec: AuthMec.Simple },
-      },
+    prisma.linkedAuthMec.updateMany({
+      where: { userId: resetToken.userId, mec: AuthMec.Simple },
       data: {
         version: 2,
         credentials: newHash,
       },
     }),
-    prisma.passwordResetToken.update({
+    prisma.passwordResetToken.updateMany({
       where: { id: resetToken.id },
       data: { consumedAt: new Date() },
     }),
