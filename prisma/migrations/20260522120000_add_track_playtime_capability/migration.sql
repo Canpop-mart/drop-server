@@ -1,0 +1,15 @@
+-- Catch up `ClientCapabilities` on databases that ran the historical
+-- migrations through 20250401083942_rename_save_to_cloud_saves but never
+-- received the `trackPlaytime` value — the application schema added it
+-- without a corresponding migration, so `migrate deploy`-based deployments
+-- have an enum that disagrees with the generated Prisma client. Writes of
+-- the new value (during `upsertClientCapability` after a successful
+-- handshake) fail at the DB level until this runs.
+--
+-- Additive and idempotent — `IF NOT EXISTS` makes this safe to re-apply,
+-- and we deliberately leave the deprecated `cloudSaves` value in place to
+-- avoid having to recreate the type and re-cast `Client.capabilities[]`
+-- rows. The application no longer recognises `cloudSaves`, but the
+-- handshake now tolerates unknown capability names so stale enum members
+-- are harmless.
+ALTER TYPE "ClientCapabilities" ADD VALUE IF NOT EXISTS 'trackPlaytime';

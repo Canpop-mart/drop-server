@@ -31,20 +31,28 @@ export default defineEventHandler(async (h3) => {
       statusMessage: "Invalid or unsupported platform",
     });
 
-  const capabilityIterableRaw = Object.entries(capabilities);
-  const capabilityIterable = capabilityIterableRaw.map(
-    ([capability, value]) => {
-      const actualCapability = validCapabilities.find(
-        (v) => capability.toLowerCase() == v.toLowerCase(),
+  // Match every advertised capability against the server's known set, dropping
+  // anything we don't recognise. We deliberately do NOT 400 on unknowns: the
+  // client/server pair are version-skewed in the wild (older clients still
+  // advertise renamed/removed capabilities like `cloudSaves`, newer clients
+  // advertise ones the server hasn't been updated to know yet), and the
+  // handshake has to survive that — a forgotten/extra name shouldn't lock the
+  // user out of signing in. Capabilities are *features the client supports*;
+  // anything we don't know about, we just won't register server-side.
+  const capabilityIterable = Object.entries(
+    capabilities,
+  ).flatMap<[InternalClientCapability, object]>(([capability, value]) => {
+    const actualCapability = validCapabilities.find(
+      (v) => capability.toLowerCase() === v.toLowerCase(),
+    );
+    if (!actualCapability) {
+      console.warn(
+        `[client/auth/initiate] ignoring unknown capability "${capability}" (version skew between client and server)`,
       );
-      if (!actualCapability)
-        throw createError({
-          statusCode: 400,
-          message: "Invalid capabilities.",
-        });
-      return [actualCapability, value];
-    },
-  ) as Array<[InternalClientCapability, object]>;
+      return [];
+    }
+    return [[actualCapability, value as object]];
+  });
 
   if (
     capabilityIterable.length > 0 &&
