@@ -48,22 +48,37 @@ function normalizeOrigin(raw: string | undefined): string | undefined {
   }
 }
 
-// Origins emitted by Tauri's custom server:// protocol when drop-app
-// makes API calls from its webview. These are always trusted because
-// they can only be produced by a Tauri WebView running on the same
-// machine — an attacker on a different host cannot forge them. We
-// allowlist them by default so every drop-server install supports
-// drop-app out of the box without per-deployment env-var fiddling.
+// Origins trusted because they can only be produced by a Tauri WebView
+// running on the same machine — an attacker on a different host cannot
+// forge them. Allowlisted by default so every drop-server install
+// supports drop-app out of the box without per-deployment env-var
+// fiddling.
 //
 // (The reason drop-app calls non-`/api/v1/client/**` endpoints in the
 // first place: collection/library management endpoints are shared
 // between the Nuxt web UI and drop-app to avoid maintaining two
 // parallel API surfaces. See AddLibraryButton.vue for an example.)
+//
+// Two distinct origin families have to be covered:
+//   * `*.server.localhost` — the `server://` custom-protocol host. A POST
+//     made from inside a drop-app `server://` *iframe* (store, community,
+//     news, …) is same-origin to the iframe, so its Origin is this.
+//   * `*.tauri.localhost` / `tauri://localhost` — the drop-app webview's
+//     OWN origin. A POST from a *native* drop-app page (e.g. the store
+//     "Add to Library" button) carries the webview origin, NOT the
+//     server:// host. WebView2 (Windows) and recent WebKitGTK (Linux)
+//     report `http://tauri.localhost`; WKWebView (macOS) reports
+//     `tauri://localhost`. Omitting these 403s every native-page POST.
 const TAURI_CUSTOM_PROTOCOL_ORIGINS = [
+  // server:// custom-protocol host (iframe-originated requests).
   "http://server.localhost",
   "https://server.localhost",
-  // Some Tauri platforms (notably macOS) use the `tauri://` scheme.
   "tauri://server.localhost",
+  // drop-app webview origin (native-page-originated requests).
+  "http://tauri.localhost",
+  "https://tauri.localhost",
+  "tauri://localhost",
+  "tauri://tauri.localhost",
 ] as const;
 
 function extractExpectedOrigins(hostHeader: string | undefined): Set<string> {
