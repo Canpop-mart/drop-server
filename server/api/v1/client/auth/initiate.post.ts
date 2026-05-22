@@ -39,9 +39,9 @@ export default defineEventHandler(async (h3) => {
   // handshake has to survive that — a forgotten/extra name shouldn't lock the
   // user out of signing in. Capabilities are *features the client supports*;
   // anything we don't know about, we just won't register server-side.
-  const capabilityIterable = Object.entries(
-    capabilities,
-  ).flatMap<[InternalClientCapability, object]>(([capability, value]) => {
+  const capabilityIterable = Object.entries(capabilities).flatMap<
+    [InternalClientCapability, object]
+  >(([capability, value]) => {
     const actualCapability = validCapabilities.find(
       (v) => capability.toLowerCase() === v.toLowerCase(),
     );
