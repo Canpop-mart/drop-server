@@ -109,8 +109,15 @@ export class ObjectHandler {
     permissions: Array<string>,
   ) {
     const { source, mime } = await this.fetchMimeType(await sourceFetcher());
-    if (!mime)
-      throw new Error("Unable to calculate MIME type - is the source empty?");
+    // Fail fast on either missing piece — if the source isn't a Buffer or
+    // a Readable (e.g. an empty upload), `fetchMimeType` returns both as
+    // undefined and we'd otherwise hand `undefined` straight to
+    // `backend.create()`, leaving a metadata-only orphan in the store
+    // and any DB row that referenced this id pointing nowhere.
+    if (!source || !mime)
+      throw new Error(
+        "Unable to determine object source or MIME type — the upload is empty or unreadable.",
+      );
 
     await this.backend.create(id, source, {
       permissions,

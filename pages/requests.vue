@@ -219,18 +219,121 @@
                       :placeholder="$t('requests.form.descriptionPlaceholder')"
                     />
                   </div>
+                  <!-- Metadata-provider search. Lets the requester pick the
+                       game from the same lookups the admin import flow
+                       uses, so the request lands with proper source URLs
+                       without manual pasting. The manual Steam URL field
+                       below stays as a fallback for obscure titles. -->
                   <div>
-                    <label
-                      class="block text-sm font-medium text-zinc-300 mb-1"
-                      >{{ $t("requests.form.steamUrl") }}</label
+                    <label class="block text-sm font-medium text-zinc-300 mb-1">
+                      Find on Steam / IGDB
+                      <span class="text-zinc-500 font-normal">(optional)</span>
+                    </label>
+
+                    <!-- Picked state -->
+                    <div
+                      v-if="matchedResult"
+                      class="flex items-center gap-3 rounded-md border border-blue-500/30 bg-blue-500/5 p-3"
                     >
+                      <img
+                        v-if="matchedResult.icon"
+                        :src="matchedResult.icon"
+                        class="size-12 rounded object-cover bg-zinc-800 shrink-0"
+                        alt=""
+                      />
+                      <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-zinc-100 truncate">
+                          {{ matchedResult.name }}
+                        </p>
+                        <p class="text-xs text-zinc-400 truncate">
+                          {{ matchedResult.sourceName
+                          }}<span v-if="matchedResult.year">
+                            &middot; {{ matchedResult.year }}</span
+                          >
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        class="text-xs text-zinc-400 hover:text-red-400 transition-colors shrink-0"
+                        @click="clearMatch"
+                      >
+                        Clear
+                      </button>
+                    </div>
+
+                    <!-- Search state -->
+                    <div v-else>
+                      <input
+                        v-model="searchQuery"
+                        type="text"
+                        class="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
+                        placeholder="Type a game name to search providers…"
+                        @input="onSearchInput"
+                      />
+                      <div v-if="searching" class="mt-2 text-xs text-zinc-500">
+                        Searching…
+                      </div>
+                      <div
+                        v-else-if="searchResults.length > 0"
+                        class="mt-2 max-h-56 overflow-y-auto rounded-md border border-zinc-700 bg-zinc-800/50 divide-y divide-zinc-700/50"
+                      >
+                        <button
+                          v-for="r in searchResults"
+                          :key="`${r.sourceId}-${r.id}`"
+                          type="button"
+                          class="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-zinc-700/40 transition-colors"
+                          @click="pickResult(r)"
+                        >
+                          <img
+                            v-if="r.icon"
+                            :src="r.icon"
+                            class="size-10 rounded object-cover bg-zinc-900 shrink-0"
+                            alt=""
+                          />
+                          <div class="flex-1 min-w-0">
+                            <p class="text-sm text-zinc-100 truncate">
+                              {{ r.name }}
+                            </p>
+                            <p class="text-xs text-zinc-500 truncate">
+                              {{ r.sourceName
+                              }}<span v-if="r.year">
+                                &middot; {{ r.year }}</span
+                              >
+                            </p>
+                          </div>
+                        </button>
+                      </div>
+                      <p
+                        v-else-if="searchQuery.trim().length >= 2 && !searching"
+                        class="mt-2 text-xs text-zinc-500"
+                      >
+                        No matches. You can still submit the request with just a
+                        title.
+                      </p>
+                    </div>
+                  </div>
+
+                  <!-- Manual Steam URL fallback, collapsed until needed. -->
+                  <details v-if="!matchedResult" class="text-sm">
+                    <summary
+                      class="cursor-pointer text-xs text-zinc-500 hover:text-zinc-300 select-none"
+                    >
+                      Or paste a Steam URL directly
+                    </summary>
                     <input
                       v-model="newSteamUrl"
                       type="url"
-                      class="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
+                      class="mt-2 w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
                       placeholder="https://store.steampowered.com/app/..."
                     />
-                  </div>
+                  </details>
+                </div>
+
+                <div
+                  v-if="createError"
+                  class="mt-4 rounded-md bg-red-500/10 p-3 ring-1 ring-red-500/20"
+                >
+                  <p class="text-sm text-red-400">{{ createError }}</p>
                 </div>
 
                 <div class="flex justify-end gap-2 mt-6">
@@ -380,24 +483,127 @@ const creating = ref(false);
 const newTitle = ref("");
 const newDescription = ref("");
 const newSteamUrl = ref("");
+// Error from the last submit attempt — previously this was a silent
+// try/finally, so any 4xx (validation, CSRF, ACL) or transport failure
+// made the modal feel broken. Surface it inline so the user knows.
+const createError = ref<string | undefined>();
+
+// ── Metadata-provider search ──────────────────────────────────────────
+// Lets the requester pick the game from the same Steam / IGDB /
+// PCGamingWiki search the admin import flow uses, so the request lands
+// with proper source URLs without forcing the user to paste them. The
+// manual Steam URL field stays as a fallback for obscure titles the
+// providers don't surface.
+type MetadataSearchResult = {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  year: number;
+  sourceId: string;
+  sourceName: string;
+};
+const searchQuery = ref("");
+const searchResults = ref<MetadataSearchResult[]>([]);
+const searching = ref(false);
+const matchedResult = ref<MetadataSearchResult | null>(null);
+let searchDebounce: ReturnType<typeof setTimeout> | undefined;
+
+function onSearchInput() {
+  if (searchDebounce) clearTimeout(searchDebounce);
+  const q = searchQuery.value.trim();
+  if (q.length < 2) {
+    searchResults.value = [];
+    searching.value = false;
+    return;
+  }
+  searching.value = true;
+  searchDebounce = setTimeout(async () => {
+    try {
+      const results = await $dropFetch<MetadataSearchResult[]>(
+        `/api/v1/store/requests/metadata-search?q=${encodeURIComponent(q)}`,
+      );
+      // Guard against a stale callback: only land results if the user
+      // hasn't kept typing past this query.
+      if (searchQuery.value.trim() === q) {
+        searchResults.value = results ?? [];
+      }
+    } catch {
+      searchResults.value = [];
+    } finally {
+      searching.value = false;
+    }
+  }, 300);
+}
+
+function pickResult(r: MetadataSearchResult) {
+  matchedResult.value = r;
+  // Take the picked name as the title if the user hadn't already typed
+  // one — saves re-typing what they just clicked and ensures the title
+  // matches the metadata source exactly.
+  if (!newTitle.value.trim()) newTitle.value = r.name;
+  searchResults.value = [];
+  searchQuery.value = "";
+}
+
+function clearMatch() {
+  matchedResult.value = null;
+  searchResults.value = [];
+}
+
+/**
+ * Derive Steam / IGDB URLs from a picked metadata result. Steam URLs
+ * are deterministic from the app ID; IGDB's canonical URLs use slugs
+ * that the search payload doesn't carry, so IGDB picks contribute the
+ * title + provider hint but no URL. Picks from any other provider
+ * (PCGamingWiki, GiantBomb, Manual) similarly just contribute the title.
+ */
+function urlsFromMatch(r: MetadataSearchResult | null) {
+  if (!r) return { steamUrl: undefined, igdbUrl: undefined };
+  if (r.sourceId === "Steam")
+    return {
+      steamUrl: `https://store.steampowered.com/app/${r.id}`,
+      igdbUrl: undefined,
+    };
+  return { steamUrl: undefined, igdbUrl: undefined };
+}
 
 async function createRequest() {
   if (!newTitle.value.trim()) return;
   creating.value = true;
+  createError.value = undefined;
   try {
+    const { steamUrl: matchSteam, igdbUrl: matchIgdb } = urlsFromMatch(
+      matchedResult.value,
+    );
     await $dropFetch("/api/v1/store/requests/create", {
       method: "POST",
       body: {
         title: newTitle.value.trim(),
         description: newDescription.value.trim(),
-        steamUrl: newSteamUrl.value.trim() || undefined,
+        steamUrl: matchSteam ?? (newSteamUrl.value.trim() || undefined),
+        igdbUrl: matchIgdb,
       },
     });
     newTitle.value = "";
     newDescription.value = "";
     newSteamUrl.value = "";
+    matchedResult.value = null;
+    searchQuery.value = "";
+    searchResults.value = [];
     createDialogOpen.value = false;
     await fetchRequests();
+  } catch (e: unknown) {
+    const err = e as {
+      statusMessage?: string;
+      data?: { message?: string };
+      message?: string;
+    };
+    createError.value =
+      err?.data?.message ||
+      err?.statusMessage ||
+      err?.message ||
+      "Failed to create request.";
   } finally {
     creating.value = false;
   }

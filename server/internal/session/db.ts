@@ -49,14 +49,22 @@ export default function createDBSessionHandler(): SessionProvider {
       });
       if (result === null) return undefined;
 
-      // add to cache
-      // need to cast to Session since prisma returns a more specific type
-      await cache.set(token, result as SessionWithToken);
-
-      // i hate casting
-      // need to cast to unknown since result.data can be an N deep json object technically
-      // ts doesn't like that be cast down to the more constraining session type
-      return result.data as unknown as T;
+      // Cache the session payload, NOT the Prisma row. Historically we
+      // cached `result` directly, which wraps the real session under a
+      // `data:` field — so every cache-hit after the 5-min cache TTL
+      // rotated handed callers `{ token, userId, expiresAt, data: { …real
+      // session… } }` cast as Session. `session.authenticated` was
+      // `undefined` on those reads, the ACL check decided "not signed in,"
+      // and the user got bounced back to /auth. Sign-in's own `setSession`
+      // stores the correct shape, which is why the bug only showed up
+      // ~5 min after login — once the freshly-set cache entry expired and
+      // the DB-fallback re-poisoned it.
+      const session: SessionWithToken = {
+        ...(result.data as unknown as SessionWithToken),
+        token,
+      };
+      await cache.set(token, session);
+      return session as T;
     },
     async removeSession(token) {
       await cache.remove(token);
