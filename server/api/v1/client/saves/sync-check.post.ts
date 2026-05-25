@@ -41,8 +41,18 @@ import prisma from "~/server/internal/db/database";
  *     clientModifiedAt: string,
  *     uploadedFrom: string,
  *     uploadedAt: string
+ *   }],
+ *   tombstones: [{              // saves the user deleted from another device
+ *     filename: string,         // client deletes its local copy of this file
+ *     deletedAt: string,        // ISO timestamp of the soft-delete
+ *     deletedFrom: string       // device that initiated the delete
  *   }]
  * }
+ *
+ * Tombstones are saves the user actively deleted (soft-deleted server-side
+ * via `delete.post.ts`) from a different device. The client should remove
+ * its local copy after backing it up — this is the cross-device mirror of
+ * the delete operation.
  */
 export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const user = await fetchUser();
@@ -58,8 +68,10 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     });
   }
 
-  // Fetch all cloud saves for this game+user (metadata only, no blob)
-  const cloudSaves = await prisma.cloudSave.findMany({
+  // Fetch all cloud saves for this game+user (metadata only, no blob),
+  // including tombstoned ones — we split them client-side. We need
+  // `deletedAt`/`deletedFrom` for the tombstone array.
+  const allCloudSaves = await prisma.cloudSave.findMany({
     where: { gameId, userId },
     select: {
       id: true,
@@ -70,8 +82,18 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
       uploadedFrom: true,
       clientModifiedAt: true,
       uploadedAt: true,
+      deletedAt: true,
+      deletedFrom: true,
     },
   });
+
+  // Active rows feed the normal conflict-detection path; tombstoned rows
+  // feed the `tombstones` array and are otherwise invisible to the client.
+  const cloudSaves = allCloudSaves
+    .filter((s) => s.deletedAt === null)
+    // strip the tombstone fields from the public response shape; clients
+    // don't need them on active rows and it keeps the JSON small.
+    .map(({ deletedAt: _da, deletedFrom: _df, ...rest }) => rest);
 
   const cloudByFilename = new Map(cloudSaves.map((s) => [s.filename, s]));
   const localFilenames = new Set(
@@ -89,7 +111,11 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     const cloud = cloudByFilename.get(local.filename);
 
     if (!cloud) {
-      // Local only — needs upload
+      // Local only — needs upload. Note: if there's a tombstone for this
+      // filename we DON'T silently re-upload; that's the whole point of the
+      // tombstone flow. The client receives both the "upload" action AND
+      // the matching tombstone entry; its sync code prefers the tombstone
+      // (i.e. delete locally) when both are present.
       actions.push({
         filename: local.filename,
         action: "upload",
@@ -131,8 +157,20 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     });
   }
 
-  // Cloud-only saves (not present locally) — client should download these
+  // Cloud-only saves (not present locally) — client should download these.
   const cloudOnly = cloudSaves.filter((s) => !localFilenames.has(s.filename));
 
-  return { actions, cloudOnly };
+  // Tombstones surface deletes the user made on another device so this
+  // client can mirror them. We send filename + when + where so the client
+  // can both delete the local copy and show a friendly "deleted from
+  // <Marts Desktop>" hint.
+  const tombstones = allCloudSaves
+    .filter((s) => s.deletedAt !== null)
+    .map((s) => ({
+      filename: s.filename,
+      deletedAt: s.deletedAt!.toISOString(),
+      deletedFrom: s.deletedFrom ?? "",
+    }));
+
+  return { actions, cloudOnly, tombstones };
 });

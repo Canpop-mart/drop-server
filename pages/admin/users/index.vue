@@ -160,6 +160,17 @@
                               {{ $t("users.admin.setPasswordAction") }}
                             </button>
                           </MenuItem>
+                          <MenuItem v-slot="{ active }">
+                            <button
+                              :class="[
+                                active ? 'bg-zinc-800 outline-none' : '',
+                                'block w-full px-3 py-1 text-left text-sm/6 text-zinc-100 transition-colors duration-200',
+                              ]"
+                              @click="() => (userToSetQuota = user)"
+                            >
+                              {{ $t("users.admin.setCloudQuotaAction") }}
+                            </button>
+                          </MenuItem>
                           <MenuItem
                             v-if="user.id !== currentUser?.id"
                             v-slot="{ active }"
@@ -188,6 +199,7 @@
     <ModalDeleteUser v-model="userToDelete" />
     <ModalGenerateResetLink v-model="userToResetLink" />
     <ModalSetUserPassword v-model="userToSetPassword" />
+    <ModalSetCloudSaveQuota v-model="userToSetQuota" />
   </div>
 </template>
 
@@ -215,6 +227,7 @@ if (!users.value) {
 const userToDelete = ref();
 const userToResetLink = ref<UserModel | undefined>();
 const userToSetPassword = ref<UserModel | undefined>();
+const userToSetQuota = ref<UserModel | undefined>();
 
 const setUserToDelete = (user: UserModel) => (userToDelete.value = user);
 </script>

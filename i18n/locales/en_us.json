@@ -1039,7 +1039,8 @@
         "name": "Name",
         "newest": "Newest",
         "recent": "Recently Added",
-        "relevance": "Relevance"
+        "relevance": "Relevance",
+        "updated": "Recently Updated"
       },
       "srFilters": "Filters",
       "srGames": "Games"
@@ -1168,6 +1169,16 @@
         "title": "Reset link for {0}",
         "urlLabel": "Password reset link"
       },
+      "setCloudQuota": {
+        "currentUsage": "Currently using {0}",
+        "description": "Limits how many bytes of cloud-save data this user can store. Uploads that would exceed the limit are rejected with HTTP 413.",
+        "invalidRange": "Enter a value between 0 and 1,048,576 MiB.",
+        "quotaLabel": "Cloud save quota",
+        "submitButton": "Save quota",
+        "success": "Quota set to {0}.",
+        "title": "Cloud save quota for {0}"
+      },
+      "setCloudQuotaAction": "Set cloud save quota",
       "setPassword": {
         "confirmLabel": "Confirm password",
         "confirmMismatch": "Passwords do not match.",

@@ -15,10 +15,18 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
 
   const save = await prisma.cloudSave.findUnique({
     where: { id },
-    select: { userId: true, data: true, filename: true, saveType: true },
+    select: {
+      userId: true,
+      data: true,
+      filename: true,
+      saveType: true,
+      deletedAt: true,
+    },
   });
 
-  if (!save || save.userId !== userId) {
+  // Tombstoned rows are invisible to downloads — a stale client holding an
+  // ID from before the delete should get a 404, not the deleted bytes.
+  if (!save || save.userId !== userId || save.deletedAt !== null) {
     throw createError({ statusCode: 404, statusMessage: "Save not found" });
   }
 

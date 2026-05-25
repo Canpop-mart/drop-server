@@ -37,6 +37,17 @@ model CloudSave {
     uploadedAt DateTime @default(now()) @db.Timestamptz(6)
     updatedAt  DateTime @updatedAt @db.Timestamptz(6)
 
+    /// Soft-delete tombstone timestamp. When non-null the row is "deleted":
+    /// excluded from list/sync-check active sets, but surfaced as a tombstone
+    /// in sync-check so other clients can mirror the delete locally.
+    /// A periodic GC sweep purges rows older than 30 days.
+    deletedAt   DateTime? @db.Timestamptz(6)
+
+    /// Hostname / friendly device name that initiated the deletion.
+    /// Shown in the "deleted from <Marts Desktop>" hint in the UI.
+    deletedFrom String?
+
     @@unique([gameId, userId, filename])
     @@index([gameId, userId])
+    @@index([userId, deletedAt])
 }

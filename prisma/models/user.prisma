@@ -11,6 +11,11 @@ model User {
     bio                    String  @default("")
     profileTheme           String  @default("default")
 
+    /// Per-user cloud-save aggregate quota in bytes.
+    /// Default 1 GiB (1_073_741_824). Admin can raise per-user.
+    /// Enforced by the upload + bulk-upload endpoints.
+    cloudSaveQuotaBytes BigInt @default(1073741824)
+
     favoriteGames FavoriteGame[]
 
     authMecs LinkedAuthMec[]

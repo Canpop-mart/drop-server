@@ -13,8 +13,12 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   if (!gameId)
     throw createError({ statusCode: 400, statusMessage: "gameId required" });
 
+  // Hide tombstones from the listing — `delete.post.ts` soft-deletes by
+  // setting `deletedAt`, and listings should reflect what the user thinks of
+  // as "their saves". Cross-device delete cascading runs through sync-check's
+  // `tombstones` array, not this endpoint.
   const saves = await prisma.cloudSave.findMany({
-    where: { gameId, userId },
+    where: { gameId, userId, deletedAt: null },
     select: {
       id: true,
       filename: true,

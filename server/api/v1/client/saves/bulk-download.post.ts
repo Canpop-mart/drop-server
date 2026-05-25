@@ -47,6 +47,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     where: {
       id: { in: saveIds },
       userId, // enforce ownership
+      deletedAt: null, // tombstoned saves are invisible to downloads
     },
     select: {
       id: true,

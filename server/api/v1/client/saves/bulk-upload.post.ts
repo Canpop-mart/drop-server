@@ -4,6 +4,10 @@ import sanitizeFilename from "sanitize-filename";
 import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
+import {
+  fetchUserQuota,
+  quotaExceededMessage,
+} from "~/server/internal/cloudsaves/quota";
 
 const MAX_SAVES_PER_REQUEST = 50;
 const MAX_SAVE_BYTES = 50 * 1024 * 1024; // 50MB
@@ -35,6 +39,13 @@ const BulkUploadBody = type({
  *
  * Upload multiple save files in a single request.
  * Used during post-exit sync to push all changed saves at once.
+ *
+ * Quota handling: partial-acceptance.
+ *   - Pre-decode every save and compute its replacement bytes.
+ *   - Walk saves in order, accepting each that still fits within the user's
+ *     remaining quota; ones that don't fit produce a per-file error entry
+ *     with `quota_exceeded` and are skipped. This way a single huge file
+ *     doesn't black-hole a batch of small ones.
  */
 export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const user = await fetchUser();
@@ -62,6 +73,34 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   }> = [];
 
   const errors: Array<{ filename: string; error: string }> = [];
+
+  // Quota: snapshot current usage + limit once, then accept saves one by one
+  // until the running total would exceed the limit. We refetch sizes of any
+  // saves being overwritten so we don't double-count their existing bytes
+  // against the quota.
+  const { usedBytes, limitBytes } = await fetchUserQuota(userId);
+  let runningBytes = usedBytes;
+
+  // Bulk-fetch any pre-existing rows for these filenames so we can subtract
+  // their current `size` when computing the projection. Tombstoned rows are
+  // included — we'll be reviving them, so their stored bytes belong to the
+  // user regardless of the `deletedAt` flag.
+  const incomingFilenames = saves.map((s) => sanitizeFilename(s.filename));
+  const existing = await prisma.cloudSave.findMany({
+    where: {
+      gameId,
+      userId,
+      filename: { in: incomingFilenames },
+    },
+    select: { filename: true, size: true, deletedAt: true },
+  });
+  const existingByFilename = new Map(
+    existing
+      // Only subtract sizes of active rows: tombstoned rows are
+      // excluded from `usedBytes` so their size isn't in the snapshot.
+      .filter((e) => e.deletedAt === null)
+      .map((e) => [e.filename, e.size]),
+  );
 
   for (const save of saves) {
     try {
@@ -91,6 +130,19 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
         errors.push({
           filename,
           error: `File too large (max ${MAX_SAVE_BYTES / (1024 * 1024)}MB)`,
+        });
+        continue;
+      }
+
+      // Quota check before we touch the DB. `existingSize` is the bytes the
+      // current row contributes to `runningBytes`; we subtract it because
+      // the row will be replaced, not added on top.
+      const existingSize = existingByFilename.get(filename) ?? 0;
+      const projected = runningBytes - existingSize + buffer.length;
+      if (projected > limitBytes) {
+        errors.push({
+          filename,
+          error: quotaExceededMessage(projected, limitBytes),
         });
         continue;
       }
@@ -133,8 +185,18 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
           dataHash: hash,
           uploadedFrom: uploadedFrom || "",
           clientModifiedAt: clientModifiedAtSafe,
+          // Resurrect tombstoned rows on re-upload.
+          deletedAt: null,
+          deletedFrom: null,
         },
       });
+
+      // Update the running tally only after a successful upsert so a thrown
+      // exception doesn't lock subsequent saves out of an artificial limit.
+      runningBytes = projected;
+      // Future iterations on the same filename (unlikely but possible in a
+      // single batch) should now treat the post-upsert size as the baseline.
+      existingByFilename.set(filename, buffer.length);
 
       results.push({
         filename: result.filename,

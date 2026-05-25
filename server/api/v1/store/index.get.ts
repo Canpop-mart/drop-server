@@ -22,7 +22,7 @@ const StoreRead = type({
   company: "string?",
   companyActions: "string = 'published,developed'",
 
-  sort: "'default' | 'newest' | 'recent' | 'name' | 'relevance' | 'random' = 'default'",
+  sort: "'default' | 'newest' | 'recent' | 'updated' | 'name' | 'relevance' | 'random' = 'default'",
   order: "'asc' | 'desc' = 'desc'",
 });
 
@@ -250,6 +250,16 @@ export default defineEventHandler(async (h3) => {
       ],
     } satisfies Prisma.GameWhereInput;
 
+    if (effectiveSort === "updated") {
+      const { results, count } = await pageByLatestVersion(
+        searchFilter,
+        options.skip,
+        Math.min(options.take, 55),
+        options.order,
+      );
+      return { results: await attachRelations(results), count };
+    }
+
     const [games, count] = await prisma.$transaction([
       prisma.game.findMany({
         skip: options.skip,
@@ -295,6 +305,16 @@ export default defineEventHandler(async (h3) => {
     return { results: await attachRelations(fullGames), count };
   }
 
+  if (options.sort === "updated") {
+    const { results, count } = await pageByLatestVersion(
+      finalFilter,
+      options.skip,
+      Math.min(options.take, 55),
+      options.order,
+    );
+    return { results: await attachRelations(results), count };
+  }
+
   const sort: Prisma.GameOrderByWithRelationInput = {};
   switch (options.sort) {
     case "default":
@@ -322,3 +342,62 @@ export default defineEventHandler(async (h3) => {
 
   return { results: await attachRelations(games), count };
 });
+
+/**
+ * Sort by latest GameVersion.created date. Prisma's `orderBy` doesn't expose
+ * `_max` on a one-to-many relation, so we pull (id, latestVersionAt) for
+ * every game matching the filter, sort in JS, slice the page, then re-fetch
+ * the page's full rows. The candidate set is just (string, Date) pairs —
+ * tiny even on a multi-thousand-game catalogue — and avoids reimplementing
+ * Prisma's filter shapes in raw SQL.
+ *
+ * Games with no versions are sorted last regardless of direction, since
+ * "never updated" shouldn't poison the top of the list.
+ */
+async function pageByLatestVersion(
+  filter: Prisma.GameWhereInput,
+  skip: number,
+  take: number,
+  order: "asc" | "desc",
+) {
+  const candidates = await prisma.game.findMany({
+    where: filter,
+    select: {
+      id: true,
+      versions: {
+        select: { created: true },
+        orderBy: { created: "desc" },
+        take: 1,
+      },
+    },
+  });
+
+  const sorted = candidates
+    .map((g) => ({
+      id: g.id,
+      latestVersionAt: g.versions[0]?.created ?? null,
+    }))
+    .sort((a, b) => {
+      if (a.latestVersionAt === null && b.latestVersionAt === null) return 0;
+      if (a.latestVersionAt === null) return 1;
+      if (b.latestVersionAt === null) return -1;
+      const cmp = a.latestVersionAt.getTime() - b.latestVersionAt.getTime();
+      return order === "asc" ? cmp : -cmp;
+    });
+
+  const pageIds = sorted.slice(skip, skip + take).map((g) => g.id);
+
+  if (pageIds.length === 0) {
+    return { results: [], count: candidates.length };
+  }
+
+  const games = await prisma.game.findMany({
+    where: { id: { in: pageIds } },
+  });
+
+  // Prisma doesn't preserve `in:` order; restore from the precomputed slice.
+  const idIndex = new Map(pageIds.map((id, i) => [id, i]));
+  games.sort((a, b) => (idIndex.get(a.id) ?? 0) - (idIndex.get(b.id) ?? 0));
+
+  return { results: games, count: candidates.length };
+}

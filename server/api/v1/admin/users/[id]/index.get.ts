@@ -35,10 +35,17 @@ export default defineEventHandler(async (h3) => {
       bannerObjectId: true,
       bio: true,
       profileTheme: true,
+      cloudSaveQuotaBytes: true,
     },
   });
   if (!user)
     throw createError({ statusCode: 404, statusMessage: "User not found." });
 
-  return user;
+  // BigInt doesn't survive default JSON serialization; cast to number for the
+  // wire. Range is bounded by the POST endpoint (≤ Number.MAX_SAFE_INTEGER),
+  // so the round-trip is lossless.
+  return {
+    ...user,
+    cloudSaveQuotaBytes: Number(user.cloudSaveQuotaBytes),
+  };
 });

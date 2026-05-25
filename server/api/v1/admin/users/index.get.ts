@@ -29,8 +29,13 @@ export default defineEventHandler(async (h3) => {
     mecsByUser.set(am.userId, arr);
   }
 
+  // cloudSaveQuotaBytes is a Prisma BigInt; coerce to number so the wire
+  // payload is plain JSON (Nuxt's default serializer turns BigInt into a
+  // string, which the admin modal would have to special-case). Range is
+  // bounded ≤ Number.MAX_SAFE_INTEGER by the quota POST endpoint.
   return users.map((u) => ({
     ...u,
+    cloudSaveQuotaBytes: Number(u.cloudSaveQuotaBytes),
     authMecs: mecsByUser.get(u.id) ?? [],
   }));
 });

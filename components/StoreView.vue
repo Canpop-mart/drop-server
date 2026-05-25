@@ -489,11 +489,16 @@ const [tags, storeLibraries] = await Promise.all([
   $dropFetch<Array<{ id: string; name: string }>>("/api/v1/store/libraries"),
 ]);
 
+// `newest` (Game.mReleased) was dropped from the chip row because the
+// metadata-provider release date is unreliable for remakes/remasters and
+// isn't what users expect on a store. `recent` (Game.created) and the
+// new `updated` (max version.created) are the two meaningful "freshness"
+// axes; release date isn't really one of them. `default` is still
+// accepted by the API for any direct callers but no longer surfaced.
 const sorts = computed<Array<StoreSortOption>>(() => {
   const base: Array<StoreSortOption> = [
-    { name: t("store.view.sorts.default"), param: "default" },
-    { name: t("store.view.sorts.newest"), param: "newest" },
     { name: t("store.view.sorts.recent"), param: "recent" },
+    { name: t("store.view.sorts.updated"), param: "updated" },
     { name: t("store.view.sorts.name"), param: "name" },
   ];
   if (debouncedSearch.value.length > 0) {
@@ -501,7 +506,7 @@ const sorts = computed<Array<StoreSortOption>>(() => {
   }
   return base;
 });
-const currentSort = ref(sorts.value[0].param);
+const currentSort = ref<StoreSortOption["param"]>("recent");
 const sortOrder = ref<"asc" | "desc">("desc");
 
 const options: Array<StoreFilterOption> = [
