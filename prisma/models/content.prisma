@@ -100,7 +100,8 @@ model GameTag {
   id   String @id @default(uuid())
   name String @unique
 
-  games Game[]
+  games             Game[]
+  weeklyChallenges  WeeklyChallenge[]
 
   @@index([name(ops: raw("gist_trgm_ops(siglen=32)"))], type: Gist)
 }

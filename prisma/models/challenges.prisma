@@ -1,0 +1,27 @@
+/// Server-wide weekly community challenge. One row per ISO week, keyed by
+/// `weekStart` (always the Monday 00:00 UTC for the week). Auto-generated on
+/// the first GET against `/api/v1/community/weekly-challenge` for a given
+/// week — the endpoint is the single source of truth for creation, so there
+/// is no admin UI and no background job involved.
+///
+/// `kind` rotates round-robin between `total_playtime`, `total_unlocks`, and
+/// `genre_focus` (selected by `weekOfYear(now) % 3`). For `genre_focus`,
+/// `tagId` references the underplayed tag the challenge is focused on; for
+/// the other two kinds it's null. Progress is computed live on each GET, so
+/// the row only stores the immutable targets/description.
+model WeeklyChallenge {
+  id          String   @id @default(uuid())
+  weekStart   DateTime @unique @db.Timestamptz(6)
+  kind        String
+  title       String
+  description String
+  targetValue Int
+
+  /// For `genre_focus` only — the GameTag this week's challenge is focused on.
+  /// Cleared (set to null) if the tag is deleted; the challenge row still
+  /// renders, just without its focus context.
+  tagId String?
+  tag   GameTag? @relation(fields: [tagId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+}

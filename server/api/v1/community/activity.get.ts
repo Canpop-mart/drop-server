@@ -9,6 +9,7 @@ export default defineEventHandler(async (h3) => {
   const query = getQuery(h3);
   const limit = Math.min(Number(query.limit) || 30, 100);
   const before = query.before ? new Date(query.before as string) : undefined;
+  const gameId = typeof query.gameId === "string" ? query.gameId : undefined;
 
   const timeFilter = before ? { lt: before } : undefined;
 
@@ -19,23 +20,46 @@ export default defineEventHandler(async (h3) => {
     profilePictureObjectId: true,
   } as const;
 
+  // For per-game scope, prefilter the achievement set so the unlock query is
+  // narrowed by an indexed `achievementId IN (...)` instead of post-filtering
+  // in JS. For the all-games view, this stays unused.
+  const scopedAchievementIds = gameId
+    ? (
+        await prisma.achievement.findMany({
+          where: { gameId },
+          select: { id: true },
+        })
+      ).map((a) => a.id)
+    : null;
+
   // Fetch each activity type in parallel (no nested includes)
   const [sessions, rawAchievements, approvedRequests] = await Promise.all([
     prisma.playSession.findMany({
-      where: before ? { startedAt: timeFilter } : undefined,
+      where: {
+        ...(before ? { startedAt: timeFilter } : {}),
+        ...(gameId ? { gameId } : {}),
+      },
       orderBy: { startedAt: "desc" },
       take: limit,
     }),
     prisma.userAchievement.findMany({
-      where: before ? { unlockedAt: timeFilter } : undefined,
+      where: {
+        ...(before ? { unlockedAt: timeFilter } : {}),
+        ...(scopedAchievementIds
+          ? { achievementId: { in: scopedAchievementIds } }
+          : {}),
+      },
       orderBy: { unlockedAt: "desc" },
       take: limit,
     }),
+    // Game requests aren't really "per-game" activity in the same sense, but
+    // when filtering by game we still want the request that introduced it.
     prisma.gameRequest.findMany({
       where: {
         status: RequestStatus.Approved,
         ...(before ? { reviewedAt: timeFilter } : {}),
         reviewedAt: { not: null },
+        ...(gameId ? { gameId } : {}),
       },
       orderBy: { reviewedAt: "desc" },
       take: 20,
