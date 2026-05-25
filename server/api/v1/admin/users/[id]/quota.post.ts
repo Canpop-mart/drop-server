@@ -16,7 +16,10 @@ const Body = type({
 });
 
 export default defineEventHandler(async (h3) => {
-  const allowed = await aclManager.allowSystemACL(h3, ["user:write"]);
+  // No granular `user:update` exists in the ACL table — `user:delete` is
+  // the existing umbrella for any admin write on a user row (the
+  // set-password endpoint uses the same one).
+  const allowed = await aclManager.allowSystemACL(h3, ["user:delete"]);
   if (!allowed) throw createError({ statusCode: 403 });
 
   const userId = getRouterParam(h3, "id");
