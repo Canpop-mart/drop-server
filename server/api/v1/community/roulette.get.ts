@@ -1,20 +1,26 @@
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
+import { GameType } from "~/prisma/client/enums";
 
 /**
- * "Spin to pick" — returns ONE random game from a prioritized pool so the
- * front-end can power a roulette-style discovery widget.
+ * "Spin to pick" — returns ONE random game from a weighted pool of EVERY
+ * game on the Drop store, so the wheel can land on something the caller
+ * has never seen as well as anything from their own library.
  *
- * Priority order (first non-empty pool wins):
- *   1. `rediscovery` — games the caller has installed on at least one client
- *      but hasn't played (no Playtime row, or last updatedAt > 14 days ago).
- *   2. `library`     — any game the caller has installed (regardless of
- *                       recent play). The "I just feel like *something* from
- *                       my library" bucket.
- *   3. `social`      — games on this server's store that ≥ 2 OTHER users
- *                       (i.e. not the caller) have actually played, weighted
- *                       toward broader social proof. Caller doesn't need to
- *                       own them; that's the whole point of the bucket.
+ * Selection:
+ *   • Base pool = every Game row on the server (weight 1)
+ *   • + caller's installs (weight 2 total — base 1 plus an extra entry)
+ *   • + caller's cold installs (weight 4 total — installed but not played
+ *     in > 14 days; gets +2 more on top of the install entry)
+ *   • `source` on the response reflects which bucket the chosen game came
+ *     from: `rediscovery` / `library` / `discover` / `social`.
+ *   • `social` is the legacy fallback when the catalog is empty AND the
+ *     caller has nothing installed; in practice on a populated server
+ *     this branch is dead, but it stays as a defensive fallback.
+ *
+ * For `social` and `discover` picks we additionally surface up to 5
+ * other server users who have hours in the game, so the caption can
+ * read "3 friends play this" instead of just announcing the title.
  *
  * Returns null when every pool is empty, so the UI can decide whether to
  * show an empty state or hide the widget entirely.
@@ -46,36 +52,55 @@ export default defineEventHandler(async (h3) => {
       : [];
   const installedGameIds = [...new Set(installedRows.map((r) => r.gameId))];
 
-  // ── 2. Build the prioritized candidate pool ────────────────────────────────
+  // ── 2. Build the candidate pool ────────────────────────────────────────────
   let pickGameId: string | null = null;
-  let source: "rediscovery" | "library" | "social" | null = null;
+  let source: "rediscovery" | "library" | "social" | "discover" | null = null;
 
-  if (installedGameIds.length > 0) {
-    // 1: rediscovery — installed games whose Playtime row (per caller) is
-    // either missing or hasn't been touched in > 14 days.
-    const recentPlaytimes = await prisma.playtime.findMany({
-      where: {
-        userId,
-        gameId: { in: installedGameIds },
-        updatedAt: { gte: rediscoveryCutoff },
-      },
-      select: { gameId: true },
-    });
-    const recentlyPlayedSet = new Set(recentPlaytimes.map((p) => p.gameId));
+  // Pool composition (per the user's "let me discover anything" request):
+  //   • EVERY game on the Drop store gets weight 1 — the wheel can land on
+  //     a game the caller has never seen.
+  //   • Caller's installs get +1 weight (total 2× the catalog base).
+  //   • Caller's cold installs (rediscovery — installed but not played in
+  //     > 14 days) get +2 more on top (total 4×).
+  // The old logic short-circuited on the rediscovery pool whenever it was
+  // non-empty, which produced "always the same game" — typically an
+  // emulator launcher the user has technically installed but never opens
+  // directly, while every actual game has been played in the last fortnight.
+  const allGames = await prisma.game.findMany({
+    where: { type: GameType.Game },
+    select: { id: true },
+  });
+  const allGameIds = allGames.map((g) => g.id);
 
-    const rediscoveryPool = installedGameIds.filter(
-      (gid) => !recentlyPlayedSet.has(gid),
-    );
+  if (allGameIds.length > 0) {
+    let rediscoveryPool: string[] = [];
+    if (installedGameIds.length > 0) {
+      const recentPlaytimes = await prisma.playtime.findMany({
+        where: {
+          userId,
+          gameId: { in: installedGameIds },
+          updatedAt: { gte: rediscoveryCutoff },
+        },
+        select: { gameId: true },
+      });
+      const recentlyPlayedSet = new Set(recentPlaytimes.map((p) => p.gameId));
+      rediscoveryPool = installedGameIds.filter(
+        (gid) => !recentlyPlayedSet.has(gid),
+      );
+    }
 
-    if (rediscoveryPool.length > 0) {
-      pickGameId =
-        rediscoveryPool[Math.floor(Math.random() * rediscoveryPool.length)];
+    const weightedPool: string[] = [...allGameIds];
+    weightedPool.push(...installedGameIds);
+    weightedPool.push(...rediscoveryPool, ...rediscoveryPool);
+
+    pickGameId = weightedPool[Math.floor(Math.random() * weightedPool.length)];
+
+    if (rediscoveryPool.includes(pickGameId)) {
       source = "rediscovery";
-    } else {
-      // 2: library — anything the caller has installed.
-      pickGameId =
-        installedGameIds[Math.floor(Math.random() * installedGameIds.length)];
+    } else if (installedGameIds.includes(pickGameId)) {
       source = "library";
+    } else {
+      source = "discover";
     }
   } else {
     // 3: social — games ≥ 2 OTHER users have played. We use the Playtime
@@ -126,7 +151,7 @@ export default defineEventHandler(async (h3) => {
       coverObjectId: string | null;
       bannerObjectId: string | null;
     };
-    source: "rediscovery" | "library" | "social";
+    source: "rediscovery" | "library" | "social" | "discover";
     alsoPlayedBy?: Array<{
       userId: string;
       displayName: string;
@@ -142,8 +167,12 @@ export default defineEventHandler(async (h3) => {
     source,
   };
 
-  // ── 4. For social picks, surface up to 5 players for the caption ──────────
-  if (source === "social") {
+  // ── 4. For social / discover picks, surface up to 5 players who've put
+  // hours into this game (excluding the caller). The discover branch may
+  // land on a game the caller has never seen; if other users on the server
+  // have played it, that's the most useful caption ("3 friends play this")
+  // — so we run the same enrichment as the legacy social branch.
+  if (source === "social" || source === "discover") {
     const otherPlayers = await prisma.playtime.findMany({
       where: {
         gameId: pickGameId,

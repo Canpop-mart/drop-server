@@ -22,6 +22,13 @@ import prisma from "~/server/internal/db/database";
  * shape is meaningless without a user.
  */
 
+// `genre_focus` was dropped from the rotation: tags in our catalogue are
+// often metadata-source quirks (e.g. "Flight" appearing as a top-level
+// genre) that don't read like a real challenge category to players. The
+// kind is still present in the union below as a transitional alias so any
+// already-persisted row with kind="genre_focus" survives a deploy without
+// breaking type narrowing; selection no longer picks it and progress falls
+// back to the play-hours formula for safety.
 type PersonalKind =
   | "play_hours"
   | "unlock_count"
@@ -41,7 +48,6 @@ const ALL_KINDS: PersonalKind[] = [
   "marathon",
   "night_owl",
   "new_to_you",
-  "genre_focus",
   "fresh_drop",
 ];
 

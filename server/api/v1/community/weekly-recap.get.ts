@@ -3,8 +3,20 @@ import prisma from "~/server/internal/db/database";
 
 /**
  * Weekly recap — up to 5 highlight cards covering the last 7 days. Each card
- * is a discrete slide the front-end renders in a carousel; we just emit
- * { kind, title, subtitle, gameId, userId } and let the UI handle the look.
+ * is a structured slide the front-end renders in a carousel:
+ *
+ *   { kind, title, headline, meta, gameId, userId, coverObjectId, avatarObjectId }
+ *
+ * The split lets the UI build a real hierarchy (kicker / headline / meta line)
+ * with a thumbnail anchor on the left, instead of forcing every kind through
+ * a flat "subtitle joined with bullets" string.
+ *
+ *  - title           The kicker label ("MOST PLAYED THIS WEEK")
+ *  - headline        The big bolded line — what the slide is *about*
+ *                    (game name for top_game; player name for the rest)
+ *  - meta            The quieter supporting line (durations, counts, etc.)
+ *  - coverObjectId   Game cover for the thumbnail slot
+ *  - avatarObjectId  Player avatar — used when no game cover is in scope
  *
  * Slide kinds (all optional — skip if no qualifying data):
  *  - top_game        max(SUM(durationSeconds)) grouped by gameId
@@ -49,9 +61,12 @@ export default defineEventHandler(async (h3) => {
       | "new_player"
       | "most_unlocks";
     title: string;
-    subtitle: string;
+    headline: string;
+    meta: string;
     gameId: string | null;
     userId: string | null;
+    coverObjectId: string | null;
+    avatarObjectId: string | null;
   };
 
   const slides: Slide[] = [];
@@ -106,13 +121,14 @@ export default defineEventHandler(async (h3) => {
             id: true,
             displayName: true,
             username: true,
+            profilePictureObjectId: true,
           },
         })
       : [],
     referencedGameIds.size > 0
       ? prisma.game.findMany({
           where: { id: { in: [...referencedGameIds] } },
-          select: { id: true, mName: true },
+          select: { id: true, mName: true, mCoverObjectId: true },
         })
       : [],
   ]);
@@ -121,6 +137,9 @@ export default defineEventHandler(async (h3) => {
 
   const displayName = (uid: string) =>
     userMap.get(uid)?.displayName ?? userMap.get(uid)?.username ?? "Someone";
+  const userAvatar = (uid: string) =>
+    userMap.get(uid)?.profilePictureObjectId || null;
+  const gameCover = (gid: string) => gameMap.get(gid)?.mCoverObjectId || null;
   const formatHours = (seconds: number) => {
     const hours = seconds / 3600;
     if (hours >= 1) {
@@ -131,6 +150,8 @@ export default defineEventHandler(async (h3) => {
   };
 
   // ── Slide: top game by total playtime ────────────────────────────────────
+  // The GAME is the news here — the headline is its name, the meta line
+  // carries the supporting stats (hours, who played it).
   if (gameTotals.size > 0) {
     const sorted = [...gameTotals.entries()].sort((a, b) => b[1] - a[1]);
     for (const [topGameId, topSeconds] of sorted) {
@@ -140,27 +161,29 @@ export default defineEventHandler(async (h3) => {
         .filter((uid) => userMap.has(uid))
         .map((uid) => displayName(uid));
       if (players.length === 0) continue;
-      const subtitleParts = [
-        game.mName,
-        formatHours(topSeconds),
+      const playersFragment =
         players.length === 1
-          ? players[0]
+          ? `played by ${players[0]}`
           : players.length === 2
-            ? `${players[0]} + 1 other`
-            : `${players[0]} + ${players.length - 1} others`,
-      ];
+            ? `played by ${players[0]} and 1 other`
+            : `played by ${players[0]} and ${players.length - 1} others`;
       slides.push({
         kind: "top_game",
         title: "Most played this week",
-        subtitle: subtitleParts.join(" · "),
+        headline: game.mName,
+        meta: `${formatHours(topSeconds)} · ${playersFragment}`,
         gameId: topGameId,
         userId: null,
+        coverObjectId: gameCover(topGameId),
+        avatarObjectId: null,
       });
       break;
     }
   }
 
   // ── Slide: longest single session ────────────────────────────────────────
+  // The PLAYER is the news (a person sat down for hours straight). Headline
+  // is the player name; meta names the game and the duration.
   if (longestSession) {
     const game = gameMap.get(longestSession.gameId);
     const user = userMap.get(longestSession.userId);
@@ -168,14 +191,22 @@ export default defineEventHandler(async (h3) => {
       slides.push({
         kind: "longest_session",
         title: "Longest session this week",
-        subtitle: `${displayName(user.id)} · ${game.mName} · ${formatHours(longestSession.durationSeconds ?? 0)}`,
+        headline: displayName(user.id),
+        meta: `${formatHours(longestSession.durationSeconds ?? 0)} on ${game.mName}`,
         gameId: game.id,
         userId: user.id,
+        // Cover-led: the game art reads better than an avatar for this
+        // slide kind (game art is more recognizable at-a-glance than a
+        // small avatar would be).
+        coverObjectId: gameCover(game.id),
+        avatarObjectId: userAvatar(user.id),
       });
     }
   }
 
   // ── Slide: most achievement unlocks ──────────────────────────────────────
+  // The PLAYER is the news. No specific game to anchor to, so the
+  // thumbnail slot falls back to the player avatar.
   if (achievementsByUser.size > 0) {
     const sorted = [...achievementsByUser.entries()].sort(
       (a, b) => b[1] - a[1],
@@ -186,9 +217,12 @@ export default defineEventHandler(async (h3) => {
       slides.push({
         kind: "most_unlocks",
         title: "Achievement hunter",
-        subtitle: `${displayName(user.id)} · ${count} unlocked this week`,
+        headline: displayName(user.id),
+        meta: `${count} achievement${count === 1 ? "" : "s"} unlocked this week`,
         gameId: null,
         userId: user.id,
+        coverObjectId: null,
+        avatarObjectId: userAvatar(user.id),
       });
       break;
     }
@@ -241,9 +275,12 @@ export default defineEventHandler(async (h3) => {
         slides.push({
           kind: "milestone",
           title: "New milestone",
-          subtitle: `${displayName(user.id)} crossed ${bestMilestone.threshold} hours played`,
+          headline: displayName(user.id),
+          meta: `Crossed ${bestMilestone.threshold} hours played`,
           gameId: null,
           userId: user.id,
+          coverObjectId: null,
+          avatarObjectId: userAvatar(user.id),
         });
       }
     }
@@ -279,9 +316,12 @@ export default defineEventHandler(async (h3) => {
         slides.push({
           kind: "new_player",
           title: "Welcome to the server",
-          subtitle: `${displayName(user.id)} joined the action this week`,
+          headline: displayName(user.id),
+          meta: "Joined the action this week",
           gameId: null,
           userId: user.id,
+          coverObjectId: null,
+          avatarObjectId: userAvatar(user.id),
         });
       }
     }
