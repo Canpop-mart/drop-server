@@ -4,7 +4,7 @@ import prisma from "~/server/internal/db/database";
 /**
  * Soft-delete a cloud save.
  *
- * Body: { id, deletedFrom?: string }
+ * Body: { id, deletedFrom?: string, uploadedFrom?: string }
  *
  * The row is NOT removed; instead `deletedAt` is set to now and `deletedFrom`
  * is recorded so other devices can see "this save was deleted from <device>"
@@ -13,9 +13,16 @@ import prisma from "~/server/internal/db/database";
  * hard-deletes old tombstones.
  *
  * `deletedFrom` is sourced in priority order:
- *   1. The request body (client supplies its friendly device name).
- *   2. The `X-Drop-Hostname` header (set by older clients).
- *   3. Empty string (we still tombstone — the cascade is what matters).
+ *   1. `body.deletedFrom`     — modern clients sending the canonical key.
+ *   2. `body.uploadedFrom`    — Rust desktop client's `DeleteBody` uses
+ *                               `uploaded_from` (camelCased to `uploadedFrom`)
+ *                               because the field doubles as the "deleted
+ *                               by this device" hint. Accept it as a synonym
+ *                               so the cross-device "deleted from <X>"
+ *                               surface actually works for those clients.
+ *   3. `X-Drop-Hostname`      — legacy header set by older clients.
+ *   4. Empty string           — we still tombstone; the cascade is what
+ *                               matters and the hint is just a UX nicety.
  *
  * Re-uploads automatically clear the tombstone (see upload / bulk-upload).
  */
@@ -24,11 +31,20 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const userId = user.id;
 
   const body = await readBody(h3);
-  const { id, deletedFrom: bodyDeletedFrom } = body ?? {};
+  const {
+    id,
+    deletedFrom: bodyDeletedFrom,
+    uploadedFrom: bodyUploadedFrom,
+  } = body ?? {};
   if (!id) throw createError({ statusCode: 400, statusMessage: "id required" });
 
   const headerHost = getHeader(h3, "x-drop-hostname") ?? "";
-  const deletedFrom = (bodyDeletedFrom || headerHost || "").slice(0, 255);
+  const deletedFrom = (
+    bodyDeletedFrom ||
+    bodyUploadedFrom ||
+    headerHost ||
+    ""
+  ).slice(0, 255);
 
   // Two-step: only tombstone rows owned by this user, and only ones that
   // aren't already tombstoned (so we don't churn the deletedAt timestamp

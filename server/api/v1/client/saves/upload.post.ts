@@ -1,10 +1,15 @@
 import { createHash } from "node:crypto";
+import sanitizeFilename from "sanitize-filename";
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
 import {
   fetchUserQuota,
   quotaExceededMessage,
 } from "~/server/internal/cloudsaves/quota";
+
+const MAX_SAVE_BYTES = 50 * 1024 * 1024; // 50MiB — matches bulk-upload
+const MAX_FILENAME_LEN = 255;
+const MAX_UPLOADED_FROM_LEN = 128;
 
 /**
  * Upload a save file to cloud storage.
@@ -16,6 +21,11 @@ import {
  * payload) must fit within `User.cloudSaveQuotaBytes`. Returns HTTP 413 with
  * a human-readable message when exceeded — clients should surface this in
  * the sync UI rather than retrying.
+ *
+ * Validation here mirrors `bulk-upload.post.ts` (size cap, filename sanitise,
+ * timestamp sanity bounds, dataHash length) so a single-file upload can never
+ * land a row that a bulk upload would have rejected — they share the same
+ * downstream storage and quota accounting.
  */
 export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const user = await fetchUser();
@@ -24,7 +34,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const body = await readBody(h3);
   const {
     gameId,
-    filename,
+    filename: rawFilename,
     saveType,
     data,
     clientModifiedAt,
@@ -32,7 +42,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     uploadedFrom,
   } = body;
 
-  if (!gameId || !filename || !saveType || !data) {
+  if (!gameId || !rawFilename || !saveType || !data) {
     throw createError({
       statusCode: 400,
       statusMessage: "gameId, filename, saveType, and data are required",
@@ -46,12 +56,45 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     });
   }
 
+  // Defense-in-depth: filenames are opaque DB keys (never used as filesystem
+  // paths) but sanitise anyway so a future code path can't be tricked into
+  // path traversal. sanitize-filename strips separators + control chars and
+  // truncates dangerous prefixes; we then cap the length to keep it within
+  // the column constraint and DB index limits.
+  const filename = sanitizeFilename(String(rawFilename)).slice(
+    0,
+    MAX_FILENAME_LEN,
+  );
+  if (!filename) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Filename reduced to empty after sanitization",
+    });
+  }
+
+  if (typeof data !== "string") {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "data must be a base64 string",
+    });
+  }
+
   const buffer = Buffer.from(data, "base64");
 
-  if (buffer.length > 50 * 1024 * 1024) {
+  // Reject empties: a base64 string that decodes to zero bytes is almost
+  // always a client bug (read of a partially-written save) and creates a
+  // useless row that still pays the quota tax of the metadata.
+  if (buffer.length === 0) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Decoded save is empty",
+    });
+  }
+
+  if (buffer.length > MAX_SAVE_BYTES) {
     throw createError({
       statusCode: 413,
-      statusMessage: "Save file too large (max 50MB)",
+      statusMessage: `Save file too large (max ${MAX_SAVE_BYTES / (1024 * 1024)}MB)`,
     });
   }
 
@@ -75,8 +118,43 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     });
   }
 
-  // Compute MD5 server-side if client didn't provide it
-  const hash = dataHash || createHash("md5").update(buffer).digest("hex");
+  // Parse client-supplied timestamp with sanity bounds (mirrors bulk-upload):
+  // reject futures > 5min of clock skew and anything older than year 2000,
+  // both of which would corrupt the conflict-detection mtime comparison.
+  const parsedClientModified = clientModifiedAt
+    ? new Date(clientModifiedAt)
+    : null;
+  const now = Date.now();
+  const maxAllowed = now + 5 * 60 * 1000;
+  const minAllowed = new Date("2000-01-01T00:00:00Z").getTime();
+  const clientModifiedAtSafe =
+    !parsedClientModified ||
+    isNaN(parsedClientModified.getTime()) ||
+    parsedClientModified.getTime() > maxAllowed ||
+    parsedClientModified.getTime() < minAllowed
+      ? new Date(now)
+      : parsedClientModified;
+
+  // Compute MD5 server-side if client didn't provide it. If client did,
+  // sanity-check the length so a garbage value can't be persisted (an MD5
+  // hex digest is always 32 chars).
+  let hash: string;
+  if (typeof dataHash === "string" && dataHash.length > 0) {
+    if (dataHash.length !== 32 || !/^[0-9a-fA-F]{32}$/.test(dataHash)) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "dataHash must be a 32-character hex MD5",
+      });
+    }
+    hash = dataHash.toLowerCase();
+  } else {
+    hash = createHash("md5").update(buffer).digest("hex");
+  }
+
+  const uploadedFromSafe =
+    typeof uploadedFrom === "string"
+      ? uploadedFrom.slice(0, MAX_UPLOADED_FROM_LEN)
+      : "";
 
   const result = await prisma.cloudSave.upsert({
     where: {
@@ -90,16 +168,16 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
       size: buffer.length,
       data: buffer,
       dataHash: hash,
-      uploadedFrom: uploadedFrom || "",
-      clientModifiedAt: new Date(clientModifiedAt || Date.now()),
+      uploadedFrom: uploadedFromSafe,
+      clientModifiedAt: clientModifiedAtSafe,
     },
     update: {
       data: buffer,
       size: buffer.length,
       saveType,
       dataHash: hash,
-      uploadedFrom: uploadedFrom || "",
-      clientModifiedAt: new Date(clientModifiedAt || Date.now()),
+      uploadedFrom: uploadedFromSafe,
+      clientModifiedAt: clientModifiedAtSafe,
       // Resurrect tombstoned rows on re-upload (user moved a save back).
       deletedAt: null,
       deletedFrom: null,

@@ -10,6 +10,12 @@ import prisma from "~/server/internal/db/database";
  * client died without a stop event are filtered out by the freshness check;
  * the background orphan-cleanup task eventually closes them.
  *
+ * The 5-minute stale window is deliberately wide relative to the client's
+ * 60s heartbeat cadence: it tolerates ~4 consecutive lost heartbeats before
+ * presence flickers off, which covers typical residential wifi hiccups and
+ * brief NAS sleep. Shrinking the window without slowing the heartbeat would
+ * trade real bandwidth (per-client noise) for marginal staleness gains.
+ *
  * Returns an array of flat entries with the user's display name + avatar and
  * the game's id/name/cover, in the shape the community front-end expects.
  */

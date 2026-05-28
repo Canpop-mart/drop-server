@@ -169,6 +169,7 @@ import {
   BugAntIcon,
   BeakerIcon,
   PhotoIcon,
+  InboxArrowDownIcon,
 } from "@heroicons/vue/24/outline";
 import type { NavigationItem } from "~/composables/types";
 import { useCurrentNavigationIndex } from "~/composables/current-page-engine";
@@ -226,6 +227,12 @@ const navigation: Array<NavigationItem & { icon: Component }> = [
     route: "/admin/bugreports",
     prefix: "/admin/bugreports",
     icon: BugAntIcon,
+  },
+  {
+    label: "Requests",
+    route: "/admin/requests",
+    prefix: "/admin/requests",
+    icon: InboxArrowDownIcon,
   },
   {
     label: "Objects",
