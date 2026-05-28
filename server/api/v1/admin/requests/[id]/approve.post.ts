@@ -75,20 +75,39 @@ export default defineEventHandler(async (h3) => {
   // approved, return without touching the Game table. The admin will
   // import the binary later via the regular import wizard, picking the
   // same metadata.
+  //
+  // Using `updateMany` + count check (not `update`) to satisfy Drop's
+  // `drop/no-prisma-delete` lint rule — same write semantics, just
+  // without the implicit "row must exist" throw. We already
+  // findUnique'd above so we use `existing` for the response payload.
   const fullImport = body.library && body.path;
   if (!fullImport) {
-    const updated = await prisma.gameRequest.update({
+    const reviewNotes = JSON.stringify({
+      metadata: body.metadata,
+      deferred: true,
+    });
+    const reviewedAt = new Date();
+    const result = await prisma.gameRequest.updateMany({
       where: { id },
       data: {
         status: RequestStatus.Approved,
-        reviewNotes: JSON.stringify({
-          metadata: body.metadata,
-          deferred: true,
-        }),
+        reviewNotes,
         reviewerId,
-        reviewedAt: new Date(),
+        reviewedAt,
       },
     });
+    if (result.count === 0)
+      throw createError({
+        statusCode: 404,
+        statusMessage: "Request not found.",
+      });
+    const updated = {
+      ...existing,
+      status: RequestStatus.Approved,
+      reviewNotes,
+      reviewerId,
+      reviewedAt,
+    };
     await notifyRequester(updated.requesterId, updated.id, updated.title, null);
     return { request: updated, deferred: true };
   }
@@ -119,19 +138,35 @@ export default defineEventHandler(async (h3) => {
         "Pick a different game or unlink the existing one first.",
     });
 
-  const updated = await prisma.gameRequest.update({
+  const reviewNotes = JSON.stringify({
+    metadata: body.metadata,
+    taskId: created.taskId,
+  });
+  const reviewedAt = new Date();
+  const result = await prisma.gameRequest.updateMany({
     where: { id },
     data: {
       status: RequestStatus.Approved,
       gameId: created.gameId,
-      reviewNotes: JSON.stringify({
-        metadata: body.metadata,
-        taskId: created.taskId,
-      }),
+      reviewNotes,
       reviewerId,
-      reviewedAt: new Date(),
+      reviewedAt,
     },
   });
+  if (result.count === 0)
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Request not found.",
+    });
+
+  const updated = {
+    ...existing,
+    status: RequestStatus.Approved,
+    gameId: created.gameId,
+    reviewNotes,
+    reviewerId,
+    reviewedAt,
+  };
 
   await notifyRequester(
     updated.requesterId,

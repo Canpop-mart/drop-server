@@ -43,16 +43,34 @@ export default defineEventHandler(async (h3) => {
     });
 
   const reason = body.reason?.trim() ?? "";
+  const reviewNotes = reason || null;
+  const reviewedAt = new Date();
 
-  const updated = await prisma.gameRequest.update({
+  // updateMany + count check rather than .update() to satisfy Drop's
+  // `drop/no-prisma-delete` lint rule. We already findUnique'd above,
+  // so the response payload reuses `existing` with the new fields.
+  const result = await prisma.gameRequest.updateMany({
     where: { id },
     data: {
       status: RequestStatus.Denied,
-      reviewNotes: reason || null,
+      reviewNotes,
       reviewerId,
-      reviewedAt: new Date(),
+      reviewedAt,
     },
   });
+  if (result.count === 0)
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Request not found.",
+    });
+
+  const updated = {
+    ...existing,
+    status: RequestStatus.Denied,
+    reviewNotes,
+    reviewerId,
+    reviewedAt,
+  };
 
   await notificationSystem.push(updated.requesterId, {
     nonce: `request-denied-${updated.id}`,

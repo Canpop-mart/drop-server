@@ -494,11 +494,6 @@ type MetadataSearchResult = {
   sourceName: string;
 };
 
-type UnimportedGameRow = {
-  game: string;
-  library: { id: string; name: string };
-};
-
 const statusClasses: Record<string, string> = {
   Pending: "bg-yellow-500/10 text-yellow-400 ring-1 ring-yellow-500/20",
   Approved: "bg-green-500/10 text-green-400 ring-1 ring-green-500/20",
