@@ -18,6 +18,8 @@ export interface RAGameInfo {
   ConsoleName: string;
   ImageIcon: string;
   ImageTitle: string;
+  /** Total distinct players (casual) — the denominator for global rarity %. */
+  NumDistinctPlayers?: number;
   Achievements: Record<
     string,
     {

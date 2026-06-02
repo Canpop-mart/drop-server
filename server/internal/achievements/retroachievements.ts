@@ -39,6 +39,7 @@ export function raAchievementsToDefinitions(
 ): AchievementDefinition[] {
   const defs: AchievementDefinition[] = [];
   let order = 0;
+  const players = gameInfo.NumDistinctPlayers ?? 0;
   for (const [externalId, ach] of Object.entries(gameInfo.Achievements || {})) {
     defs.push({
       externalId,
@@ -49,6 +50,9 @@ export function raAchievementsToDefinitions(
         ? `${RA_MEDIA}/${ach.BadgeName}_lock.png`
         : "",
       displayOrder: order++,
+      points: ach.Points ?? 0,
+      globalPercent:
+        players > 0 ? Math.min(100, (ach.NumAwarded / players) * 100) : null,
     });
   }
   return defs;

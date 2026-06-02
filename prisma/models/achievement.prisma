@@ -45,6 +45,10 @@ model Achievement {
     iconUrl       String                  @default("")
     iconLockedUrl String                  @default("")
     displayOrder  Int                     @default(0)
+    /// Gamerscore-style points (RetroAchievements / Xbox-style). 0 for Steam.
+    points        Int                     @default(0)
+    /// Global unlock rarity as a percentage in [0, 100]. Null = unknown.
+    globalPercent Float?
 
     unlocks UserAchievement[]
 

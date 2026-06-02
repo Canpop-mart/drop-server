@@ -88,6 +88,8 @@ async function loadFromDb(
       iconUrl: a.iconUrl,
       iconLockedUrl: a.iconLockedUrl,
       displayOrder: a.displayOrder,
+      points: a.points,
+      globalPercent: a.globalPercent,
     })),
     externalLinks: externalLinks.map((l) => ({
       id: l.id,

@@ -27,6 +27,10 @@ export interface AchievementDefinition {
   iconLockedUrl: string;
   /** Sort order within the game, provider-defined. */
   displayOrder: number;
+  /** Gamerscore-style points (RetroAchievements / Xbox-style). 0 for Steam. */
+  points?: number;
+  /** Global unlock rarity as a percentage in [0, 100]. Undefined/null = unknown. */
+  globalPercent?: number | null;
 }
 
 /** Result of a per-game definition scan. */

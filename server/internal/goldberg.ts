@@ -70,6 +70,8 @@ export interface GoldbergAchievementDef {
   icon?: string;
   icon_gray?: string;
   hidden?: number;
+  /** Global unlock rarity % from Steam's official global-percentages API. */
+  globalPercent?: number | null;
 }
 
 export interface GoldbergAchievementUnlock extends GoldbergAchievementDef {
@@ -234,6 +236,9 @@ export async function fetchSteamAchievements(
       `[PHASE:emulator] Got ${achievements.length} achievements from Steam API for AppID ${appId}`,
     );
 
+    // Global unlock rarity (best-effort; empty map on failure).
+    const percentMap = await fetchSteamGlobalPercentages(appId);
+
     return achievements.map((a) => ({
       name: a.name,
       displayName: resolveLocalised(a.displayName, a.name),
@@ -241,6 +246,7 @@ export async function fetchSteamAchievements(
       icon: a.icon,
       icon_gray: a.icongray,
       hidden: a.hidden,
+      globalPercent: percentMap.get(a.name) ?? null,
     }));
   } catch (e) {
     defaultLogger.warn(
@@ -248,6 +254,36 @@ export async function fetchSteamAchievements(
     );
     return [];
   }
+}
+
+/**
+ * Global unlock rarity per achievement, from Steam's official, no-key
+ * global-percentages endpoint — the same data behind the "X% of players"
+ * figures on the Steam store. Returns name -> percent; an empty map on any
+ * failure (rarity is best-effort and must never block achievement setup).
+ */
+async function fetchSteamGlobalPercentages(
+  appId: string,
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  const url = `https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid=${appId}&format=json`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return map;
+    const json = (await res.json()) as {
+      achievementpercentages?: {
+        achievements?: { name: string; percent: number }[];
+      };
+    };
+    for (const a of json.achievementpercentages?.achievements ?? []) {
+      if (typeof a.percent === "number") map.set(a.name, a.percent);
+    }
+  } catch (e) {
+    defaultLogger.warn(
+      `[PHASE:emulator] Steam global-percentages fetch failed for AppID ${appId}: ${e}`,
+    );
+  }
+  return map;
 }
 
 // ── Post-import achievement setup ──────────────────────────────────────────
@@ -541,6 +577,7 @@ export async function setupGoldberg(
           iconUrl: def.icon ?? "",
           iconLockedUrl: def.icon_gray ?? "",
           displayOrder: i,
+          globalPercent: def.globalPercent ?? null,
         })),
       );
 

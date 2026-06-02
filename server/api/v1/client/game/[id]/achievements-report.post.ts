@@ -55,7 +55,13 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     prisma.achievement.findMany({
       where: {
         gameId,
-        provider: "Goldberg" as ExternalAccountProvider,
+        // Match both Goldberg-emulated AND genuinely-owned Steam achievements.
+        // The client reports every file-based unlock (Goldberg / SmartSteamEmu /
+        // CODEX / RUNE / OnlineFix / … / the real Steam client cache) under
+        // "Goldberg", but a game's achievement rows may be stored under either
+        // provider. Steam achievements share the same external IDs across both,
+        // so we match by externalId across providers (see the map below).
+        provider: { in: ["Goldberg", "Steam"] as ExternalAccountProvider[] },
         externalId: {
           in: body.achievements.map((a) => a.externalId),
         },
@@ -75,10 +81,17 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     }),
   ]);
 
-  // Build lookup maps
-  const achievementMap = new Map(
-    achievements.map((a) => [`${a.provider}:${a.externalId}`, a]),
-  );
+  // Build lookup maps. Key by externalId alone (not `provider:externalId`):
+  // the client reports everything file-based as "Goldberg", but the matching
+  // row may be stored under the "Steam" provider. Prefer a Goldberg row when
+  // both providers exist for the same externalId (the canonical client path).
+  const achievementMap = new Map<string, (typeof achievements)[number]>();
+  for (const a of achievements) {
+    const existing = achievementMap.get(a.externalId);
+    if (!existing || a.provider === "Goldberg") {
+      achievementMap.set(a.externalId, a);
+    }
+  }
   const alreadyUnlockedIds = new Set(
     existingUnlocks.map((u) => u.achievementId),
   );
@@ -87,9 +100,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const newlyUnlocked: { title: string; iconUrl: string }[] = [];
 
   for (const report of body.achievements) {
-    const achievement = achievementMap.get(
-      `${report.provider}:${report.externalId}`,
-    );
+    const achievement = achievementMap.get(report.externalId);
     if (!achievement) {
       logger.warn(
         `[ACH:goldberg] Achievement NOT FOUND in DB: gameId=${gameId} externalId=${report.externalId}`,

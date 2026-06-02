@@ -71,6 +71,8 @@ export const achievementsRepo = {
           iconUrl: def.iconUrl || "",
           iconLockedUrl: def.iconLockedUrl || "",
           displayOrder: def.displayOrder ?? i,
+          points: def.points ?? 0,
+          globalPercent: def.globalPercent ?? null,
         },
         update: {
           title: def.title || externalId,
@@ -78,6 +80,8 @@ export const achievementsRepo = {
           iconUrl: def.iconUrl || "",
           iconLockedUrl: def.iconLockedUrl || "",
           displayOrder: def.displayOrder ?? i,
+          points: def.points ?? 0,
+          globalPercent: def.globalPercent ?? null,
         },
       });
       written++;
