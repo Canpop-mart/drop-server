@@ -23,6 +23,14 @@ export default withNuxt([
         },
       ],
       "@intlify/vue-i18n/no-missing-keys": "error",
+      // Pure symbols/digits/punctuation ("%", "@", "0", "—") aren't
+      // translatable content, so don't flag them. Genuine strings still warn
+      // (kept at "warn", not "error") and are wrapped in a focused i18n
+      // follow-up pass rather than blocking this commit.
+      "@intlify/vue-i18n/no-raw-text": [
+        "warn",
+        { ignorePattern: "^[^a-zA-Z]+$" },
+      ],
       "drop/no-prisma-delete": "error",
     },
     settings: {

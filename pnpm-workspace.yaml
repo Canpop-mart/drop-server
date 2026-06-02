@@ -11,3 +11,45 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 shamefullyHoist: true
+
+overrides:
+  vue3-carousel-nuxt>vue3-carousel: "^0.16.0"
+  # Dependabot 2026-06 — scoped per major so unrelated version lines are not
+  # force-bumped. Deep nuxt/nitro/vite/build-chain transitive deps. A few
+  # advisories are intentionally NOT overridden: nanotar (no fix published),
+  # lodash/lodash-es ("4.18.0" is not a real release), file-type/diff
+  # (cross-major bump, too risky to force on a transitive dep).
+  "@hono/node-server@<1.19.13": ">=1.19.13"
+  ajv@<6.14.0: ">=6.14.0"
+  brace-expansion@<1.1.13: ">=1.1.13"
+  brace-expansion@>=2.0.0 <2.0.3: ">=2.0.3"
+  defu@<=6.1.4: ">=6.1.5"
+  devalue@<5.8.1: ">=5.8.1"
+  effect@<3.20.0: ">=3.20.0"
+  flatted@<3.4.2: ">=3.4.2"
+  h3@<1.15.9: ">=1.15.9"
+  hono@<4.12.18: ">=4.12.18"
+  immutable@>=5.0.0 <5.1.5: ">=5.1.5"
+  minimatch@<3.1.4: ">=3.1.4"
+  minimatch@>=5.0.0 <5.1.8: ">=5.1.8"
+  minimatch@>=9.0.0 <9.0.7: ">=9.0.7"
+  minimatch@>=10.0.0 <10.2.3: ">=10.2.3"
+  nitropack@<2.13.4: ">=2.13.4"
+  node-forge@<1.4.0: ">=1.4.0"
+  picomatch@<2.3.2: ">=2.3.2"
+  picomatch@>=4.0.0 <4.0.4: ">=4.0.4"
+  postcss@<8.5.10: ">=8.5.10"
+  qs@>=6.11.1 <=6.15.1: ">=6.15.2"
+  rollup@>=4.0.0 <4.59.0: ">=4.59.0"
+  serialize-javascript@>=7.0.0 <7.0.5: ">=7.0.5"
+  seroval@<1.4.1: ">=1.4.1"
+  simple-git@<3.36.0: ">=3.36.0"
+  srvx@<0.11.13: ">=0.11.13"
+  svgo@>=3.0.0 <3.3.3: ">=3.3.3"
+  tar@>=7.0.0 <7.5.11: ">=7.5.11"
+  undici@>=7.0.0 <7.24.0: ">=7.24.0"
+  unhead@<2.1.13: ">=2.1.13"
+  uuid@<11.1.1: ">=11.1.1"
+  vite@>=7.0.0 <=7.3.1: ">=7.3.2"
+  ws@>=8.0.0 <8.20.1: ">=8.20.1"
+  yaml@>=2.0.0 <2.8.3: ">=2.8.3"

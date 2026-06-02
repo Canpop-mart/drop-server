@@ -358,13 +358,25 @@ const STEAM_API_DLLS = ["steam_api64.dll", "steam_api.dll", "libsteam_api.so"];
 const STEAM_DRM_MARKERS = ["steamclient64.dll", "gameoverlayrenderer64.dll"];
 
 /**
+ * Max directory depth for the steam_api DLL / DRM-marker scans. Unreal
+ * Engine games bury steam_api64.dll deep, e.g.
+ *   Engine/Binaries/ThirdParty/Steamworks/Steamv157/Win64/steam_api64.dll
+ * which is 6 levels below the version root. The previous limit of 5 stopped
+ * one directory short, so the DLL was never found, setupGoldberg fell back to
+ * writing steam_settings/ + the achievement schema at the version ROOT, and
+ * the buried emulator booted schema-less and recorded no achievements.
+ * 8 covers UE's layout with headroom. (See LEGO Batman / Black Myth: Wukong.)
+ */
+const STEAM_API_SCAN_DEPTH = 8;
+
+/**
  * Recursively finds the directory containing a Steam API DLL within a
  * game's version directory. Returns the directory path and the DLL name.
  */
 export function findSteamApiDll(
   rootDir: string,
 ): { dllDir: string; dllName: string } | null {
-  return findSteamApiDllRecursive(rootDir, 0, 5);
+  return findSteamApiDllRecursive(rootDir, 0, STEAM_API_SCAN_DEPTH);
 }
 
 function findSteamApiDllRecursive(
@@ -412,7 +424,7 @@ function findSteamApiDllRecursive(
  * with real Steam DRM rather than an emulator.
  */
 export function hasSteamDrmMarker(rootDir: string): boolean {
-  return hasSteamDrmMarkerRecursive(rootDir, 0, 5);
+  return hasSteamDrmMarkerRecursive(rootDir, 0, STEAM_API_SCAN_DEPTH);
 }
 
 // ── DLL fingerprinting (positive identification) ─────────────────────────
