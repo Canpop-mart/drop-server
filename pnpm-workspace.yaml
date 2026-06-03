@@ -20,7 +20,12 @@ overrides:
   # lodash/lodash-es ("4.18.0" is not a real release), file-type/diff
   # (cross-major bump, too risky to force on a transitive dep).
   "@hono/node-server@<1.19.13": ">=1.19.13"
-  ajv@<6.14.0: ">=6.14.0"
+  # Cap ajv at the 6.x line. A bare ">=6.14.0" resolves to the newest match
+  # (ajv 8.x, since the range spans majors), which @eslint/eslintrc cannot
+  # use — it calls ajv 6's `missingRefs` option and crashes `eslint .`. The
+  # "<7" bound keeps the advisory fix (>=6.14.0, available as 6.14.0/6.15.0)
+  # while staying on the ajv 6 API the eslint toolchain depends on.
+  ajv@<6.14.0: ">=6.14.0 <7"
   brace-expansion@<1.1.13: ">=1.1.13"
   brace-expansion@>=2.0.0 <2.0.3: ">=2.0.3"
   defu@<=6.1.4: ">=6.1.5"
