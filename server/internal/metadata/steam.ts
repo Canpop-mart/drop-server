@@ -42,6 +42,34 @@ interface SteamItem {
   appid: string;
 }
 
+// ── Steam category → coarse tag derivation ───────────────────────────────
+// Steam's appdetails returns player-mode + controller category buckets, but
+// Drop otherwise discards them. We derive a few coarse, searchable tags from
+// the well-known store category IDs so games can be found by them.
+const STEAM_SINGLE_PLAYER_CATEGORY_ID = 2;
+// Co-op, Online Co-op, LAN Co-op, Shared/Split Screen Co-op.
+const STEAM_COOP_CATEGORY_IDS: ReadonlySet<number> = new Set([9, 38, 39, 54]);
+
+/**
+ * Derive coarse tag names from Steam's category buckets:
+ *  - any controller category present → "Controller Support"
+ *  - a player-mode category other than single-player → "Multiplayer"
+ *  - a co-op player category → "Co-op"
+ */
+function deriveSteamCategoryTags(categories?: {
+  supported_player_categoryids?: number[];
+  controller_categoryids?: number[];
+}): string[] {
+  const tags: string[] = [];
+  const players = categories?.supported_player_categoryids ?? [];
+  const controllers = categories?.controller_categoryids ?? [];
+  if (controllers.length > 0) tags.push("Controller Support");
+  if (players.some((id) => id !== STEAM_SINGLE_PLAYER_CATEGORY_ID))
+    tags.push("Multiplayer");
+  if (players.some((id) => STEAM_COOP_CATEGORY_IDS.has(id))) tags.push("Co-op");
+  return tags;
+}
+
 interface SteamSearchStub extends SteamItem {
   name: string;
   icon: string; // Ratio 1:1
@@ -485,7 +513,12 @@ export class SteamProvider implements MetadataProvider {
       released,
       publishers,
       developers,
-      tags,
+      tags: [
+        ...new Set([
+          ...tags,
+          ...deriveSteamCategoryTags(currentGame.categories),
+        ]),
+      ],
       reviews,
       icon,
       bannerId: banner,

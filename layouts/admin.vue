@@ -170,6 +170,7 @@ import {
   BeakerIcon,
   PhotoIcon,
   InboxArrowDownIcon,
+  ClipboardDocumentCheckIcon,
 } from "@heroicons/vue/24/outline";
 import type { NavigationItem } from "~/composables/types";
 import { useCurrentNavigationIndex } from "~/composables/current-page-engine";
@@ -221,6 +222,12 @@ const navigation: Array<NavigationItem & { icon: Component }> = [
     route: "/admin/compat",
     prefix: "/admin/compat",
     icon: BeakerIcon,
+  },
+  {
+    label: "Audit",
+    route: "/admin/audit/launch-configs",
+    prefix: "/admin/audit",
+    icon: ClipboardDocumentCheckIcon,
   },
   {
     label: $t("header.admin.bugReports"),

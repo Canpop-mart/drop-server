@@ -25,6 +25,14 @@
         class="py-2 px-3 inline-flex gap-x-3 bg-zinc-950 ring-1 ring-zinc-800 text-zinc-300"
       >
         {{ tag.name }}
+        <button
+          :title="`Add games to ${tag.name}`"
+          @click="() => openBulk(tag)"
+        >
+          <PlusCircleIcon
+            class="transition size-4 text-zinc-700 hover:text-blue-400"
+          />
+        </button>
         <button @click="() => deleteTag(tagIdx)">
           <TrashIcon
             class="transition size-4 text-zinc-700 hover:text-red-500"
@@ -33,11 +41,12 @@
       </div>
     </div>
     <ModalCreateTag v-model="createModalOpen" @created="onTagCreate" />
+    <ModalBulkTagGames v-model="bulkModalOpen" :tag="bulkTag" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { TrashIcon } from "@heroicons/vue/24/outline";
+import { TrashIcon, PlusCircleIcon } from "@heroicons/vue/24/outline";
 import type { SerializeObject } from "nitropack";
 import type { GameTagModel } from "~/prisma/client/models";
 
@@ -46,6 +55,13 @@ definePageMeta({
 });
 
 const createModalOpen = ref(false);
+const bulkModalOpen = ref(false);
+const bulkTag = ref<{ id: string; name: string } | null>(null);
+
+function openBulk(tag: { id: string; name: string }) {
+  bulkTag.value = { id: tag.id, name: tag.name };
+  bulkModalOpen.value = true;
+}
 
 const tags = ref(
   await $dropFetch<Array<SerializeObject<GameTagModel>>>("/api/v1/admin/tags"),

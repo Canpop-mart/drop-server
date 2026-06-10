@@ -25,6 +25,7 @@
 import fs from "fs";
 import path from "path";
 import {
+  detectCrackLoader,
   detectEmulator,
   ensureGbeDll,
   findSteamApiDll,
@@ -33,6 +34,7 @@ import {
   type EmulatorDetection,
 } from "../../gbe";
 import { setupGoldberg } from "../../goldberg";
+import prisma from "~/server/internal/db/database";
 import type { ImportContext, EmulatorSetupResult } from "./types";
 
 const PHASE = "[PHASE:emulator]";
@@ -247,6 +249,31 @@ export async function setupEmulators(
           }
         }
       }
+    }
+
+    // Auto-tag multiplayer: a loader crack (OnlineFix etc.) means the game has
+    // a multiplayer mode — OnlineFix spoofs the SpaceWar lobby. Steam metadata
+    // often misses these, so tag from the files. connectOrCreate by the unique
+    // tag name reuses the same "Multiplayer" tag the metadata path creates.
+    const loaderMarker = detectCrackLoader(versionDir);
+    if (loaderMarker) {
+      // SAFETY: ctx.gameId is the in-flight import target; a relation
+      // connectOrCreate can only be expressed via update(), not updateMany().
+      // eslint-disable-next-line drop/no-prisma-delete
+      await prisma.game.update({
+        where: { id: ctx.gameId },
+        data: {
+          tags: {
+            connectOrCreate: {
+              where: { name: "Multiplayer" },
+              create: { name: "Multiplayer" },
+            },
+          },
+        },
+      });
+      logger.info(
+        `${PHASE} OnlineFix/loader crack (${loaderMarker}) detected → tagged "Multiplayer"`,
+      );
     }
   } catch (e) {
     // Emulator setup must never block an import — record + carry on.

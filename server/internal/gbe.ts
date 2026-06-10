@@ -419,6 +419,71 @@ function findSteamApiDllRecursive(
 }
 
 /**
+ * Filenames that positively flag a pre-applied loader/wrapper crack whose OWN
+ * steam_api[64].dll fingerprints as vanilla Valve. OnlineFix (and CreamAPI,
+ * etc.) ship a steam_api DLL that re-exports the Steamworks interface strings,
+ * so `identifySteamApiDll` — which only reads the DLL itself — classifies it as
+ * Valve and would swap it. The real crack marker lives in a SIBLING file
+ * elsewhere in the install (`OnlineFix64.dll`, `OnlineFix.ini`, the proxy
+ * loader's `dlllist.txt`, …). If one is present, swapping the steam_api DLL for
+ * GBE bricks the crack's multiplayer (OnlineFix uses the SpaceWar AppID for its
+ * lobby), so the swap must be suppressed. Lowercased for case-insensitive match.
+ */
+const CRACK_LOADER_MARKER_FILES: ReadonlySet<string> = new Set([
+  "onlinefix.ini",
+  "onlinefix64.dll",
+  "onlinefix.url",
+  "dlllist.txt",
+  "cream_api.ini",
+  "creamapi.loader.config.ini",
+]);
+
+/**
+ * Returns the marker filename if `rootDir` (recursively, bounded depth)
+ * contains a crack-loader sibling file, else null. Drives the swap-suppression
+ * guard in `ensureGbeDll` for loader cracks whose steam_api DLL looks Valve.
+ */
+export function detectCrackLoader(rootDir: string): string | null {
+  return detectCrackLoaderRecursive(rootDir, 0, STEAM_API_SCAN_DEPTH);
+}
+
+function detectCrackLoaderRecursive(
+  dir: string,
+  depth: number,
+  maxDepth: number,
+): string | null {
+  if (depth > maxDepth) return null;
+
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  for (const entry of entries) {
+    if (
+      entry.isFile() &&
+      CRACK_LOADER_MARKER_FILES.has(entry.name.toLowerCase())
+    ) {
+      return entry.name;
+    }
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const found = detectCrackLoaderRecursive(
+      path.join(dir, entry.name),
+      depth + 1,
+      maxDepth,
+    );
+    if (found) return found;
+  }
+
+  return null;
+}
+
+/**
  * Returns true if `rootDir` (recursively, bounded depth) contains any
  * file from STEAM_DRM_MARKERS. Used as a cheap signal that a game ships
  * with real Steam DRM rather than an emulator.
@@ -929,6 +994,15 @@ export interface EnsureGbeOptions {
    * this from `setupGoldberg`.
    */
   forceGbeSwap?: boolean;
+  /**
+   * Game install root (version directory). When set, the swap is suppressed if
+   * a loader/wrapper crack (OnlineFix, CreamAPI, …) is detected anywhere in the
+   * tree — even when the steam_api DLL itself fingerprints as Valve. These
+   * cracks ship a steam_api DLL that re-exports the Steamworks interface
+   * strings, so the per-DLL fingerprint alone can't distinguish them from
+   * vanilla Valve; their real marker is a sibling file (e.g. `OnlineFix64.dll`).
+   */
+  installRoot?: string;
 }
 
 /**
@@ -1010,6 +1084,41 @@ export async function ensureGbeDll(
       skipped: true,
       identification: ident,
     };
+  }
+
+  // A loader/wrapper crack (OnlineFix, CreamAPI, …) ships a steam_api DLL that
+  // re-exports the Steamworks interface strings, so it fingerprinted as Valve
+  // above — but its real marker is a SIBLING file elsewhere in the install.
+  // When the caller gave us the install root, scan it: if a loader is present,
+  // refuse the swap, or we'd brick the crack's multiplayer (e.g. OnlineFix's
+  // SpaceWar lobby). The steam_settings/ + achievement scaffolding is still
+  // written by setupGoldberg, so achievements keep recording via the crack's
+  // own emulator.
+  if (
+    ident.kind === "valve" &&
+    !options?.forceGbeSwap &&
+    options?.installRoot
+  ) {
+    const loaderMarker = detectCrackLoader(options.installRoot);
+    if (loaderMarker) {
+      logger.warn(
+        `[GBE] ${dllName} fingerprints as Valve, but a crack loader ` +
+          `(${loaderMarker}) is present in the install tree — skipping GBE swap ` +
+          `to preserve the pre-applied crack's multiplayer/DRM. ` +
+          `Pass forceGbeSwap: true to override.`,
+      );
+      return {
+        swapped: false,
+        alreadyGbe: false,
+        skipped: true,
+        identification: {
+          ...ident,
+          kind: "known-crack",
+          crackName: `loader:${loaderMarker}`,
+          fingerprint: `Valve-looking steam_api DLL, but crack loader present (${loaderMarker})`,
+        },
+      };
+    }
   }
 
   // At this point: kind === "valve", OR forceGbeSwap === true.

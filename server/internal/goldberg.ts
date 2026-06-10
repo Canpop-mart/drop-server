@@ -457,6 +457,10 @@ export async function setupGoldberg(
         dllInfo.dllName,
         appId,
         log,
+        // Scan the whole install for a loader crack (OnlineFix etc.) whose
+        // steam_api DLL fingerprints as Valve — so we don't swap it and brick
+        // multiplayer. The marker lives in a sibling file, not the DLL itself.
+        { installRoot: versionDir },
       );
       if (result.swapped) {
         log.info(

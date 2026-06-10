@@ -488,6 +488,11 @@ const scheduledTasks: {
     description:
       "Reports folders on disk not in the DB, and DB rows with no matching folder. Report-only — never deletes.",
   },
+  "scan:launch-config-audit": {
+    name: "Audit Launch Configs & Versions",
+    description:
+      "Checks every version's launch configs against disk — orphaned versions, launch targets that are missing or aren't executables (the Linux data-file bug), and versions with no Windows launch. Report-only.",
+  },
   "refresh:metadata": {
     name: "Audit Metadata",
     description:

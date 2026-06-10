@@ -503,14 +503,18 @@ class LibraryManager {
 
     const fileExts: { [key in Platform]: string[] } = {
       Linux: [
-        // Ext for Unity games
+        // Unity native player
         ".x86_64",
-        // Shell scripts
+        // Shell-script launchers
         ".sh",
-        // No extension is common for Linux binaries
-        "",
         // AppImages
         ".appimage",
+        // NOTE: a bare "" (no-extension) match used to live here, but it
+        // greedily matched any extensionless data file and — ranked only by a
+        // fuzzy name match — those files got auto-picked as the Linux launch
+        // (e.g. an Unreal content/.bin file). Native Linux binaries should ship
+        // as .x86_64/.sh/.AppImage; a bare ELF can be added by hand. The
+        // launch-config audit task flags any missing/invalid launch.
       ],
       Windows: [".exe", ".bat"],
       macOS: [

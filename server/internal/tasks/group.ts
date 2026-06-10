@@ -13,6 +13,7 @@ export const taskGroups = {
   "check:game-updates": { concurrency: false },
   "scan:library-health": { concurrency: false },
   "cleanup:library-orphans": { concurrency: false },
+  "scan:launch-config-audit": { concurrency: false },
   "refresh:metadata": { concurrency: false },
 
   // ── Achievements ───────────────────────────────────────────────────

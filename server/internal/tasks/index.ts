@@ -23,6 +23,7 @@ import recalculatePlaytime from "./registry/recalculate-playtime";
 import recalculateAchievements from "./registry/recalculate-achievements";
 import scanLibraryHealth from "./registry/library-health";
 import scanLibraryOrphans from "./registry/library-orphans";
+import scanLaunchConfigAudit from "./registry/launch-config-audit";
 import refreshMetadata from "./registry/refresh-metadata";
 import backupExport from "./registry/backup-export";
 
@@ -118,6 +119,7 @@ class TaskHandler {
     // Library maintenance (on-demand)
     this.saveScheduledTask(checkGameUpdates);
     this.saveScheduledTask(scanLibraryOrphans);
+    this.saveScheduledTask(scanLaunchConfigAudit);
     this.saveScheduledTask(refreshMetadata);
 
     // Achievements (on-demand)
