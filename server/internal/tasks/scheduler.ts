@@ -11,8 +11,8 @@ import type { TaskGroup } from "./group";
  *     on the next tick, then every intervalMs after.
  *   - `{ daily }` / `{ weekly }`: bucketed into the legacy daily/weekly
  *     scheduler so the behaviour for tasks already on that path is
- *     unchanged (cleanup:invitations, cleanup:sessions, check:update,
- *     cleanup:objects, scan:library-health).
+ *     unchanged (cleanup:auth-records, check:update, cleanup:objects,
+ *     scan:library-integrity).
  *
  * Single-flight + concurrency:false in the task pool prevent overlap if
  * a previous run is still in flight when the timer fires.

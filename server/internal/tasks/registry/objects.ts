@@ -164,9 +164,13 @@ async function findReference(
         : { [c.field]: { has: id } },
     );
     const delegate = modelDelegate(modelName);
+    // No `select` here: not every referencing model has an `id` column.
+    // ApplicationSettings is a singleton keyed by `timestamp`, so a
+    // `select: { id: true }` threw "Unknown field id" and aborted the entire
+    // GC run. We only care whether a referencing row exists, so let findFirst
+    // return the matched row as-is and test it for truthiness.
     const found = await delegate.findFirst({
       where: { OR: orConditions },
-      select: { id: true },
     } as unknown as never);
     if (found) {
       // Return the first column that *could* hold the id. We don't

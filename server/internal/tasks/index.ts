@@ -8,8 +8,7 @@ import pino from "pino";
 import { logger } from "~/server/internal/logging";
 import { Writable } from "node:stream";
 
-import cleanupInvites from "./registry/invitations";
-import cleanupSessions from "./registry/sessions";
+import cleanupAuthRecords from "./registry/auth-records";
 import checkUpdate from "./registry/update";
 import cleanupObjects from "./registry/objects";
 import checkGameUpdates from "./registry/game-update";
@@ -21,9 +20,7 @@ import regenerateManifests from "./registry/regenerate-manifests";
 import restoreSteamBackup from "./registry/restore-steam-backup";
 import recalculatePlaytime from "./registry/recalculate-playtime";
 import recalculateAchievements from "./registry/recalculate-achievements";
-import scanLibraryHealth from "./registry/library-health";
-import scanLibraryOrphans from "./registry/library-orphans";
-import scanLaunchConfigAudit from "./registry/launch-config-audit";
+import scanLibraryIntegrity from "./registry/library-integrity";
 import refreshMetadata from "./registry/refresh-metadata";
 import backupExport from "./registry/backup-export";
 
@@ -99,27 +96,23 @@ class TaskHandler {
   private clientRegistry = new Map<string, PeerImpl>();
 
   private dailyScheduledTasks: TaskGroup[] = [
-    "cleanup:invitations",
-    "cleanup:sessions",
+    "cleanup:auth-records",
     "check:update",
   ];
   private weeklyScheduledTasks: TaskGroup[] = [
     "cleanup:objects",
-    "scan:library-health",
+    "scan:library-integrity",
   ];
 
   constructor() {
     // Scheduled cleanup / health
-    this.saveScheduledTask(cleanupInvites);
-    this.saveScheduledTask(cleanupSessions);
+    this.saveScheduledTask(cleanupAuthRecords);
     this.saveScheduledTask(checkUpdate);
     this.saveScheduledTask(cleanupObjects);
-    this.saveScheduledTask(scanLibraryHealth);
 
-    // Library maintenance (on-demand)
+    // Library maintenance (on-demand + weekly integrity audit)
     this.saveScheduledTask(checkGameUpdates);
-    this.saveScheduledTask(scanLibraryOrphans);
-    this.saveScheduledTask(scanLaunchConfigAudit);
+    this.saveScheduledTask(scanLibraryIntegrity);
     this.saveScheduledTask(refreshMetadata);
 
     // Achievements (on-demand)

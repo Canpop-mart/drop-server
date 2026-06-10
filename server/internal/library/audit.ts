@@ -1,16 +1,25 @@
 /**
- * Launch-config & version integrity audit.
+ * Library integrity audit.
  *
- * Walks every GameVersion and verifies, against what's actually on disk:
- *   - the version's folder still exists (orphaned DB rows);
- *   - each launch target exists and is plausibly executable for its platform
- *     (Windows → .exe/.bat; Linux → ELF binary / .sh / .AppImage / .x86_64,
- *     NOT a data file like .bin/.pak/.uasset; macOS → .app). Emulator launches
- *     point at a ROM/disc, so only their existence is checked;
- *   - non-setup versions have a Windows launch (the common "Windows via Proton"
- *     case).
+ * One read-only pass over the library that surfaces everything wrong between
+ * the database and what's actually on disk. Consolidates what used to be three
+ * separate tasks (scan:library-health, cleanup:library-orphans,
+ * scan:launch-config-audit):
+ *   - orphaned_version    — a GameVersion row whose folder is gone on disk;
+ *   - unreadable_version  — the folder exists but is empty or can't be read
+ *     into (stale mount / Synology ACL drift);
+ *   - missing_launch_target / invalid_launch_target — a launch command that
+ *     points at a file that doesn't exist, or isn't plausibly executable for
+ *     its platform (Windows → .exe/.bat; Linux → ELF / .sh / .AppImage /
+ *     .x86_64, NOT a data file like .bin/.pak; macOS → .app). Emulator
+ *     launches point at a ROM/disc, so only their existence is checked;
+ *   - missing_windows_launch — a playable (non-setup) version with no Windows
+ *     launch (the common "Windows via Proton" case);
+ *   - orphaned_folder     — a game folder on disk under a library with no Game
+ *     row pointing at it (the inverse of orphaned_version, at game granularity).
  *
- * Report-only — it never mutates. Shared by the scan task and the admin API.
+ * Report-only — it never mutates. Shared by the scan:library-integrity task
+ * and the admin audit API/page.
  */
 import fs from "fs";
 import path from "path";
@@ -18,33 +27,41 @@ import prisma from "../db/database";
 import { libraryManager } from ".";
 import { Platform } from "~/prisma/client/enums";
 
-export type LaunchAuditIssueType =
+export type LibraryAuditIssueType =
   | "orphaned_version"
+  | "unreadable_version"
   | "missing_launch_target"
   | "invalid_launch_target"
-  | "missing_windows_launch";
+  | "missing_windows_launch"
+  | "orphaned_folder";
 
-export interface LaunchAuditIssue {
-  type: LaunchAuditIssueType;
-  gameId: string;
-  gameName: string;
-  versionId: string;
-  versionName: string;
+export interface LibraryAuditIssue {
+  type: LibraryAuditIssueType;
+  /** Present for version-scoped issues; absent for orphaned_folder. */
+  gameId?: string;
+  gameName?: string;
+  versionId?: string;
+  versionName?: string;
   platform?: Platform;
   launchId?: string;
   launchName?: string;
   command?: string;
+  /** orphaned_folder only — the library + on-disk folder with no DB row. */
+  libraryName?: string;
+  path?: string;
   detail: string;
 }
 
-export interface LaunchAuditResult {
-  issues: LaunchAuditIssue[];
+export interface LibraryAuditResult {
+  issues: LibraryAuditIssue[];
   summary: {
     versionsScanned: number;
     orphanedVersions: number;
+    unreadableVersions: number;
     missingTargets: number;
     invalidTargets: number;
     missingWindowsLaunch: number;
+    orphanedFolders: number;
   };
 }
 
@@ -118,43 +135,41 @@ function isShebang(fullPath: string): boolean {
   }
 }
 
-/** Strip surrounding quotes a shell-escaped command path may carry. */
-function unquote(cmd: string): string {
-  const t = cmd.trim();
+/**
+ * Recover the real on-disk path from a stored launch command.
+ *
+ * Import stores launch commands shell-escaped (shescape). The server runs on
+ * Linux, so spaces / parens / etc. come back backslash-escaped — e.g.
+ * `Super\ Mario\ Strikers\ \(USA\).iso` — while path separators stay forward
+ * slashes. Testing that literal string against the filesystem fails even
+ * though the file is right there, which flooded the audit with false "missing
+ * target" hits on ROM + emulator launches. Strip any wrapping quotes, then
+ * undo the backslash escapes (`\X` -> `X`) to recover the real path.
+ */
+function unescapeCommand(command: string): string {
+  let s = command.trim();
   if (
-    (t.startsWith('"') && t.endsWith('"')) ||
-    (t.startsWith("'") && t.endsWith("'"))
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
   ) {
-    return t.slice(1, -1);
+    s = s.slice(1, -1);
   }
-  return t;
+  return s.replace(/\\(.)/g, "$1");
 }
 
-/**
- * Resolve a launch command to an on-disk path relative to `versionDir`.
- * Falls back to the first whitespace token when the full command (which may
- * carry trailing args) doesn't resolve.
- */
 function resolveLaunchTarget(
   versionDir: string,
   command: string,
 ): { rel: string; fullPath: string; exists: boolean } {
-  const rel = unquote(command);
+  const rel = unescapeCommand(command);
   const fullPath = path.join(versionDir, rel);
-  if (fs.existsSync(fullPath)) return { rel, fullPath, exists: true };
-
-  const firstToken = unquote(command.split(/\s+/)[0] ?? "");
-  if (firstToken && firstToken !== rel) {
-    const alt = path.join(versionDir, firstToken);
-    if (fs.existsSync(alt))
-      return { rel: firstToken, fullPath: alt, exists: true };
-  }
-  return { rel, fullPath, exists: false };
+  return { rel, fullPath, exists: fs.existsSync(fullPath) };
 }
 
-export async function auditLaunchConfigs(): Promise<LaunchAuditResult> {
-  const issues: LaunchAuditIssue[] = [];
+export async function auditLibrary(): Promise<LibraryAuditResult> {
+  const issues: LibraryAuditIssue[] = [];
 
+  // ── Pass 1: per-version integrity ──────────────────────────────────
   const versions = await prisma.gameVersion.findMany({
     select: {
       versionId: true,
@@ -205,11 +220,40 @@ export async function auditLaunchConfigs(): Promise<LaunchAuditResult> {
           ? `No folder on disk for versionPath "${version.versionPath}"`
           : "Version has no versionPath",
       });
-      // Can't validate targets without a folder.
       continue;
     }
 
-    // 2. Validate each launch target.
+    // 2. Health — the folder exists; is it non-empty and readable? Catches
+    //    stale mounts and Synology ACL drift (listable but not statable).
+    try {
+      const entries = fs.readdirSync(versionDir);
+      if (entries.length === 0) {
+        issues.push({
+          type: "unreadable_version",
+          gameId: game.id,
+          gameName: game.mName,
+          versionId: version.versionId,
+          versionName,
+          detail: "Version folder exists but is empty",
+        });
+        continue;
+      }
+      // Spot-check one entry — a dir can be listable while its contents are
+      // owned by a uid the container can't read.
+      fs.statSync(path.join(versionDir, entries[0]));
+    } catch (e) {
+      issues.push({
+        type: "unreadable_version",
+        gameId: game.id,
+        gameName: game.mName,
+        versionId: version.versionId,
+        versionName,
+        detail: `Version folder is unreadable: ${e instanceof Error ? e.message : String(e)}`,
+      });
+      continue;
+    }
+
+    // 3. Validate each launch target.
     for (const launch of version.launches) {
       const { rel, fullPath, exists } = resolveLaunchTarget(
         versionDir,
@@ -275,7 +319,7 @@ export async function auditLaunchConfigs(): Promise<LaunchAuditResult> {
       }
     }
 
-    // 3. A playable (non-setup) version should have a Windows launch — most
+    // 4. A playable (non-setup) version should have a Windows launch — most
     //    games run on Windows (incl. Proton on Linux).
     if (!version.onlySetup) {
       const hasWindows = version.launches.some(
@@ -294,7 +338,48 @@ export async function auditLaunchConfigs(): Promise<LaunchAuditResult> {
     }
   }
 
-  const count = (t: LaunchAuditIssueType) =>
+  // ── Pass 2: orphaned folders on disk (game granularity) ────────────
+  // Top-level game folders present on disk but referenced by no Game row.
+  // Report-only — game folders are multi-GB, so the deployer makes the call.
+  const libraries = await prisma.library.findMany({
+    select: { id: true, name: true },
+  });
+  for (const lib of libraries) {
+    const provider = libraryManager.getLibrary(lib.id);
+    if (!provider) continue;
+
+    let onDisk: string[];
+    try {
+      onDisk = await provider.listGames();
+    } catch {
+      // Library offline / unreadable — Pass 1 already flags affected
+      // versions; skip the orphan sweep for this library.
+      continue;
+    }
+
+    const inDb = await prisma.game.findMany({
+      where: { libraryId: lib.id },
+      select: { libraryPath: true, discFolders: true },
+    });
+    const known = new Set<string>();
+    for (const g of inDb) {
+      known.add(g.libraryPath);
+      for (const disc of g.discFolders ?? []) known.add(disc);
+    }
+
+    for (const folder of onDisk) {
+      if (!known.has(folder)) {
+        issues.push({
+          type: "orphaned_folder",
+          libraryName: lib.name,
+          path: folder,
+          detail: `Folder on disk under "${lib.name}" with no game in the database`,
+        });
+      }
+    }
+  }
+
+  const count = (t: LibraryAuditIssueType) =>
     issues.filter((i) => i.type === t).length;
 
   return {
@@ -302,9 +387,11 @@ export async function auditLaunchConfigs(): Promise<LaunchAuditResult> {
     summary: {
       versionsScanned: versions.length,
       orphanedVersions: count("orphaned_version"),
+      unreadableVersions: count("unreadable_version"),
       missingTargets: count("missing_launch_target"),
       invalidTargets: count("invalid_launch_target"),
       missingWindowsLaunch: count("missing_windows_launch"),
+      orphanedFolders: count("orphaned_folder"),
     },
   };
 }

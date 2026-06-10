@@ -26,12 +26,14 @@ model Library {
     backend LibraryBackend
     options Json
 
-    // When true (default), setupGoldberg will swap a positively-identified
-    // vanilla Valve `steam_api*.dll` for a GBE build at import time.
-    // Flip OFF for libraries of pre-cracked games (OnlineFix, CODEX,
-    // EMPRESS, CreamAPI, etc.) where you want the on-disk DLLs left alone.
+    // When true, setupGoldberg swaps a positively-identified vanilla Valve
+    // `steam_api*.dll` for a GBE build at import time. Defaults OFF: most Drop
+    // libraries hold pre-cracked games (OnlineFix, CODEX, EMPRESS, CreamAPI,
+    // …) that already ship their own Steam emulation, so the swap is redundant
+    // and risks bricking the working crack. Flip ON only for a library of clean
+    // Valve builds that actually need GBE to run without Steam.
     // Per-game overrides live on Game.autoSwapSteamApiDll.
-    autoSwapSteamApiDll Boolean @default(true)
+    autoSwapSteamApiDll Boolean @default(false)
 
     // When true (default), the version-import pipeline runs the
     // `setupEmulators` phase (SSE detection + Goldberg achievement

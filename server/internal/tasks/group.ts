@@ -1,7 +1,6 @@
 export const taskGroups = {
   // ── Scheduled cleanup ──────────────────────────────────────────────
-  "cleanup:invitations": { concurrency: false },
-  "cleanup:sessions": { concurrency: false },
+  "cleanup:auth-records": { concurrency: false },
   "cleanup:objects": { concurrency: false },
   "check:update": { concurrency: false },
 
@@ -11,9 +10,7 @@ export const taskGroups = {
 
   // ── Library maintenance ────────────────────────────────────────────
   "check:game-updates": { concurrency: false },
-  "scan:library-health": { concurrency: false },
-  "cleanup:library-orphans": { concurrency: false },
-  "scan:launch-config-audit": { concurrency: false },
+  "scan:library-integrity": { concurrency: false },
   "refresh:metadata": { concurrency: false },
 
   // ── Achievements ───────────────────────────────────────────────────

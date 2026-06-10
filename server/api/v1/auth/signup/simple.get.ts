@@ -18,7 +18,7 @@ export default defineEventHandler(async (h3) => {
       statusCode: 400,
       statusMessage: t("errors.auth.inviteIdRequired"),
     });
-  taskHandler.runTaskGroupByName("cleanup:invitations");
+  taskHandler.runTaskGroupByName("cleanup:auth-records");
 
   const invitation = await prisma.invitation.findUnique({ where: { id: id } });
   if (!invitation)

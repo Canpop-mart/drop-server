@@ -451,17 +451,14 @@ const scheduledTasks: {
   [key in TaskGroup]: { name: string; description: string };
 } = {
   // Scheduled cleanup (automatic)
-  "cleanup:invitations": {
-    name: t("tasks.admin.scheduled.cleanupInvitationsName"),
-    description: t("tasks.admin.scheduled.cleanupInvitationsDescription"),
+  "cleanup:auth-records": {
+    name: "Prune Expired Records",
+    description:
+      "Deletes expired invitations and expired/orphaned login sessions in one pass. Runs automatically every day.",
   },
   "cleanup:objects": {
     name: t("tasks.admin.scheduled.cleanupObjectsName"),
     description: t("tasks.admin.scheduled.cleanupObjectsDescription"),
-  },
-  "cleanup:sessions": {
-    name: t("tasks.admin.scheduled.cleanupSessionsName"),
-    description: t("tasks.admin.scheduled.cleanupSessionsDescription"),
   },
   "check:update": {
     name: t("tasks.admin.scheduled.checkUpdateName"),
@@ -478,20 +475,10 @@ const scheduledTasks: {
     description:
       "Hits Steam for fresh build IDs and flips updateAvailable on any game that's behind. Also runs automatically every 6 hours.",
   },
-  "scan:library-health": {
-    name: "Scan Library Health",
+  "scan:library-integrity": {
+    name: "Audit Library",
     description:
-      "Verifies every imported version's files still exist and are readable. Catches stale mounts and ACL drift.",
-  },
-  "cleanup:library-orphans": {
-    name: "Scan Library Orphans",
-    description:
-      "Reports folders on disk not in the DB, and DB rows with no matching folder. Report-only — never deletes.",
-  },
-  "scan:launch-config-audit": {
-    name: "Audit Launch Configs & Versions",
-    description:
-      "Checks every version's launch configs against disk — orphaned versions, launch targets that are missing or aren't executables (the Linux data-file bug), and versions with no Windows launch. Report-only.",
+      "One report-only pass over the whole library: orphaned versions, empty/unreadable folders, launch targets that are missing or aren't executables, versions with no Windows launch, and game folders on disk with no DB row. Runs weekly; full results on the Audit page.",
   },
   "refresh:metadata": {
     name: "Audit Metadata",

@@ -9,7 +9,7 @@ export default defineEventHandler(async (h3) => {
   ]);
   if (!allowed) throw createError({ statusCode: 403 });
 
-  await taskHandler.runTaskGroupByName("cleanup:invitations");
+  await taskHandler.runTaskGroupByName("cleanup:auth-records");
 
   const externalUrl = systemConfig.getExternalUrl();
   const invitations = await prisma.invitation.findMany({});

@@ -48,7 +48,6 @@ export default defineEventHandler(async (h3) => {
   // On-demand admin categories. Ordering here controls the UI reading order.
   const library: TaskGroup[] = [
     "check:game-updates",
-    "cleanup:library-orphans",
     "refresh:metadata",
     "regenerate:manifests",
   ];

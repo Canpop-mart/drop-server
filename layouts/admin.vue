@@ -225,7 +225,7 @@ const navigation: Array<NavigationItem & { icon: Component }> = [
   },
   {
     label: "Audit",
-    route: "/admin/audit/launch-configs",
+    route: "/admin/audit/library",
     prefix: "/admin/audit",
     icon: ClipboardDocumentCheckIcon,
   },
