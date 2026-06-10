@@ -128,6 +128,14 @@ export const OBJECT_REFERENCE_COLUMNS: ObjectReferenceColumn[] = [
     kind: "scalar",
     label: "server logo",
   },
+
+  // ── Collection (curated store-group cover) ──────────────────────────
+  {
+    model: "collection",
+    field: "coverObjectId",
+    kind: "scalar",
+    label: "collection cover",
+  },
 ];
 
 /**

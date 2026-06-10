@@ -236,6 +236,14 @@
       <section v-if="tabMounted.browse" v-show="activeTab === 'browse'">
         <StoreView />
       </section>
+
+      <!-- Collections -->
+      <section
+        v-if="tabMounted.collections"
+        v-show="activeTab === 'collections'"
+      >
+        <StoreCollectionsShelf />
+      </section>
     </div>
   </div>
 </template>
@@ -246,6 +254,7 @@ import {
   FireIcon,
   ClockIcon,
   Squares2X2Icon,
+  RectangleStackIcon,
 } from "@heroicons/vue/24/outline";
 import type { SerializeObject } from "nitropack";
 import type { GameModel } from "~/prisma/client/models";
@@ -267,11 +276,14 @@ const compatSummary = computed(() => compatSummaryRef?.value ?? {});
 useHead({ title: t("store.title") });
 
 // ─── Tabs ─────────────────────────────────────────────────────────────
-const activeTab = ref<"mostPlayed" | "recentlyAdded" | "browse">("mostPlayed");
+const activeTab = ref<
+  "mostPlayed" | "recentlyAdded" | "browse" | "collections"
+>("mostPlayed");
 const tabMounted = reactive<Record<string, boolean>>({
   mostPlayed: true,
   recentlyAdded: true,
   browse: false,
+  collections: false,
 });
 
 watch(activeTab, (tab) => {
@@ -293,6 +305,11 @@ const tabs = computed(() => [
     id: "browse" as const,
     label: t("store.nav.browse"),
     icon: Squares2X2Icon,
+  },
+  {
+    id: "collections" as const,
+    label: "Collections",
+    icon: RectangleStackIcon,
   },
 ]);
 

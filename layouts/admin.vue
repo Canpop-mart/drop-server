@@ -164,6 +164,7 @@ import {
   Cog6ToothIcon,
   UserGroupIcon,
   RectangleStackIcon,
+  RectangleGroupIcon,
   DocumentIcon,
   TrophyIcon,
   BugAntIcon,
@@ -198,6 +199,12 @@ const navigation: Array<NavigationItem & { icon: Component }> = [
     route: "/admin/metadata",
     prefix: "/admin/metadata",
     icon: DocumentIcon,
+  },
+  {
+    label: "Collections",
+    route: "/admin/collections",
+    prefix: "/admin/collections",
+    icon: RectangleGroupIcon,
   },
   {
     label: $t("header.admin.users"),

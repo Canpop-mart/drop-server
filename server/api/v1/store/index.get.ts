@@ -16,6 +16,9 @@ const StoreRead = type({
   q: "string?",
 
   tags: "string?",
+  // How multiple selected tags combine: "or" = any (union, default),
+  // "and" = all (intersection — only games carrying every selected tag).
+  tagMode: "'and' | 'or' = 'or'",
   platform: "string?",
   library: "string?",
 
@@ -43,17 +46,21 @@ export default defineEventHandler(async (h3) => {
   /**
    * Generic filters
    */
-  const tagFilter = options.tags
-    ? {
-        tags: {
-          some: {
-            id: {
-              in: options.tags.split(","),
-            },
-          },
-        },
-      }
-    : undefined;
+  const tagIds = options.tags?.split(",").filter((t) => t.length > 0) ?? [];
+  const tagFilter =
+    tagIds.length === 0
+      ? undefined
+      : options.tagMode === "and"
+        ? // Intersection — the game must carry EVERY selected tag. Each tag
+          // becomes its own `some`, AND-ed together (a single `some` with
+          // `id in [...]` would be union, not intersection).
+          ({
+            AND: tagIds.map((id) => ({ tags: { some: { id } } })),
+          } satisfies Prisma.GameWhereInput)
+        : // Union (default) — the game carries ANY of the selected tags.
+          ({
+            tags: { some: { id: { in: tagIds } } },
+          } satisfies Prisma.GameWhereInput);
   const platformFilter = filterPlatforms
     ? ({
         OR: [

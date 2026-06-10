@@ -75,6 +75,40 @@
                     </h3>
                     <DisclosurePanel class="pt-6">
                       <div
+                        v-if="section.param === 'tags' && selectedTagCount >= 2"
+                        class="mb-4 flex items-center gap-2 text-xs"
+                      >
+                        <span class="text-zinc-500">Match</span>
+                        <div
+                          class="inline-flex overflow-hidden rounded-md ring-1 ring-zinc-700"
+                        >
+                          <button
+                            type="button"
+                            class="px-2.5 py-1 transition-colors"
+                            :class="
+                              tagMode === 'and'
+                                ? 'bg-blue-600 text-white'
+                                : 'text-zinc-400 hover:bg-zinc-800'
+                            "
+                            @click="tagMode = 'and'"
+                          >
+                            All tags
+                          </button>
+                          <button
+                            type="button"
+                            class="px-2.5 py-1 transition-colors"
+                            :class="
+                              tagMode === 'or'
+                                ? 'bg-blue-600 text-white'
+                                : 'text-zinc-400 hover:bg-zinc-800'
+                            "
+                            @click="tagMode = 'or'"
+                          >
+                            Any tag
+                          </button>
+                        </div>
+                      </div>
+                      <div
                         v-if="section.options.length <= 10"
                         class="gap-3 grid grid-cols-2"
                       >
@@ -263,6 +297,40 @@
                   </DisclosureButton>
                 </h3>
                 <DisclosurePanel class="pt-6">
+                  <div
+                    v-if="section.param === 'tags' && selectedTagCount >= 2"
+                    class="mb-4 flex items-center gap-2 text-xs"
+                  >
+                    <span class="text-zinc-500">Match</span>
+                    <div
+                      class="inline-flex overflow-hidden rounded-md ring-1 ring-zinc-700"
+                    >
+                      <button
+                        type="button"
+                        class="px-2.5 py-1 transition-colors"
+                        :class="
+                          tagMode === 'and'
+                            ? 'bg-blue-600 text-white'
+                            : 'text-zinc-400 hover:bg-zinc-800'
+                        "
+                        @click="tagMode = 'and'"
+                      >
+                        All tags
+                      </button>
+                      <button
+                        type="button"
+                        class="px-2.5 py-1 transition-colors"
+                        :class="
+                          tagMode === 'or'
+                            ? 'bg-blue-600 text-white'
+                            : 'text-zinc-400 hover:bg-zinc-800'
+                        "
+                        @click="tagMode = 'or'"
+                      >
+                        Any tag
+                      </button>
+                    </div>
+                  </div>
                   <div v-if="section.options.length <= 10" class="space-y-4">
                     <div
                       v-for="(option, optionIdx) in section.options"
@@ -547,6 +615,17 @@ const optionValues = ref<{
 );
 Object.assign(optionValues.value, props.prefilled);
 
+// Tag combine mode — "or" = any selected tag (default), "and" = all of them
+// (intersection). Only meaningful with 2+ tags selected; the toggle and the
+// query param are both gated on that.
+const tagMode = ref<"and" | "or">("or");
+const selectedTagCount = computed(() => {
+  const sel = optionValues.value.tags;
+  return sel && typeof sel === "object"
+    ? Object.values(sel).filter(Boolean).length
+    : 0;
+});
+
 const filterQuery = computed(() => {
   const query = Object.entries(optionValues.value)
     .filter(
@@ -569,7 +648,11 @@ const filterQuery = computed(() => {
   const searchParam = debouncedSearch.value
     ? `q=${encodeURIComponent(debouncedSearch.value)}`
     : "";
-  const parts = [query, extraFilters, searchParam]
+  // Only send tagMode when it changes the result set (2+ tags) and it's the
+  // non-default "and" — keeps URLs clean for the common single-tag case.
+  const tagModeParam =
+    selectedTagCount.value >= 2 && tagMode.value === "and" ? "tagMode=and" : "";
+  const parts = [query, extraFilters, searchParam, tagModeParam]
     .filter((p) => p && p.length > 0)
     .join("&");
   return parts;

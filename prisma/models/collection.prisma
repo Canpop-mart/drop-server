@@ -2,6 +2,14 @@ model Collection {
     id   String @id @default(uuid())
     name String
 
+    // Curated store-group fields. A collection surfaces as a store "group"
+    // when isPublic && featured (featured is admin-gated). Plain personal
+    // collections leave these at their defaults and are unaffected.
+    description   String?
+    coverObjectId String?
+    featured      Boolean @default(false)
+    sortIndex     Int     @default(0)
+
     isDefault Boolean @default(false)
     isPublic  Boolean @default(false)
     userId    String
@@ -16,6 +24,10 @@ model CollectionEntry {
 
     gameId String
     game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+    // Curated order within the collection (store landing page). Personal
+    // collections ignore it (all default 0 → insertion/name order).
+    sortIndex Int @default(0)
 
     @@id([collectionId, gameId])
 }
