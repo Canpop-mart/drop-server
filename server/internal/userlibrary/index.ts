@@ -66,10 +66,19 @@ class UserLibraryManager {
     return await this.attachEntries(collection);
   }
 
-  async fetchCollections(userId: string) {
+  async fetchCollections(
+    userId: string,
+    opts: { excludeFeatured?: boolean } = {},
+  ) {
     await this.fetchUserLibrary(userId); // Ensures user library exists, doesn't have much performance impact due to caching
     const collections = await prisma.collection.findMany({
-      where: { userId, isDefault: false },
+      where: {
+        userId,
+        isDefault: false,
+        // Curated (featured) collections are store content — exclude them
+        // from the user's personal library feed when asked.
+        ...(opts.excludeFeatured ? { featured: false } : {}),
+      },
     });
 
     if (collections.length === 0) return [];

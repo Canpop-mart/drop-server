@@ -389,6 +389,15 @@ export class SteamProvider implements MetadataProvider {
 
     // Process results
     for (const { companyName, types, comp } of companyResults) {
+      // A company can fail to resolve (e.g. its Steam page didn't yield a
+      // usable name). Skip it instead of pushing `undefined` into the connect
+      // arrays — that makes prisma.game.create reject the entire import.
+      if (!comp) {
+        context?.logger.warn(
+          `Skipping unresolved company "${companyName}" — no metadata returned`,
+        );
+        continue;
+      }
       if (types.dev) {
         developers.push(comp);
         context?.logger.info(

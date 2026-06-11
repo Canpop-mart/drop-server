@@ -87,7 +87,9 @@ interface AdminCollection {
 }
 
 const collections = ref<AdminCollection[]>(
-  await $dropFetch<AdminCollection[]>("/api/v1/collection"),
+  await $dropFetch<AdminCollection[]>(
+    "/api/v1/collection?includeFeatured=true",
+  ),
 );
 
 const router = useRouter();

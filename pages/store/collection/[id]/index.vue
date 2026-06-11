@@ -30,6 +30,23 @@
           >
             {{ collection.description }}
           </p>
+
+          <div v-if="collection.games.length > 0" class="mt-6">
+            <button
+              :disabled="adding || added"
+              class="inline-flex items-center gap-2 rounded-md bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+              @click="addToLibrary"
+            >
+              <template v-if="added"
+                >Added {{ collection.games.length }} game{{
+                  collection.games.length === 1 ? "" : "s"
+                }}
+                to your library</template
+              >
+              <template v-else-if="adding">Adding…</template>
+              <template v-else>Add entire collection to my library</template>
+            </button>
+          </div>
         </div>
       </section>
     </div>
@@ -61,6 +78,24 @@ const route = useRoute();
 const collectionId = route.params.id;
 
 const collection = await $dropFetch(`/api/v1/store/collection/${collectionId}`);
+
+// "Add entire collection to my library" — adds every game to the user's
+// library and saves a personal copy of the collection as a shelf.
+const adding = ref(false);
+const added = ref(false);
+async function addToLibrary() {
+  if (adding.value || added.value) return;
+  adding.value = true;
+  try {
+    await $dropFetch(
+      `/api/v1/store/collection/${collectionId}/add-to-library`,
+      { method: "POST", failTitle: "Failed to add collection to library" },
+    );
+    added.value = true;
+  } finally {
+    adding.value = false;
+  }
+}
 
 // Compat badges per game — soft-fail so the page still renders offline.
 const compatSummaryRef = await useCompatSummary().catch(() => null);

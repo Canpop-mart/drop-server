@@ -456,10 +456,12 @@ export class MetadataHandler {
               mImageCarouselObjectIds: metadata.screenshots.slice(0, 10),
 
               publishers: {
-                connect: metadata.publishers,
+                // Defensive: drop any company that failed to resolve so a
+                // single bad publisher/developer can't reject the whole import.
+                connect: metadata.publishers.filter(Boolean),
               },
               developers: {
-                connect: metadata.developers,
+                connect: metadata.developers.filter(Boolean),
               },
 
               ratings: {
