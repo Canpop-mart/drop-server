@@ -19,6 +19,7 @@ import prisma from "../../db/database";
 import notificationSystem from "../../notifications";
 import gameSizeManager from "../../gamesize";
 import { GameType } from "~/prisma/client/enums";
+import { readGoldbergAppId } from "../../goldberg";
 import type {
   ImportContext,
   ManifestResult,
@@ -58,6 +59,18 @@ export async function persistVersion(
   });
   const currentIndex = largestIndex ? largestIndex.versionIndex + 1 : 0;
 
+  // Default the umu GAMEID to the game's Steam AppID so umu-launcher applies
+  // its per-game protonfixes (runtime deps, dll overrides) on Linux/Deck.
+  // Prefer the AppID from metadata, fall back to steam_appid.txt for cracked
+  // games. An explicit per-launch umuId from the importer always wins.
+  const autoUmuId =
+    ctx.steamAppId ??
+    (prepared.versionDir ? readGoldbergAppId(prepared.versionDir) : undefined);
+  if (autoUmuId)
+    logger.info(
+      `${PHASE} umu GAMEID defaults to Steam AppID ${autoUmuId} (protonfixes)`,
+    );
+
   // ── 1. Insert the GameVersion row ────────────────────────────────────
   const newVersion = await prisma.gameVersion.create({
     data: {
@@ -92,6 +105,11 @@ export async function persistVersion(
                     ? (v.suggestions ?? [])
                     : [],
                 discPaths: v.discPaths ?? [],
+                // Explicit importer umuId wins; otherwise default to the
+                // Steam AppID so umu pulls the game's protonfixes. Store is
+                // "steam" only when we auto-fill from a real Steam AppID.
+                umuIdOverride: v.umuId ?? autoUmuId ?? null,
+                umuStoreOverride: !v.umuId && autoUmuId ? "steam" : null,
               })),
             }
           : { data: [] },

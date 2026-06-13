@@ -55,16 +55,6 @@ model Game {
   // the library base dir. Empty for single-disc games.
   discFolders String[] @default([])
 
-  // Per-game override for the library's autoSwapSteamApiDll setting.
-  //   null  → inherit Library.autoSwapSteamApiDll (default)
-  //   true  → force-attempt the GBE swap even if the library has it off
-  //   false → never swap this game's steam_api DLL, even if the library
-  //           has it on (use for pre-fixed games with crack DLLs we don't
-  //           positively identify yet)
-  // The actual swap still requires positive Valve identification — this
-  // flag only gates whether ensureGbeDll is even consulted.
-  autoSwapSteamApiDll Boolean?
-
   collections CollectionEntry[]
   screenshots Screenshot[]
   tags        GameTag[]
@@ -162,6 +152,8 @@ model GameVersion {
   requiringContent GameVersion[] @relation(name: "requiredContent")
 
   importReceipt ImportReceipt?
+
+  compatibilityResults GameCompatibilityResult[]
 
   // PostgreSQL does not auto-index FK columns. Without this, cascade deletes
   // from Game and every "list versions for this game" query full-scans the

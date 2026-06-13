@@ -49,11 +49,6 @@ export interface ImportContext {
   metadata: typeof ImportVersion.infer;
 
   /**
-   * Effective `autoSwapSteamApiDll` policy (game override → library
-   * default → true). Gates only the DLL swap.
-   */
-  autoSwapDll: boolean;
-  /**
    * Effective `autoEmulatorSetup` policy (library default → true).
    * When false the whole setupEmulators phase is a no-op.
    */

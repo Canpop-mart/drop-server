@@ -5,12 +5,9 @@ import libraryManager from "~/server/internal/library";
 /**
  * POST /api/v1/admin/import/revert/[versionId]
  *
- * Reverts a previously-imported version:
- *   - deletes the GameVersion row (cascades the ImportReceipt),
- *   - restores any `.steam_backup` DLL on disk (via gbe.ts
- *     `restoreSteamBackup`),
- *   - regenerates the manifest for whatever version is now latest
- *     (only when a DLL was actually restored).
+ * Reverts a previously-imported version: deletes the GameVersion row
+ * (which cascades the ImportReceipt) so the version becomes available
+ * to re-import.
  *
  * Idempotent-ish: a second call 404s because the version is gone.
  */
@@ -25,7 +22,5 @@ export default defineEventHandler(async (h3) => {
   return {
     reverted: true,
     gameId: result.gameId,
-    restoredBackups: result.restoredBackups,
-    manifestRegenerated: result.manifestRegenQueued,
   };
 });

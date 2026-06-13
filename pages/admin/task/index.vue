@@ -512,16 +512,6 @@ const scheduledTasks: {
     description:
       "Audits per-user unlock counts and flags games whose definitions never fetched. Reports only.",
   },
-  "upgrade:gbe": {
-    name: "Upgrade to GBE",
-    description:
-      "Ensures the GBE (Goldberg fork) DLLs are cached, then scans every game and upgrades SSE/Steam DRM installs in place.",
-  },
-  "restore:steam-backup": {
-    name: "Restore .steam_backup DLLs",
-    description:
-      "Recovery task — restores any *.steam_backup files left behind by the old opt-out GBE swap (which destroyed pre-applied crack DLLs like OnlineFix/CODEX/EMPRESS). Walks every library, swaps the original back into place, stashes the GBE DLL as *.gbe_backup, and regenerates manifests so client checksums stay honest.",
-  },
 
   // System
   "recalculate:playtime": {
@@ -533,6 +523,11 @@ const scheduledTasks: {
     name: "Export Backup",
     description:
       "Writes a JSON snapshot of games, users, versions, and achievements to /data/backups. Keeps the most recent 10.",
+  },
+  "cleanup:compat-logs": {
+    name: "Tier Compatibility Logs",
+    description:
+      "Moves launch-telemetry log excerpts older than 7 days from the database into gzipped cold storage, and deletes cold files older than 30 days. The compact result rows are kept.",
   },
 };
 

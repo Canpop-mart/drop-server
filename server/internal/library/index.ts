@@ -18,7 +18,6 @@ import type { WorkingLibrarySource } from "~/server/api/v1/admin/library/sources
 import type { ImportVersion } from "~/server/api/v1/admin/import/version/index.post";
 import { GameType, type Platform } from "~/prisma/client/enums";
 import { Shescape } from "shescape";
-import { restoreSteamBackup } from "../gbe";
 import { runVersionImport } from "./import";
 import type { ImportContext, ImportReceiptShape } from "./import/types";
 import type {
@@ -743,9 +742,8 @@ class LibraryManager {
         discFolders: true,
         metadataSource: true,
         metadataId: true,
-        autoSwapSteamApiDll: true,
         library: {
-          select: { autoSwapSteamApiDll: true, autoEmulatorSetup: true },
+          select: { autoEmulatorSetup: true },
         },
       },
     });
@@ -762,9 +760,6 @@ class LibraryManager {
 
     const isMultiDisc = !!(game.discFolders && game.discFolders.length > 1);
 
-    // Effective swap policy: game override → library default → true.
-    const autoSwapDll =
-      game.autoSwapSteamApiDll ?? game.library?.autoSwapSteamApiDll ?? true;
     // autoEmulatorSetup is library-only; default true.
     const autoEmulatorSetup = game.library?.autoEmulatorSetup ?? true;
 
@@ -788,7 +783,6 @@ class LibraryManager {
       library,
       version,
       metadata,
-      autoSwapDll,
       autoEmulatorSetup,
       dryRun,
       task,
@@ -891,28 +885,22 @@ class LibraryManager {
   }
 
   /**
-   * Reverts an imported version: deletes the GameVersion (cascades the
-   * ImportReceipt), restores any `.steam_backup` DLL on disk, and queues
-   * a manifest regeneration for whatever version is now latest.
+   * Reverts an imported version: deletes the GameVersion (which cascades
+   * the ImportReceipt) and busts the unimported-games cache so the
+   * version reappears as available to re-import.
    *
-   * Returns a small summary. Throws `createError` on bad input.
+   * Returns the affected gameId. Throws `createError` on bad input.
    */
   async revertImportedVersion(versionId: string): Promise<{
     gameId: string;
-    restoredBackups: number;
-    manifestRegenQueued: boolean;
   }> {
     const version = await prisma.gameVersion.findUnique({
       where: { versionId },
       select: {
-        versionId: true,
-        versionPath: true,
         gameId: true,
         game: {
           select: {
             libraryId: true,
-            libraryPath: true,
-            discFolders: true,
           },
         },
       },
@@ -921,32 +909,6 @@ class LibraryManager {
       throw createError({ statusCode: 404, message: "Version not found" });
 
     const gameId = version.gameId;
-    let restoredBackups = 0;
-
-    // ── Restore any .steam_backup DLLs on disk ─────────────────────────
-    const library = version.game.libraryId
-      ? this.libraries.get(version.game.libraryId)
-      : undefined;
-    if (library && version.versionPath) {
-      const isMultiDisc =
-        version.game.discFolders && version.game.discFolders.length > 1;
-      const effectivePath = isMultiDisc
-        ? version.game.discFolders[0]
-        : version.game.libraryPath;
-      const versionDir = library.resolveVersionDir(
-        effectivePath,
-        version.versionPath,
-      );
-      if (versionDir) {
-        const results = restoreSteamBackup(versionDir);
-        restoredBackups = results.filter((r) => r.restored).length;
-        for (const r of results) {
-          logger.info(
-            `[import:revert] ${r.dllPath}: ${r.note ?? (r.restored ? "restored" : "skipped")}`,
-          );
-        }
-      }
-    }
 
     // ── Delete the GameVersion (ImportReceipt cascades) ────────────────
     await prisma.gameVersion.deleteMany({ where: { versionId } });
@@ -956,19 +918,7 @@ class LibraryManager {
     if (version.game.libraryId)
       this.bustUnimportedGamesCache(version.game.libraryId);
 
-    // ── Regenerate the manifest for whatever version is now latest ─────
-    let manifestRegenQueued = false;
-    const stillHasVersions =
-      (await prisma.gameVersion.count({ where: { gameId } })) > 0;
-    if (stillHasVersions && restoredBackups > 0) {
-      const ok = await this.regenerateManifestForLatestVersion(gameId, {
-        info: (m) => logger.info(`[import:revert] ${m}`),
-        warn: (m) => logger.warn(`[import:revert] ${m}`),
-      });
-      manifestRegenQueued = ok;
-    }
-
-    return { gameId, restoredBackups, manifestRegenQueued };
+    return { gameId };
   }
 
   async peekFile(

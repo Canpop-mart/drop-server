@@ -11,13 +11,12 @@ import { Writable } from "node:stream";
 import cleanupAuthRecords from "./registry/auth-records";
 import checkUpdate from "./registry/update";
 import cleanupObjects from "./registry/objects";
+import cleanupCompatLogs from "./registry/cleanup-compat-logs";
 import checkGameUpdates from "./registry/game-update";
 import scanGoldbergReadiness from "./registry/goldberg-readiness";
 import refreshAchievementDefs from "./registry/refresh-achievement-defs";
 import linkRetroAchievements from "./registry/link-retroachievements";
-import upgradeGbe from "./registry/upgrade-to-gbe";
 import regenerateManifests from "./registry/regenerate-manifests";
-import restoreSteamBackup from "./registry/restore-steam-backup";
 import recalculatePlaytime from "./registry/recalculate-playtime";
 import recalculateAchievements from "./registry/recalculate-achievements";
 import scanLibraryIntegrity from "./registry/library-integrity";
@@ -97,6 +96,7 @@ class TaskHandler {
 
   private dailyScheduledTasks: TaskGroup[] = [
     "cleanup:auth-records",
+    "cleanup:compat-logs",
     "check:update",
   ];
   private weeklyScheduledTasks: TaskGroup[] = [
@@ -109,6 +109,7 @@ class TaskHandler {
     this.saveScheduledTask(cleanupAuthRecords);
     this.saveScheduledTask(checkUpdate);
     this.saveScheduledTask(cleanupObjects);
+    this.saveScheduledTask(cleanupCompatLogs);
 
     // Library maintenance (on-demand + weekly integrity audit)
     this.saveScheduledTask(checkGameUpdates);
@@ -120,9 +121,7 @@ class TaskHandler {
     this.saveScheduledTask(refreshAchievementDefs);
     this.saveScheduledTask(linkRetroAchievements);
     this.saveScheduledTask(recalculateAchievements);
-    this.saveScheduledTask(upgradeGbe);
     this.saveScheduledTask(regenerateManifests);
-    this.saveScheduledTask(restoreSteamBackup);
 
     // System (on-demand)
     this.saveScheduledTask(recalculatePlaytime);

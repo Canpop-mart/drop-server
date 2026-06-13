@@ -41,6 +41,17 @@ model GameCompatibilityResult {
     /// Up to ~16KB of relevant log lines for triage; trimmed on insert if larger.
     logExcerpt    String?
 
+    /// The specific build this result is for — enables per-version compat and
+    /// multiplayer parity ("does v3 work?"). Null for legacy/worker rows that
+    /// predate version linking.
+    gameVersionId String?
+    gameVersion   GameVersion? @relation(fields: [gameVersionId], references: [versionId], onDelete: SetNull, onUpdate: Cascade)
+    /// Did multiplayer actually work this run? Null = not multiplayer / not observed.
+    multiplayerOk Boolean?
+    /// Origin of the result: "worker" (compat-test harness) or "launch" (a real
+    /// user launch auto-reporting its outcome).
+    source        String       @default("worker")
+
     testedAt DateTime @default(now()) @db.Timestamptz(6)
 
     /// Primary access pattern: "what's the latest result for this game on this client?"
@@ -50,4 +61,6 @@ model GameCompatibilityResult {
     @@index([clientId, status, testedAt(sort: Desc)])
     /// Tertiary: dashboard rollups by status.
     @@index([status])
+    /// Per-version compat lookups ("results for this build").
+    @@index([gameVersionId])
 }

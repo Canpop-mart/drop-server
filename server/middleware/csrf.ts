@@ -126,6 +126,16 @@ export default defineEventHandler((h3) => {
     if (url.startsWith(prefix)) return;
   }
 
+  // Bearer-token requests are immune to CSRF: a cross-site page can neither
+  // set the Authorization header (CORS blocks it cross-origin) nor read the
+  // token, so there are no ambient credentials to forge — unlike a SameSite
+  // cookie. The desktop client makes its shared-endpoint uploads (avatar /
+  // banner / game image) as native HTTP requests that carry a Bearer token
+  // but no Origin, so without this exemption they 403. Cookie-authed browser
+  // requests have no Bearer header and stay fully origin-checked below.
+  const authHeader = getHeader(h3, "Authorization");
+  if (authHeader?.startsWith("Bearer ")) return;
+
   const originHeader = getHeader(h3, "Origin");
   const refererHeader = getHeader(h3, "Referer");
   const hostHeader = getHeader(h3, "Host");

@@ -2,6 +2,7 @@ export const taskGroups = {
   // ── Scheduled cleanup ──────────────────────────────────────────────
   "cleanup:auth-records": { concurrency: false },
   "cleanup:objects": { concurrency: false },
+  "cleanup:compat-logs": { concurrency: false },
   "check:update": { concurrency: false },
 
   // ── Import (system-triggered, concurrent) ──────────────────────────
@@ -18,9 +19,7 @@ export const taskGroups = {
   "refresh:achievement-defs": { concurrency: false },
   "link:retroachievements": { concurrency: false },
   "recalculate:achievements": { concurrency: false },
-  "upgrade:gbe": { concurrency: false },
   "regenerate:manifests": { concurrency: false },
-  "restore:steam-backup": { concurrency: false },
 
   // ── System ─────────────────────────────────────────────────────────
   "recalculate:playtime": { concurrency: false },

@@ -15,6 +15,13 @@ const ResultBody = type({
   "protonVersion?": "string",
   "notes?": "string",
   "logExcerpt?": "string",
+  // The build this result is for (per-version compat / multiplayer parity).
+  "gameVersionId?": "string",
+  // Whether multiplayer worked this run (omitted = not multiplayer / unknown).
+  "multiplayerOk?": "boolean",
+  // "worker" (compat-test harness) or "launch" (a real user launch). Defaults
+  // to "worker" server-side to match the column default.
+  "source?": "'worker' | 'launch'",
 }).configure(throwingArktype);
 
 /**
@@ -62,6 +69,13 @@ export default defineClientEventHandler(async (h3, { clientId }) => {
       ...(body.logExcerpt !== undefined && {
         logExcerpt: body.logExcerpt.slice(0, LOG_EXCERPT_MAX),
       }),
+      ...(body.gameVersionId !== undefined && {
+        gameVersionId: body.gameVersionId,
+      }),
+      ...(body.multiplayerOk !== undefined && {
+        multiplayerOk: body.multiplayerOk,
+      }),
+      ...(body.source !== undefined && { source: body.source }),
     },
     select: {
       id: true,

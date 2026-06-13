@@ -56,10 +56,12 @@ export default defineEventHandler(async (h3) => {
     "refresh:achievement-defs",
     "link:retroachievements",
     "recalculate:achievements",
-    "upgrade:gbe",
-    "restore:steam-backup",
   ];
-  const system: TaskGroup[] = ["recalculate:playtime", "backup:export"];
+  const system: TaskGroup[] = [
+    "recalculate:playtime",
+    "backup:export",
+    "cleanup:compat-logs",
+  ];
 
   return {
     runningTasks,

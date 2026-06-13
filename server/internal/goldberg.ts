@@ -354,17 +354,8 @@ export async function setupGoldberg(
       select: {
         metadataSource: true,
         metadataId: true,
-        autoSwapSteamApiDll: true,
-        library: { select: { autoSwapSteamApiDll: true } },
       },
     });
-
-    // Effective swap policy: game override wins, otherwise inherit library.
-    // Default to TRUE if for some reason both are missing.
-    const autoSwapEnabled =
-      gameRow?.autoSwapSteamApiDll ??
-      gameRow?.library?.autoSwapSteamApiDll ??
-      true;
 
     // ── 1. Resolve the AppID ─────────────────────────────────────────────
     // Try the local file first, then fall back to an existing DB link.
@@ -426,70 +417,11 @@ export async function setupGoldberg(
       log.info(`[GOLDBERG] Created save dir ${saveDir}`);
     }
 
-    // ── 2c. Ensure steam_api DLL is a GBE build ──────────────────────────
-    // The swap is **opt-in**:
-    //  - Library / game must have autoSwapSteamApiDll enabled.
-    //  - DLL must be positively identified as vanilla Valve Steamworks
-    //    (or already a GBE build, in which case no work is done).
-    //  - Known-crack DLLs (OnlineFix, CODEX, EMPRESS, CreamAPI, …) and
-    //    unidentifiable customs are LEFT IN PLACE.
-    //
-    // Historically this was opt-out: anything not matching a Goldberg
-    // signature was assumed to be Valve and clobbered, destroying
-    // pre-applied crack DLLs on every import. See `identifySteamApiDll`
-    // in gbe.ts for the new fingerprinting model.
-    let didSwapDll = false;
-    if (!dllInfo) {
-      log.info(
-        `[GOLDBERG] No steam_api DLL found in ${settingsRoot}, skipping swap`,
-      );
-    } else if (!autoSwapEnabled) {
-      log.info(
-        `[GOLDBERG] autoSwapSteamApiDll is disabled for this game/library ` +
-          `(game=${gameRow?.autoSwapSteamApiDll ?? "inherit"}, ` +
-          `library=${gameRow?.library?.autoSwapSteamApiDll ?? "n/a"}). ` +
-          `Leaving ${dllInfo.dllName} at ${dllInfo.dllDir} untouched.`,
-      );
-    } else {
-      const { ensureGbeDll } = await import("./gbe");
-      const result = await ensureGbeDll(
-        dllInfo.dllDir,
-        dllInfo.dllName,
-        appId,
-        log,
-        // Scan the whole install for a loader crack (OnlineFix etc.) whose
-        // steam_api DLL fingerprints as Valve — so we don't swap it and brick
-        // multiplayer. The marker lives in a sibling file, not the DLL itself.
-        { installRoot: versionDir },
-      );
-      if (result.swapped) {
-        log.info(
-          `[GOLDBERG] Swapped ${dllInfo.dllName} to GBE for game=${gameId} ` +
-            `(appId=${appId}, dir=${dllInfo.dllDir}, ` +
-            `fingerprint="${result.identification?.fingerprint ?? "n/a"}"). ` +
-            `Original preserved as ${dllInfo.dllName}.steam_backup.`,
-        );
-        didSwapDll = true;
-      } else if (result.alreadyGbe) {
-        log.info(
-          `[GOLDBERG] ${dllInfo.dllName} is already a GBE build for game=${gameId} ` +
-            `— no swap needed (${result.identification?.fingerprint ?? "n/a"})`,
-        );
-      } else if (result.skipped) {
-        log.warn(
-          `[GOLDBERG] DLL swap NOT performed for ${dllInfo.dllName} (game=${gameId}, ` +
-            `appId=${appId}, path=${dllInfo.dllDir}). ` +
-            `Reason: ${result.identification?.fingerprint ?? "skipped"}. ` +
-            `The game's pre-existing DLL has been left in place. ` +
-            `If the game does not launch, flip its autoSwapSteamApiDll override on ` +
-            `(see the per-game admin panel) to force the swap, or re-apply the crack manually.`,
-        );
-      } else {
-        log.warn(
-          `[GOLDBERG] DLL swap failed for ${dllInfo.dllName} (game=${gameId}): ${result.error ?? "unknown"}`,
-        );
-      }
-    }
+    // ── 2c. steam_api DLL ────────────────────────────────────────────────
+    // Drop no longer swaps the steam_api DLL. Games ship their own Steam
+    // emulator (GBE for offline, OnlineFix for online); whatever the upload
+    // contains is left exactly in place. Only achievements + steam_settings
+    // scaffolding below.
 
     // ── 3. Fetch/read achievement definitions ────────────────────────────
     const forceRefresh = options?.forceRefreshAchievements ?? false;
@@ -588,31 +520,6 @@ export async function setupGoldberg(
       log.info(
         `[GOLDBERG] Done: ${count} achievements for game=${gameId} appId=${appId}`,
       );
-    }
-
-    // ── 6. Regenerate manifest if we swapped the DLL ─────────────────────
-    // Swapping the steam_api DLL changes bytes on disk, which invalidates
-    // the droplet manifest's per-file checksums for clients that verify on
-    // download. Skipped when no swap happened (common case: already GBE).
-    if (didSwapDll) {
-      try {
-        const { libraryManager } = await import("./library");
-        const regenOk = await libraryManager.regenerateManifestForLatestVersion(
-          gameId,
-          log,
-        );
-        if (regenOk) {
-          log.info(
-            `[GOLDBERG] Regenerated manifest for game=${gameId} after DLL swap`,
-          );
-        } else {
-          log.warn(
-            `[GOLDBERG] Manifest regen FAILED for game=${gameId} — clients may hit checksum mismatches on next download`,
-          );
-        }
-      } catch (e) {
-        log.warn(`[GOLDBERG] Manifest regen threw for game=${gameId}: ${e}`);
-      }
     }
   } catch (e) {
     log.warn(`[GOLDBERG] Setup failed for game=${gameId}: ${e}`);

@@ -355,56 +355,6 @@
             </button>
           </div>
         </div>
-
-        <!-- Goldberg / steam_api DLL Auto-swap Override -->
-        <!--
-          Per-game override for the library-wide autoSwapSteamApiDll
-          setting. Three states:
-            inherit (null) - follow Library.autoSwapSteamApiDll
-            on (true)      - always attempt the swap for this game
-            off (false)    - never touch this game's steam_api DLL
-          The actual swap still requires positive Valve identification
-          inside ensureGbeDll — this flag only gates whether the swap
-          code path is consulted. See server/internal/gbe.ts.
-        -->
-        <div class="mt-8 border-t border-zinc-800 pt-6">
-          <div class="border-b border-zinc-800 pb-3">
-            <h3
-              class="text-base font-semibold font-display leading-6 text-zinc-100"
-            >
-              steam_api DLL auto-swap
-            </h3>
-            <p class="mt-1 text-sm text-zinc-400 max-w-lg">
-              Controls whether Drop swaps a vanilla Valve
-              <code>steam_api[64].dll</code> for the cached GBE build at import
-              time. Pre-applied cracks (OnlineFix, CODEX, EMPRESS, CreamAPI, …)
-              and unrecognised customs are <strong>never</strong> overwritten
-              regardless of this setting — this only gates whether the check
-              runs at all.
-            </p>
-          </div>
-          <div class="mt-3 space-y-2">
-            <label
-              v-for="opt in autoSwapOptions"
-              :key="opt.label"
-              class="flex items-start gap-3 cursor-pointer"
-            >
-              <input
-                type="radio"
-                name="autoSwapSteamApiDll"
-                class="mt-1 h-4 w-4 border-zinc-700 bg-zinc-800 text-blue-600 focus:ring-blue-600"
-                :checked="autoSwapValue === opt.value"
-                @change="setAutoSwap(opt.value)"
-              />
-              <div>
-                <p class="text-sm font-medium text-zinc-100">
-                  {{ opt.label }}
-                </p>
-                <p class="text-xs text-zinc-400">{{ opt.desc }}</p>
-              </div>
-            </label>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -1059,64 +1009,6 @@ async function updateImageCarousel() {
         buttonText: t("common.close"),
       },
       (e, c) => c(),
-    );
-  }
-}
-
-// ── steam_api DLL auto-swap per-game override ─────────────────────────────
-// Map between the database tri-state (true / false / null) and the radio
-// group keys. We persist by PATCHing /api/v1/admin/game/:id — the route
-// accepts `autoSwapSteamApiDll: boolean | null | undefined`, where null
-// clears the override and reverts the game to the library default.
-type AutoSwapValue = "inherit" | "on" | "off";
-
-const autoSwapOptions: { value: AutoSwapValue; label: string; desc: string }[] =
-  [
-    {
-      value: "inherit",
-      label: "Inherit from library (default)",
-      desc: "Follow the library-wide Auto-swap setting. Recommended.",
-    },
-    {
-      value: "on",
-      label: "Force on",
-      desc: "Always attempt the GBE swap for this game, even if the library has it disabled. The Valve-identification check still applies — cracks are never overwritten.",
-    },
-    {
-      value: "off",
-      label: "Force off",
-      desc: "Never touch this game's steam_api DLL, even if the library has the swap enabled. Use for pre-fixed games shipped with custom/unknown DLLs.",
-    },
-  ];
-
-const autoSwapValue = computed<AutoSwapValue>(() => {
-  const v = game.value.autoSwapSteamApiDll;
-  if (v === true) return "on";
-  if (v === false) return "off";
-  return "inherit";
-});
-
-async function setAutoSwap(next: AutoSwapValue) {
-  const dbValue: boolean | null =
-    next === "on" ? true : next === "off" ? false : null;
-  try {
-    await $dropFetch(`/api/v1/admin/game/:id`, {
-      method: "PATCH",
-      params: { id: game.value.id },
-      body: { autoSwapSteamApiDll: dbValue } satisfies PatchGameBody,
-    });
-    // Keep the v-model in sync so the radio reflects the new choice.
-    game.value.autoSwapSteamApiDll = dbValue;
-  } catch (e) {
-    createModal(
-      ModalType.Notification,
-      {
-        title: "Could not save auto-swap setting",
-        description:
-          (e as H3Error)?.statusMessage ?? "Unknown error saving setting",
-        buttonText: t("common.close"),
-      },
-      (_, c) => c(),
     );
   }
 }
