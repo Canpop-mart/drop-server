@@ -1,0 +1,50 @@
+enum RoomMemberStatus {
+  Pending
+  Authorized
+  Left
+}
+
+/// A co-op "room" backed by a self-hosted ZeroTier virtual-LAN network.
+/// Ephemeral: minted on demand by the controller, reaped after `expiresAt`.
+model Room {
+  id String @id @default(uuid())
+
+  /// The ZeroTier network id our controller minted (16 hex). One network per room.
+  networkId String @unique
+  /// Short, human-shareable join code (ambiguity-free uppercase alphanumeric).
+  shortCode String @unique
+
+  /// Optional game this room is for. Stored as a plain id (not a FK) because
+  /// rooms are ephemeral and a deleted game shouldn't cascade into them.
+  gameId String?
+  name   String?
+
+  hostClientId String
+  hostClient   Client @relation("RoomHost", fields: [hostClientId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+
+  members RoomMember[]
+
+  @@index([hostClientId])
+  @@index([expiresAt])
+}
+
+/// A client device that has joined a room. `memberId` is the device's ZeroTier
+/// node id (10 hex) — the identity our controller authorizes onto the network.
+model RoomMember {
+  roomId String
+  room   Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  clientId String
+  client   Client @relation("RoomMembership", fields: [clientId], references: [id], onDelete: Cascade)
+
+  memberId String
+
+  status   RoomMemberStatus @default(Authorized)
+  joinedAt DateTime         @default(now())
+
+  @@id([roomId, clientId])
+  @@index([clientId])
+}

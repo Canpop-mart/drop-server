@@ -1,8 +1,16 @@
+import { readFileSync } from "node:fs";
 import normalizeUrl from "normalize-url";
 
 class SystemConfig {
   private libraryFolder = process.env.LIBRARY ?? "./.data/library";
   private dataFolder = process.env.DATA ?? "./.data/data";
+
+  // ZeroTier co-op rooms. The feature is enabled only when both a controller
+  // URL and an auth token resolve. Token is read inline (ZEROTIER_AUTH_TOKEN)
+  // or from a file (ZEROTIER_AUTH_TOKEN_PATH) — see docs/zerotier-controller.md.
+  private zerotierControllerUrl =
+    process.env.ZEROTIER_CONTROLLER_URL?.trim() || undefined;
+  private zerotierAuthToken = resolveZerotierToken();
 
   private metadataTimeout = parseInt(process.env.METADATA_TIMEOUT ?? "5000");
 
@@ -75,9 +83,41 @@ class SystemConfig {
   shouldOidcRequireHttps() {
     return this.oidcRequireHttps;
   }
+
+  getZerotierControllerUrl() {
+    return this.zerotierControllerUrl;
+  }
+
+  getZerotierAuthToken() {
+    return this.zerotierAuthToken;
+  }
+
+  // Co-op rooms are available only when the controller URL + auth token resolve.
+  isZerotierEnabled() {
+    return Boolean(this.zerotierControllerUrl && this.zerotierAuthToken);
+  }
 }
 
 export const systemConfig = new SystemConfig();
+
+/**
+ * Resolves the ZeroTier controller auth token from the inline env var, falling
+ * back to a file path. Returns undefined (feature disabled) if neither yields a
+ * value — a missing file is not fatal.
+ */
+function resolveZerotierToken(): string | undefined {
+  const inline = process.env.ZEROTIER_AUTH_TOKEN?.trim();
+  if (inline) return inline;
+
+  const path = process.env.ZEROTIER_AUTH_TOKEN_PATH?.trim();
+  if (!path) return undefined;
+  try {
+    const token = readFileSync(path, "utf-8").trim();
+    return token || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Gets the configuration for checking updates based on various conditions

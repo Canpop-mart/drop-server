@@ -29,3 +29,25 @@ services:
       - ./data:/data
     environment:
       - DATABASE_URL=postgres://drop:drop@postgres:5432/drop
+      # --- ZeroTier co-op rooms (optional) ---
+      # Point Drop at the self-hosted controller sidecar below. Leave blank to
+      # disable the feature. ZEROTIER_AUTH_TOKEN is the controller's
+      # authtoken.secret — paste it after the controller's first boot (see
+      # docs/zerotier-controller.md). Inline token avoids cross-container file perms.
+      - ZEROTIER_CONTROLLER_URL=http://zerotier-controller:9993
+      - ZEROTIER_AUTH_TOKEN=
+
+  # Self-hosted ZeroTier network controller. It MINTS + AUTHORIZES virtual-LAN
+  # networks for co-op rooms but never JOINS one itself, so it needs no TUN
+  # device and no NET_ADMIN capability. If your NAS refuses to start the
+  # container, uncomment the devices/cap_add fallback below.
+  zerotier-controller:
+    image: zyclonite/zerotier:latest # pin to a specific tag once verified on your NAS
+    container_name: drop-zerotier-controller
+    restart: unless-stopped
+    # devices:
+    #   - /dev/net/tun
+    # cap_add:
+    #   - NET_ADMIN
+    volumes:
+      - ./zerotier:/var/lib/zerotier-one

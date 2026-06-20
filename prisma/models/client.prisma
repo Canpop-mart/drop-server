@@ -21,6 +21,8 @@ model Client {
   requestedStreams  StreamingSession[] @relation("StreamingSessionRequester")
   installedGames    ClientInstalledGame[]
   compatibilityResults GameCompatibilityResult[]
+  hostedRooms       Room[]       @relation("RoomHost")
+  roomMemberships   RoomMember[] @relation("RoomMembership")
 }
 
 /// Tracks which games are installed on which client devices.
