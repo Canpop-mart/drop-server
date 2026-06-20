@@ -16,7 +16,10 @@ import prisma from "~/server/internal/db/database";
  *   userId — optional, reset only this user. Omit to reset everyone.
  */
 export default defineEventHandler(async (h3) => {
-  const allowed = await aclManager.allowSystemACL(h3, ["maintenance:read"]);
+  // Destructive (zeroes ALL playtime rollups): gate on an action scope, not the
+  // read scope `maintenance:read`. `task:start` matches the other destructive
+  // maintenance actions (e.g. objects/gc).
+  const allowed = await aclManager.allowSystemACL(h3, ["task:start"]);
   if (!allowed) throw createError({ statusCode: 403 });
 
   const query = getQuery(h3);

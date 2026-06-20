@@ -9,8 +9,12 @@ const socketSessions = new Map<string, string>();
 export default defineWebSocketHandler({
   async open(peer) {
     const h3 = { headers: peer.request?.headers ?? new Headers() };
+    // Admin-only: getUserIdACL passes ANY authenticated session (sessions hold
+    // every userACL), so gate on allowSystemACL (the only check that verifies
+    // user.admin) and use getUserIdACL purely to resolve the listener's userId.
+    const isAdmin = await aclManager.allowSystemACL(h3, ["system-data:listen"]);
     const userId = await aclManager.getUserIdACL(h3, ["system-data:listen"]);
-    if (!userId) {
+    if (!isAdmin || !userId) {
       peer.send("unauthenticated");
       return;
     }

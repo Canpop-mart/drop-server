@@ -147,6 +147,15 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
         continue;
       }
 
+      // A client-supplied dataHash must be a valid MD5 hex (matches the single
+      // upload endpoint); otherwise compute it from the decoded bytes.
+      if (dataHash !== undefined && !/^[0-9a-fA-F]{32}$/.test(dataHash)) {
+        errors.push({
+          filename,
+          error: "Invalid dataHash (expected a 32-character MD5 hex string)",
+        });
+        continue;
+      }
       const hash = dataHash || createHash("md5").update(buffer).digest("hex");
 
       // Parse client-supplied timestamp with sanity bounds. Reject future

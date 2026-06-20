@@ -324,6 +324,11 @@ export class OIDCManager {
   > {
     const session = this.signinStateTable[state];
     if (!session) return "Invalid state parameter";
+    // Burn the state immediately: it's a single-use CSRF nonce / replay guard.
+    // Leaving it in the table makes a captured (code,state) pair replayable, and
+    // abandoned logins would otherwise leak one entry forever. (Reflect.deleteProperty
+    // rather than `delete obj[key]` to satisfy @typescript-eslint/no-dynamic-delete.)
+    Reflect.deleteProperty(this.signinStateTable, state);
 
     const tokenEndpoint = this.oidcConfiguration.token_endpoint.toString();
     const userinfoEndpoint =

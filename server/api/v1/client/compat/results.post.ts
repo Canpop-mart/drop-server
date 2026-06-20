@@ -5,6 +5,7 @@ import prisma from "~/server/internal/db/database";
 import { GameCompatibilityStatus } from "~/prisma/client/enums";
 
 const SIGNATURE_MAX = 200;
+const PROTON_VERSION_MAX = 100;
 const NOTES_MAX = 2000;
 const LOG_EXCERPT_MAX = 16 * 1024; // 16KB
 
@@ -61,7 +62,7 @@ export default defineClientEventHandler(async (h3, { clientId }) => {
         signature: body.signature.slice(0, SIGNATURE_MAX),
       }),
       ...(body.protonVersion !== undefined && {
-        protonVersion: body.protonVersion,
+        protonVersion: body.protonVersion.slice(0, PROTON_VERSION_MAX),
       }),
       ...(body.notes !== undefined && {
         notes: body.notes.slice(0, NOTES_MAX),

@@ -33,7 +33,11 @@ export default defineEventHandler(async (h3) => {
       message: "WebAuthn setup not started for this session.",
     });
   const options = JSON.parse(optionsRaw);
-  await sessionHandler.deleteSessionDataKey(h3, "webauthn/challenge");
+  // Burn the single-use challenge (stored under "webauthn/options") immediately so
+  // a captured assertion can't be replayed in-session. The old "webauthn/challenge"
+  // key was never set, so the challenge previously survived. Matches the
+  // registration handler (user/mfa/webauthn/finish.post.ts).
+  await sessionHandler.deleteSessionDataKey(h3, "webauthn/options");
 
   const mfaMec = await prisma.linkedMFAMec.findUnique({
     where: {

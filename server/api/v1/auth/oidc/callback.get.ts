@@ -65,8 +65,17 @@ export default defineEventHandler(async (h3) => {
   await userStatsManager.cacheUserSessions();
 
   if (result.options.redirect) {
-    return sendRedirect(h3, result.options.redirect);
+    return sendRedirect(h3, safeRedirectPath(result.options.redirect));
   }
 
   return sendRedirect(h3, "/");
 });
+
+// Same-origin relative paths only: the OIDC `redirect` option is user-controlled
+// (set when the login was initiated), so an unvalidated value here is an open
+// redirect.
+function safeRedirectPath(raw: string | null | undefined): string {
+  if (typeof raw !== "string" || !raw.startsWith("/")) return "/";
+  if (raw.startsWith("//") || raw.startsWith("/\\")) return "/";
+  return raw;
+}

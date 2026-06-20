@@ -41,8 +41,16 @@ export default defineEventHandler(async (h3) => {
   if (body instanceof ArkErrors)
     throw createError({ statusCode: 400, statusMessage: body.summary });
 
-  const parsedTags = JSON.parse(body.tags);
-  if (typeof parsedTags !== "object" || !Array.isArray(parsedTags))
+  let parsedTags: unknown;
+  try {
+    parsedTags = JSON.parse(body.tags);
+  } catch {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Tags must be valid JSON.",
+    });
+  }
+  if (!Array.isArray(parsedTags))
     throw createError({
       statusCode: 400,
       statusMessage: "Tags must be an array",

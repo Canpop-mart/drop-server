@@ -143,24 +143,34 @@ class UserLibraryManager {
   }
 
   async collectionAdd(gameId: string, collectionId: string, userId: string) {
+    // Authz: the collection must belong to the caller. A relation filter inside
+    // an upsert.where does NOT gate the `create` branch — a non-owned collection
+    // misses the unique lookup and falls through to an unconditional insert — so
+    // ownership has to be verified explicitly (matches collectionRemove's intent).
+    const collection = await prisma.collection.findUnique({
+      where: { id: collectionId },
+      select: { userId: true },
+    });
+    if (!collection)
+      throw createError({
+        statusCode: 404,
+        statusMessage: "Collection not found",
+      });
+    if (collection.userId !== userId)
+      throw createError({ statusCode: 403, statusMessage: "Forbidden" });
+
+    // Resolve the game up front so a bad id is a clean 404 rather than an opaque
+    // foreign-key 500 from the insert below.
+    const game = await prisma.game.findUnique({ where: { id: gameId } });
+    if (!game)
+      throw createError({ statusCode: 404, statusMessage: "Game not found" });
+
     const entry = await prisma.collectionEntry.upsert({
-      where: {
-        collectionId_gameId: {
-          collectionId,
-          gameId,
-        },
-        collection: {
-          userId,
-        },
-      },
-      create: {
-        collectionId,
-        gameId,
-      },
+      where: { collectionId_gameId: { collectionId, gameId } },
+      create: { collectionId, gameId },
       update: {},
     });
-    const game = await prisma.game.findUnique({ where: { id: gameId } });
-    return { ...entry, game: game! };
+    return { ...entry, game };
   }
 
   async collectionRemove(gameId: string, collectionId: string, userId: string) {
