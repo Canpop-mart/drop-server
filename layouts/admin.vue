@@ -172,6 +172,8 @@ import {
   PhotoIcon,
   InboxArrowDownIcon,
   ClipboardDocumentCheckIcon,
+  GlobeAltIcon,
+  ComputerDesktopIcon,
 } from "@heroicons/vue/24/outline";
 import type { NavigationItem } from "~/composables/types";
 import { useCurrentNavigationIndex } from "~/composables/current-page-engine";
@@ -211,6 +213,18 @@ const navigation: Array<NavigationItem & { icon: Component }> = [
     route: "/admin/users",
     prefix: "/admin/users",
     icon: UserGroupIcon,
+  },
+  {
+    label: "Co-op Rooms",
+    route: "/admin/rooms",
+    prefix: "/admin/rooms",
+    icon: GlobeAltIcon,
+  },
+  {
+    label: "Devices",
+    route: "/admin/devices",
+    prefix: "/admin/devices",
+    icon: ComputerDesktopIcon,
   },
   {
     label: $t("header.admin.tasks"),

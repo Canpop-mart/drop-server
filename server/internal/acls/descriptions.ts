@@ -109,6 +109,12 @@ export const systemACLDescriptions: ObjectFromList<typeof systemACLs> = {
   "maintenance:read":
     "Read tasks and maintenance information, like updates available and cleanup.",
 
+  "room:read": "Fetch all co-op rooms and their members.",
+  "room:delete": "Delete a co-op room, or reset/reap rooms.",
+
+  "client:read": "Fetch all paired client devices.",
+  "client:update": "Rename a paired client device.",
+
   "settings:update": "Update system settings.",
 
   "depot:read": "Read depot information, and search for games",

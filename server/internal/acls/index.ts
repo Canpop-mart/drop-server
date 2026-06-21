@@ -107,6 +107,12 @@ export const systemACLs = [
 
   "maintenance:read",
 
+  "room:read",
+  "room:delete",
+
+  "client:read",
+  "client:update",
+
   "settings:update",
 
   "system-data:listen",
