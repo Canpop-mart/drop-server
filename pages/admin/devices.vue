@@ -4,8 +4,9 @@
       <div class="sm:flex-auto">
         <h1 class="text-base font-semibold text-zinc-100">Devices</h1>
         <p class="mt-2 text-sm text-zinc-400">
-          Paired client devices. Rename a device for easier identification in
-          co-op rooms and activity.
+          Unique paired devices (a device that re-paired shows once, with its
+          session count). Rename a device to identify it across co-op rooms and
+          activity. See the Sessions page for the full pairing log.
         </p>
       </div>
     </div>
@@ -41,7 +42,7 @@
                   <th
                     class="px-3 py-3.5 text-left text-sm font-semibold text-zinc-100"
                   >
-                    Rooms
+                    Sessions
                   </th>
                   <th class="relative py-3.5 pl-3 pr-4 sm:pr-6">
                     <span class="sr-only">Actions</span>
@@ -51,19 +52,19 @@
               <tbody class="divide-y divide-zinc-700">
                 <tr
                   v-for="d in devices"
-                  :key="d.id"
+                  :key="d.key"
                   class="hover:bg-zinc-800/50 transition-colors"
                 >
                   <td
                     class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-zinc-100 sm:pl-6"
                   >
                     <input
-                      v-if="editingId === d.id"
+                      v-if="editingKey === d.key"
                       v-model="editName"
                       maxlength="64"
                       class="w-44 rounded-md bg-zinc-800 px-2 py-1 text-zinc-100 outline-none ring-1 ring-zinc-700 focus:ring-2 focus:ring-blue-500"
-                      @keyup.enter="saveName(d.id)"
-                      @keyup.esc="editingId = null"
+                      @keyup.enter="saveName(d)"
+                      @keyup.esc="editingKey = null"
                     />
                     <span v-else>{{ d.name }}</span>
                   </td>
@@ -77,14 +78,13 @@
                     {{ fmt(d.lastConnected) }}
                   </td>
                   <td class="whitespace-nowrap px-3 py-4 text-sm text-zinc-400">
-                    {{ d.hostedRoomCount }} hosted ·
-                    {{ d.memberRoomCount }} joined
+                    {{ d.sessionCount }}
                   </td>
                   <td
                     class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6"
                   >
                     <button
-                      v-if="editingId !== d.id"
+                      v-if="editingKey !== d.key"
                       class="text-blue-400 hover:text-blue-300 transition-colors"
                       @click="startEdit(d)"
                     >
@@ -94,13 +94,13 @@
                       <button
                         :disabled="busy || editName.trim().length === 0"
                         class="font-semibold text-blue-400 hover:text-blue-300 disabled:opacity-50"
-                        @click="saveName(d.id)"
+                        @click="saveName(d)"
                       >
                         Save
                       </button>
                       <button
                         class="text-zinc-400 hover:text-zinc-300"
-                        @click="editingId = null"
+                        @click="editingKey = null"
                       >
                         Cancel
                       </button>
@@ -125,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-interface AdminDevice {
+interface RawClient {
   id: string;
   name: string;
   platform: string;
@@ -135,17 +135,57 @@ interface AdminDevice {
   hostedRoomCount: number;
   memberRoomCount: number;
 }
+interface UniqueDevice {
+  key: string;
+  name: string;
+  platform: string;
+  userName: string;
+  lastConnected: string;
+  sessionCount: number;
+  clientIds: string[];
+}
 
 useHead({ title: "Devices" });
 definePageMeta({ layout: "admin" });
 
-const devices = ref<AdminDevice[]>([]);
+const devices = ref<UniqueDevice[]>([]);
 const busy = ref(false);
-const editingId = ref<string | null>(null);
+const editingKey = ref<string | null>(null);
 const editName = ref("");
 
+// Collapse the raw per-pairing client records into one row per physical device
+// (same user + device name + platform), keeping the most recent connection and
+// a session count.
+function dedupe(list: RawClient[]): UniqueDevice[] {
+  const map = new Map<string, UniqueDevice>();
+  for (const c of list) {
+    const key = `${c.userId}|${c.name}|${c.platform}`;
+    const existing = map.get(key);
+    if (existing) {
+      existing.sessionCount++;
+      existing.clientIds.push(c.id);
+      if (c.lastConnected > existing.lastConnected)
+        existing.lastConnected = c.lastConnected;
+    } else {
+      map.set(key, {
+        key,
+        name: c.name,
+        platform: c.platform,
+        userName: c.userName,
+        lastConnected: c.lastConnected,
+        sessionCount: 1,
+        clientIds: [c.id],
+      });
+    }
+  }
+  return [...map.values()].sort((a, b) =>
+    b.lastConnected.localeCompare(a.lastConnected),
+  );
+}
+
 async function load() {
-  devices.value = (await $dropFetch("/api/v1/admin/client")) as AdminDevice[];
+  const raw = (await $dropFetch("/api/v1/admin/client")) as RawClient[];
+  devices.value = dedupe(raw);
 }
 await load();
 
@@ -153,21 +193,26 @@ function fmt(iso: string) {
   return new Date(iso).toLocaleString();
 }
 
-function startEdit(d: AdminDevice) {
-  editingId.value = d.id;
+function startEdit(d: UniqueDevice) {
+  editingKey.value = d.key;
   editName.value = d.name;
 }
 
-async function saveName(id: string) {
+// Renaming a device applies to every pairing record for it, so it stays one row.
+async function saveName(d: UniqueDevice) {
   const name = editName.value.trim();
   if (name.length === 0) return;
   busy.value = true;
   try {
-    await $dropFetch(`/api/v1/admin/client/${id}`, {
-      method: "PATCH",
-      body: { name },
-    });
-    editingId.value = null;
+    await Promise.all(
+      d.clientIds.map((id) =>
+        $dropFetch(`/api/v1/admin/client/${id}`, {
+          method: "PATCH",
+          body: { name },
+        }),
+      ),
+    );
+    editingKey.value = null;
     await load();
   } finally {
     busy.value = false;

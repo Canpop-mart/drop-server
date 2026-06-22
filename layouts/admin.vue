@@ -104,6 +104,11 @@
       <nav class="mt-8">
         <ul role="list" class="flex flex-col items-stretch space-y-4 mx-2">
           <li v-for="(item, itemIdx) in navigation" :key="item.route">
+            <div
+              v-if="itemIdx > 0 && item.group !== navigation[itemIdx - 1].group"
+              class="border-t border-zinc-800 mx-2 mt-3 mb-1"
+              aria-hidden="true"
+            />
             <NuxtLink
               :href="item.route"
               :class="[
@@ -174,6 +179,7 @@ import {
   ClipboardDocumentCheckIcon,
   GlobeAltIcon,
   ComputerDesktopIcon,
+  ClockIcon,
 } from "@heroicons/vue/24/outline";
 import type { NavigationItem } from "~/composables/types";
 import { useCurrentNavigationIndex } from "~/composables/current-page-engine";
@@ -195,84 +201,105 @@ const navigation: Array<NavigationItem & { icon: Component }> = [
     route: "/admin/library",
     prefix: "/admin/library",
     icon: ServerStackIcon,
+    group: "Content",
   },
   {
     label: $t("header.admin.metadata"),
     route: "/admin/metadata",
     prefix: "/admin/metadata",
     icon: DocumentIcon,
+    group: "Content",
   },
   {
     label: "Collections",
     route: "/admin/collections",
     prefix: "/admin/collections",
     icon: RectangleGroupIcon,
-  },
-  {
-    label: $t("header.admin.users"),
-    route: "/admin/users",
-    prefix: "/admin/users",
-    icon: UserGroupIcon,
-  },
-  {
-    label: "Co-op Rooms",
-    route: "/admin/rooms",
-    prefix: "/admin/rooms",
-    icon: GlobeAltIcon,
-  },
-  {
-    label: "Devices",
-    route: "/admin/devices",
-    prefix: "/admin/devices",
-    icon: ComputerDesktopIcon,
-  },
-  {
-    label: $t("header.admin.tasks"),
-    route: "/admin/task",
-    prefix: "/admin/task",
-    icon: RectangleStackIcon,
-  },
-  {
-    label: $t("header.admin.achievements"),
-    route: "/admin/achievements",
-    prefix: "/admin/achievements",
-    icon: TrophyIcon,
-  },
-  {
-    label: "Compatibility",
-    route: "/admin/compat",
-    prefix: "/admin/compat",
-    icon: BeakerIcon,
-  },
-  {
-    label: "Audit",
-    route: "/admin/audit/library",
-    prefix: "/admin/audit",
-    icon: ClipboardDocumentCheckIcon,
-  },
-  {
-    label: $t("header.admin.bugReports"),
-    route: "/admin/bugreports",
-    prefix: "/admin/bugreports",
-    icon: BugAntIcon,
-  },
-  {
-    label: "Requests",
-    route: "/admin/requests",
-    prefix: "/admin/requests",
-    icon: InboxArrowDownIcon,
+    group: "Content",
   },
   {
     label: "Objects",
     route: "/admin/objects",
     prefix: "/admin/objects",
     icon: PhotoIcon,
+    group: "Content",
+  },
+  {
+    label: $t("header.admin.achievements"),
+    route: "/admin/achievements",
+    prefix: "/admin/achievements",
+    icon: TrophyIcon,
+    group: "Content",
+  },
+  {
+    label: $t("header.admin.users"),
+    route: "/admin/users",
+    prefix: "/admin/users",
+    icon: UserGroupIcon,
+    group: "Community",
+  },
+  {
+    label: "Co-op Rooms",
+    route: "/admin/rooms",
+    prefix: "/admin/rooms",
+    icon: GlobeAltIcon,
+    group: "Community",
+  },
+  {
+    label: "Devices",
+    route: "/admin/devices",
+    prefix: "/admin/devices",
+    icon: ComputerDesktopIcon,
+    group: "Community",
+  },
+  {
+    label: "Sessions",
+    route: "/admin/sessions",
+    prefix: "/admin/sessions",
+    icon: ClockIcon,
+    group: "Community",
+  },
+  {
+    label: "Requests",
+    route: "/admin/requests",
+    prefix: "/admin/requests",
+    icon: InboxArrowDownIcon,
+    group: "Community",
+  },
+  {
+    label: $t("header.admin.bugReports"),
+    route: "/admin/bugreports",
+    prefix: "/admin/bugreports",
+    icon: BugAntIcon,
+    group: "Community",
+  },
+  {
+    label: $t("header.admin.tasks"),
+    route: "/admin/task",
+    prefix: "/admin/task",
+    icon: RectangleStackIcon,
+    group: "System",
+  },
+  {
+    label: "Compatibility",
+    route: "/admin/compat",
+    prefix: "/admin/compat",
+    icon: BeakerIcon,
+    group: "System",
+  },
+  {
+    label: "Audit",
+    route: "/admin/audit/library",
+    prefix: "/admin/audit",
+    icon: ClipboardDocumentCheckIcon,
+    group: "System",
   },
   {
     label: $t("header.admin.settings.title"),
     route: "/admin/settings",
     prefix: "/admin/settings",
     icon: Cog6ToothIcon,
+    group: "System",
   },
   {
     label: $t("header.back"),

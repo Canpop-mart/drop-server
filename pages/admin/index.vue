@@ -155,7 +155,7 @@
             :title="t('home.admin.biggestGamesToDownload')"
             :subtitle="t('home.admin.latestVersionOnly')"
           >
-            <!--            <RankingList :items="biggestGamesLatest.map(gameToRankItem)" />-->
+            <RankingList :items="biggestGamesLatest.map(gameToRankItem)" />
           </TileWithLink>
         </div>
         <div class="col-span-6 lg:col-span-2">
@@ -163,7 +163,7 @@
             :title="t('home.admin.biggestGamesOnServer')"
             :subtitle="t('home.admin.allVersionsCombined')"
           >
-            <!--            <RankingList :items="biggestGamesCombined.map(gameToRankItem)" />-->
+            <RankingList :items="biggestGamesCombined.map(gameToRankItem)" />
           </TileWithLink>
         </div>
       </div>
@@ -192,6 +192,22 @@ const systemData = useSystemData();
 
 const { version, gameCount, sources, userStats } =
   await $dropFetch("/api/v1/admin/home");
+
+interface BiggestGame {
+  rank: number;
+  gameId: string;
+  gameName: string;
+  size: number;
+}
+const [biggestGamesLatest, biggestGamesCombined] = await Promise.all([
+  $dropFetch("/api/v1/admin/games/biggest-to-download") as Promise<
+    BiggestGame[]
+  >,
+  $dropFetch("/api/v1/admin/games/biggest-on-server") as Promise<BiggestGame[]>,
+]);
+function gameToRankItem(g: BiggestGame) {
+  return { rank: g.rank, name: g.gameName, value: formatBytes(g.size) };
+}
 
 const pieChartData = [
   {

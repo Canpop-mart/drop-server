@@ -10,7 +10,14 @@
           launch, and game folders on disk with no database row.
         </p>
       </div>
-      <div class="mt-4 sm:mt-0 sm:flex-none">
+      <div class="mt-4 sm:mt-0 sm:flex-none flex gap-2">
+        <button
+          v-if="result"
+          class="block rounded-md bg-zinc-800 px-3 py-2 text-center text-sm font-semibold text-zinc-100 shadow-sm transition-all hover:bg-zinc-700"
+          @click="exportAudit"
+        >
+          Export
+        </button>
         <button
           :disabled="loading"
           class="block rounded-md bg-blue-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-500 disabled:opacity-50"
@@ -156,6 +163,19 @@ interface AuditResult {
 
 const result = ref<AuditResult | null>(null);
 const loading = ref(false);
+
+function exportAudit() {
+  if (!result.value) return;
+  const blob = new Blob([JSON.stringify(result.value, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `library-audit-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 async function runAudit() {
   loading.value = true;
