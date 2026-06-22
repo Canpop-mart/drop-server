@@ -43,6 +43,18 @@
           }}
         </button>
         <button
+          v-if="result && result.summary.invalidTargets > 0"
+          :disabled="redetecting || loading"
+          class="block rounded-md bg-amber-700/40 px-3 py-2 text-center text-sm font-semibold text-amber-100 shadow-sm transition-all hover:bg-amber-700/60 disabled:opacity-50"
+          @click="redetectBroken"
+        >
+          {{
+            redetecting
+              ? "Re-detecting..."
+              : `Re-detect ${result.summary.invalidTargets} broken`
+          }}
+        </button>
+        <button
           :disabled="loading"
           class="block rounded-md bg-blue-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-500 disabled:opacity-50"
           @click="() => runAudit()"
@@ -195,6 +207,46 @@ const result = ref<AuditResult | null>(null);
 const loading = ref(false);
 const purging = ref(false);
 const fixing = ref(false);
+const redetecting = ref(false);
+
+// Re-derive launches for versions whose stored launch points at a
+// non-executable (an older importer picked Unity/Unreal data files). Previews
+// first so the counts can be confirmed; only ever touches already-broken
+// versions, so it can't break a working launch.
+async function redetectBroken() {
+  if (!result.value || result.value.summary.invalidTargets === 0) return;
+  redetecting.value = true;
+  try {
+    const preview = await $dropFetch<{
+      total: number;
+      willFix: number;
+      noCandidate: number;
+      skipped: number;
+    }>("/api/v1/admin/audit/redetect-launches", {
+      method: "POST",
+      body: { apply: false },
+    });
+    if (preview.willFix === 0) {
+      alert(
+        `No re-detectable launches: of ${preview.total} broken, none had a usable executable in the stored file list (${preview.noCandidate} no candidate, ${preview.skipped} skipped).`,
+      );
+      return;
+    }
+    if (
+      !confirm(
+        `Re-detect found a real executable for ${preview.willFix} of ${preview.total} broken launches (${preview.noCandidate} had no candidate, ${preview.skipped} skipped). These versions are already broken, so this only repairs them. Apply ${preview.willFix}?`,
+      )
+    )
+      return;
+    await $dropFetch("/api/v1/admin/audit/redetect-launches", {
+      method: "POST",
+      body: { apply: true },
+    });
+    await runAudit();
+  } finally {
+    redetecting.value = false;
+  }
+}
 
 // Re-tag Windows binaries tagged as Linux launches to Windows (or drop the
 // redundant Linux entry when a Windows launch already exists). The server

@@ -20,6 +20,7 @@ import { GameType, type Platform } from "~/prisma/client/enums";
 import { Shescape } from "shescape";
 import { runVersionImport } from "./import";
 import type { ImportContext, ImportReceiptShape } from "./import/types";
+import { launchScore } from "./import/launchScore";
 import type {
   Prisma,
   Game,
@@ -615,7 +616,7 @@ class LibraryManager {
             type: "platform",
             filename: this.shescape.escape(filename),
             platform: platform as Platform,
-            match: fuzzyValue,
+            match: launchScore(fuzzyValue, basename),
           });
         }
       }
@@ -643,6 +644,48 @@ class LibraryManager {
     const sortedOptions = options.sort((a, b) => b.match - a.match);
 
     return sortedOptions;
+  }
+
+  /**
+   * Re-derive launch configurations for an already-imported version from its
+   * stored `fileList`, using the current (fixed) executable detection. Returns
+   * at most one launch per platform that has a plausible executable. Pure: it
+   * does not write. Backs the audit's "re-detect broken launches" repair, which
+   * runs over versions whose stored launch points at a non-executable.
+   */
+  redetectLaunches(
+    fileList: string[],
+    gameName: string,
+  ): Array<{ platform: Platform; command: string; name: string }> {
+    const fileExts: { [key in Platform]: string[] } = {
+      Linux: [".x86_64", ".sh", ".appimage"],
+      Windows: [".exe", ".bat"],
+      macOS: [".app"],
+    };
+    const best = new Map<Platform, { command: string; score: number }>();
+    for (const filename of fileList) {
+      const basename = path.basename(filename);
+      const dotLocation = filename.lastIndexOf(".");
+      const ext =
+        dotLocation === -1 ? "" : filename.slice(dotLocation).toLowerCase();
+      for (const [platform, exts] of Object.entries(fileExts) as Array<
+        [Platform, string[]]
+      >) {
+        if (!exts.includes(ext)) continue;
+        const score = launchScore(fuzzy(basename, gameName), basename);
+        const current = best.get(platform);
+        if (!current || score > current.score)
+          best.set(platform, {
+            command: this.shescape.escape(filename),
+            score,
+          });
+      }
+    }
+    return [...best.entries()].map(([platform, value]) => ({
+      platform,
+      command: value.command,
+      name: "Play",
+    }));
   }
 
   // Checks are done in least to most expensive order
