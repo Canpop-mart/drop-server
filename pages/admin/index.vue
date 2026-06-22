@@ -160,10 +160,10 @@
         </div>
         <div class="col-span-6 lg:col-span-2">
           <TileWithLink
-            :title="t('home.admin.biggestGamesOnServer')"
-            :subtitle="t('home.admin.allVersionsCombined')"
+            :title="t('home.admin.mostVersions')"
+            :subtitle="t('home.admin.mostVersionsSubtitle')"
           >
-            <RankingList :items="biggestGamesCombined.map(gameToRankItem)" />
+            <RankingList :items="mostVersionsGames.map(versionsToRankItem)" />
           </TileWithLink>
         </div>
       </div>
@@ -199,14 +199,38 @@ interface BiggestGame {
   gameName: string;
   size: number;
 }
-const [biggestGamesLatest, biggestGamesCombined] = await Promise.all([
-  $dropFetch("/api/v1/admin/games/biggest-to-download") as Promise<
-    BiggestGame[]
-  >,
-  $dropFetch("/api/v1/admin/games/biggest-on-server") as Promise<BiggestGame[]>,
-]);
+interface VersionCountGame {
+  rank: number;
+  gameId: string;
+  gameName: string;
+  versionCount: number;
+}
+// Loaded after mount, not in the SSR critical path: these rankings size every
+// game on the server, so blocking the page render on them made entering /admin
+// slow. The page paints immediately and the cards fill in.
+const biggestGamesLatest = ref<BiggestGame[]>([]);
+const mostVersionsGames = ref<VersionCountGame[]>([]);
+onMounted(async () => {
+  const [latest, mostVersions] = await Promise.all([
+    $dropFetch("/api/v1/admin/games/biggest-to-download").catch(
+      () => [] as BiggestGame[],
+    ) as Promise<BiggestGame[]>,
+    $dropFetch("/api/v1/admin/games/most-versions").catch(
+      () => [] as VersionCountGame[],
+    ) as Promise<VersionCountGame[]>,
+  ]);
+  biggestGamesLatest.value = latest;
+  mostVersionsGames.value = mostVersions;
+});
 function gameToRankItem(g: BiggestGame) {
   return { rank: g.rank, name: g.gameName, value: formatBytes(g.size) };
+}
+function versionsToRankItem(g: VersionCountGame) {
+  return {
+    rank: g.rank,
+    name: g.gameName,
+    value: `${g.versionCount} ${g.versionCount === 1 ? "version" : "versions"}`,
+  };
 }
 
 const pieChartData = [

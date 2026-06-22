@@ -155,19 +155,29 @@ export class MetadataHandler {
    * constructor noticed missing creds, "rate-limited" after a 429).
    */
   async healthCheck(): Promise<ProviderHealth[]> {
-    const results: ProviderHealth[] = [];
-    for (const provider of this.providers.values()) {
-      const status = provider.health
-        ? await provider.health().catch(() => "down" as const)
-        : metadataHttp.status(provider.name());
-      results.push({
-        source: provider.source(),
-        name: provider.name(),
-        status,
-        stats: metadataHttp.getStatsSnapshot(provider.name()),
-      });
-    }
-    return results;
+    // Probe providers concurrently with a short timeout, so a slow or
+    // unresponsive provider can't serialize into (or stall) the admin page.
+    const HEALTH_TIMEOUT_MS = 4000;
+    return await Promise.all(
+      [...this.providers.values()].map(async (provider) => {
+        let status: ProviderHealth["status"];
+        if (provider.health) {
+          const probe = provider.health().catch(() => "down" as const);
+          const timeout = new Promise<"down">((resolve) =>
+            setTimeout(() => resolve("down"), HEALTH_TIMEOUT_MS),
+          );
+          status = await Promise.race([probe, timeout]);
+        } else {
+          status = metadataHttp.status(provider.name());
+        }
+        return {
+          source: provider.source(),
+          name: provider.name(),
+          status,
+          stats: metadataHttp.getStatsSnapshot(provider.name()),
+        };
+      }),
+    );
   }
 
   /**

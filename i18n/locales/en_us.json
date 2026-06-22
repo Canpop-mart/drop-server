@@ -552,9 +552,7 @@
     "admin": {
       "activeInactiveUsers": "Active/inactive users",
       "activeUsers": "Active users",
-      "allVersionsCombined": "All versions combined",
       "availableRam": "({usedRam} / {totalRam})",
-      "biggestGamesOnServer": "Biggest games on server",
       "biggestGamesToDownload": "Biggest games to download",
       "cpuUsage": "CPU usage",
       "games": "Games",
@@ -562,6 +560,8 @@
       "inactiveUsers": "Inactive users",
       "latestVersionOnly": "Latest version only",
       "librarySources": "Library sources",
+      "mostVersions": "Most versions",
+      "mostVersionsSubtitle": "By number of versions",
       "numberCores": "({count} cores) | ({count} core) | ({count} cores)",
       "ramUsage": "RAM usage",
       "subheader": "Instance summary",

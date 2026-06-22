@@ -20,6 +20,11 @@ class GameSizeManager {
     cacheHandler.createCache<GameVersionSize>("versionSizes");
   private gameBreakdownCache =
     cacheHandler.createCache<GameSizeBreakdown>("gameBreakdown");
+  // Disk size is immutable per version (the manifest never changes once
+  // imported), so caching it avoids re-pulling + JSON-parsing the entire
+  // dropletManifest just to read its top-level `.size`.
+  private gameVersionDiskSizeCache =
+    cacheHandler.createCache<number>("versionDiskSizes");
 
   private gameVersionSizeCacheKey(versionId: string, previousId?: string) {
     return `${versionId}${previousId ? `-from-${previousId}` : ""}`;
@@ -58,6 +63,8 @@ class GameSizeManager {
    * Get the size of the game on disk
    */
   async getVersionDiskSize(versionId: string): Promise<number | null> {
+    if (await this.gameVersionDiskSizeCache.has(versionId))
+      return await this.gameVersionDiskSizeCache.get(versionId);
     const version = await prisma.gameVersion.findUnique({
       where: {
         versionId,
@@ -67,7 +74,9 @@ class GameSizeManager {
       },
     });
     if (!version) return null;
-    return castManifest(version.dropletManifest).size;
+    const size = castManifest(version.dropletManifest).size;
+    await this.gameVersionDiskSizeCache.set(versionId, size);
+    return size;
   }
 
   /**

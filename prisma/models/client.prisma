@@ -23,6 +23,9 @@ model Client {
   compatibilityResults GameCompatibilityResult[]
   hostedRooms       Room[]       @relation("RoomHost")
   roomMemberships   RoomMember[] @relation("RoomMembership")
+
+  // Admin Devices/Sessions list orders by most-recently-connected.
+  @@index([lastConnected(sort: Desc)])
 }
 
 /// Tracks which games are installed on which client devices.

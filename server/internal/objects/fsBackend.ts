@@ -243,11 +243,18 @@ export class FsObjectBackend
     const ids = await this.listAll();
     let totalSize = 0;
     const entries: Array<{ id: string; size: number; mtime: Date }> = [];
-    for (const id of ids) {
-      const s = await this.stat(id);
-      if (!s) continue;
-      totalSize += s.size;
-      entries.push({ id, size: s.size, mtime: s.mtime });
+    // Stat in bounded batches so the whole store is walked concurrently rather
+    // than one serial round-trip at a time (this feeds a blocking admin fetch).
+    const CONCURRENCY = 32;
+    for (let i = 0; i < ids.length; i += CONCURRENCY) {
+      const batch = ids.slice(i, i + CONCURRENCY);
+      const stats = await Promise.all(batch.map((id) => this.stat(id)));
+      batch.forEach((id, j) => {
+        const s = stats[j];
+        if (!s) return;
+        totalSize += s.size;
+        entries.push({ id, size: s.size, mtime: s.mtime });
+      });
     }
     entries.sort((a, b) => b.size - a.size);
     return { count: ids.length, totalSize, top: entries.slice(0, 20) };

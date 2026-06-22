@@ -75,6 +75,9 @@ export async function validateManifest(
   if (!prepared.versionDir) {
     throw new Error(`${PHASE} No version directory to validate against`);
   }
+  // Capture into a const so the narrowing survives into the batch closures
+  // below (property narrowing does not carry into nested functions).
+  const versionDir = prepared.versionDir;
 
   logger.info(
     `${PHASE} Validating ${fileCount} manifest file(s) against disk in ${prepared.versionDir}`,
@@ -84,34 +87,41 @@ export async function validateManifest(
   const mismatched: string[] = [];
   let checked = 0;
 
-  for (const [filename, declaredSize] of sizes) {
+  // Validate in bounded-concurrency batches: each file's peek is an independent
+  // round-trip to droplet, so overlapping them turns N*latency into roughly
+  // N/CONCURRENCY*latency. The per-file checks are otherwise unchanged.
+  const CONCURRENCY = 16;
+  const entries: Array<[string, number]> = [...sizes];
+  for (let i = 0; i < entries.length; i += CONCURRENCY) {
     if (ctx.task.signal.aborted) {
       throw new Error(`${PHASE} Validation aborted by operator`);
     }
-    // The manifest stores POSIX-style relative paths; peekFile splits a
-    // base dir + relative filename. droplet's peekFile returns the
-    // on-disk byte size, or throws / returns 0 when the file is absent.
-    let onDiskSize: number | undefined;
-    try {
-      onDiskSize = await dropletInterface.peekFile(
-        prepared.versionDir,
-        filename,
-      );
-    } catch {
-      onDiskSize = undefined;
-    }
+    const batch = entries.slice(i, i + CONCURRENCY);
+    await Promise.all(
+      batch.map(async ([filename, declaredSize]) => {
+        // The manifest stores POSIX-style relative paths; peekFile splits a
+        // base dir + relative filename. droplet's peekFile returns the
+        // on-disk byte size, or throws / returns 0 when the file is absent.
+        let onDiskSize: number | undefined;
+        try {
+          onDiskSize = await dropletInterface.peekFile(versionDir, filename);
+        } catch {
+          onDiskSize = undefined;
+        }
 
-    if (onDiskSize === undefined || onDiskSize < 0) {
-      missing.push(filename);
-    } else if (onDiskSize !== declaredSize) {
-      mismatched.push(
-        `${filename} (manifest=${declaredSize}, disk=${onDiskSize})`,
-      );
-    }
-    checked++;
+        if (onDiskSize === undefined || onDiskSize < 0) {
+          missing.push(filename);
+        } else if (onDiskSize !== declaredSize) {
+          mismatched.push(
+            `${filename} (manifest=${declaredSize}, disk=${onDiskSize})`,
+          );
+        }
+      }),
+    );
+    checked += batch.length;
     // Light progress within the 90–100% band the orchestrator reserves
     // for post-manifest work.
-    if (checked % 50 === 0) {
+    if (checked % 256 === 0 || checked === entries.length) {
       logger.info(`${PHASE} Validated ${checked}/${fileCount} files...`);
     }
   }

@@ -123,6 +123,8 @@ model UnimportedGameVersion {
 
   manifest Json
   fileList String[]
+
+  @@index([gameId])
 }
 
 // A particular set of files that relate to the version
