@@ -32,6 +32,7 @@ export type LibraryAuditIssueType =
   | "unreadable_version"
   | "missing_launch_target"
   | "invalid_launch_target"
+  | "mistagged_linux_launch"
   | "missing_windows_launch"
   | "orphaned_folder";
 
@@ -61,6 +62,7 @@ export interface LibraryAuditResult {
     missingTargets: number;
     invalidTargets: number;
     missingWindowsLaunch: number;
+    mistaggedLinuxLaunches: number;
     orphanedFolders: number;
   };
 }
@@ -281,12 +283,36 @@ export async function auditLibrary(): Promise<LibraryAuditResult> {
       if (launch.emulatorId) continue;
 
       const ext = path.extname(fullPath).toLowerCase();
+
+      // A Windows binary tagged as a Linux launch. The client detects this at
+      // launch (a .exe / PE binary triggers the NeedsCompat fallback) and runs
+      // it through Proton, so it isn't broken, but the launch should be tagged
+      // Windows. Surface it as a hygiene note rather than a launch failure.
+      if (
+        launch.platform === Platform.Linux &&
+        (ext === ".exe" || ext === ".bat" || ext === ".cmd")
+      ) {
+        issues.push({
+          type: "mistagged_linux_launch",
+          gameId: game.id,
+          gameName: game.mName,
+          versionId: version.versionId,
+          versionName,
+          platform: launch.platform,
+          launchId: launch.launchId,
+          launchName: launch.name,
+          command: launch.command,
+          detail: `Windows binary on a Linux launch. Runs via Proton, but should be a Windows launch (got "${rel}").`,
+        });
+        continue;
+      }
+
       let valid: boolean;
       let reason: string;
 
       if (launch.platform === Platform.Windows) {
         valid = ext === ".exe" || ext === ".bat" || ext === ".cmd";
-        reason = `Windows launch should be an .exe/.bat — got "${rel}"`;
+        reason = `Windows launch should be an .exe/.bat (got "${rel}")`;
       } else if (launch.platform === Platform.Linux) {
         if (LINUX_EXEC_EXTS.has(ext)) {
           valid = true;
@@ -296,11 +322,11 @@ export async function auditLibrary(): Promise<LibraryAuditResult> {
           // Unknown / no extension — accept only a real ELF binary or script.
           valid = isElf(fullPath) || isShebang(fullPath);
         }
-        reason = `Linux launch should be an ELF binary / .sh / .AppImage / .x86_64 — got "${rel}"`;
+        reason = `Linux launch should be an ELF binary or .sh/.AppImage/.x86_64 (got "${rel}")`;
       } else {
         // macOS — expect a .app bundle.
         valid = ext === ".app";
-        reason = `macOS launch should be a .app — got "${rel}"`;
+        reason = `macOS launch should be a .app (got "${rel}")`;
       }
 
       if (!valid) {
@@ -391,6 +417,7 @@ export async function auditLibrary(): Promise<LibraryAuditResult> {
       missingTargets: count("missing_launch_target"),
       invalidTargets: count("invalid_launch_target"),
       missingWindowsLaunch: count("missing_windows_launch"),
+      mistaggedLinuxLaunches: count("mistagged_linux_launch"),
       orphanedFolders: count("orphaned_folder"),
     },
   };

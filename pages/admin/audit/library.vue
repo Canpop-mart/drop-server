@@ -19,6 +19,30 @@
           Export
         </button>
         <button
+          v-if="result && result.summary.orphanedVersions > 0"
+          :disabled="purging || loading"
+          class="block rounded-md bg-red-900/40 px-3 py-2 text-center text-sm font-semibold text-red-200 shadow-sm transition-all hover:bg-red-900/60 disabled:opacity-50"
+          @click="purgeOrphans"
+        >
+          {{
+            purging
+              ? "Purging..."
+              : `Purge ${result.summary.orphanedVersions} orphaned`
+          }}
+        </button>
+        <button
+          v-if="result && result.summary.mistaggedLinuxLaunches > 0"
+          :disabled="fixing || loading"
+          class="block rounded-md bg-sky-700/50 px-3 py-2 text-center text-sm font-semibold text-sky-100 shadow-sm transition-all hover:bg-sky-700/70 disabled:opacity-50"
+          @click="fixMistagged"
+        >
+          {{
+            fixing
+              ? "Fixing..."
+              : `Fix ${result.summary.mistaggedLinuxLaunches} mistagged`
+          }}
+        </button>
+        <button
           :disabled="loading"
           class="block rounded-md bg-blue-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-500 disabled:opacity-50"
           @click="() => runAudit()"
@@ -48,6 +72,11 @@
         class="rounded bg-amber-500/10 px-2 py-1 text-amber-400 ring-1 ring-amber-500/30"
       >
         {{ result.summary.invalidTargets }} invalid target
+      </span>
+      <span
+        class="rounded bg-sky-500/10 px-2 py-1 text-sky-400 ring-1 ring-sky-500/30"
+      >
+        {{ result.summary.mistaggedLinuxLaunches }} mistagged launch
       </span>
       <span
         class="rounded bg-orange-500/10 px-2 py-1 text-orange-400 ring-1 ring-orange-500/30"
@@ -157,12 +186,62 @@ interface AuditResult {
     missingTargets: number;
     invalidTargets: number;
     missingWindowsLaunch: number;
+    mistaggedLinuxLaunches: number;
     orphanedFolders: number;
   };
 }
 
 const result = ref<AuditResult | null>(null);
 const loading = ref(false);
+const purging = ref(false);
+const fixing = ref(false);
+
+// Re-tag Windows binaries tagged as Linux launches to Windows (or drop the
+// redundant Linux entry when a Windows launch already exists). The server
+// re-detects on call, so it only touches launches that are still mistagged.
+async function fixMistagged() {
+  if (!result.value) return;
+  const n = result.value.summary.mistaggedLinuxLaunches;
+  if (n === 0) return;
+  if (
+    !confirm(
+      `Fix ${n} mistagged launch ${n === 1 ? "entry" : "entries"}? Windows .exe launches tagged as Linux will be re-tagged to Windows, or removed when a Windows launch already exists.`,
+    )
+  )
+    return;
+  fixing.value = true;
+  try {
+    await $dropFetch("/api/v1/admin/audit/fix-mistagged-launches", {
+      method: "POST",
+    });
+    await runAudit();
+  } finally {
+    fixing.value = false;
+  }
+}
+
+// Delete the orphaned-version rows (versions whose folder is gone on disk). The
+// server re-detects at call time, so nothing whose folder reappeared is removed.
+async function purgeOrphans() {
+  if (!result.value) return;
+  const n = result.value.summary.orphanedVersions;
+  if (n === 0) return;
+  if (
+    !confirm(
+      `Delete ${n} orphaned version ${n === 1 ? "row" : "rows"}? These are versions with no folder on disk. This removes the database entries only; nothing on disk is touched.`,
+    )
+  )
+    return;
+  purging.value = true;
+  try {
+    await $dropFetch("/api/v1/admin/audit/purge-orphaned-versions", {
+      method: "POST",
+    });
+    await runAudit();
+  } finally {
+    purging.value = false;
+  }
+}
 
 function exportAudit() {
   if (!result.value) return;
@@ -195,6 +274,7 @@ const LABELS: Record<string, string> = {
   unreadable_version: "Unreadable",
   missing_launch_target: "Missing target",
   invalid_launch_target: "Invalid target",
+  mistagged_linux_launch: "Mistagged launch",
   missing_windows_launch: "No Windows launch",
   orphaned_folder: "Orphaned folder",
 };
@@ -210,6 +290,8 @@ function badgeClass(type: string) {
     return base + "bg-rose-500/15 text-rose-400";
   if (type === "invalid_launch_target")
     return base + "bg-amber-500/15 text-amber-400";
+  if (type === "mistagged_linux_launch")
+    return base + "bg-sky-500/15 text-sky-400";
   if (type === "missing_launch_target")
     return base + "bg-orange-500/15 text-orange-400";
   if (type === "orphaned_folder")
