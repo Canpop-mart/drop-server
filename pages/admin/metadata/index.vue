@@ -151,7 +151,7 @@
     <div>
       <h2 class="text-sm font-medium text-zinc-400">Test fetch</h2>
       <p class="mt-1 text-xs text-zinc-500">
-        Runs a search across every provider — confirms connectivity and auth
+        Runs a search across every provider to confirm connectivity and auth
         without importing a game.
       </p>
       <form class="mt-3 flex gap-2" @submit.prevent="runTestFetch">
@@ -293,7 +293,7 @@ async function runTestFetch() {
     })) as TestFetchResult;
   } catch (e) {
     testError.value =
-      e instanceof Error ? e.message : "Test fetch failed — see server logs.";
+      e instanceof Error ? e.message : "Test fetch failed. See server logs.";
   } finally {
     testRunning.value = false;
   }

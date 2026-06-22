@@ -37,7 +37,7 @@
       title="Allow rules"
       :description="
         allowRules.length > 0
-          ? 'Default-deny is active — only addresses matching an enabled Allow rule can reach the server.'
+          ? 'Default-deny is active. Only addresses matching an enabled Allow rule can reach the server.'
           : 'No Allow rules. Add one to switch the server into default-deny mode.'
       "
       :rules="allowRules"

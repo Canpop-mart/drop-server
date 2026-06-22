@@ -91,7 +91,7 @@ const tooltipText = computed(() => {
     .map((e) => {
       let line = `${e.platform}: ${e.statusName}`;
       if (e.result.protonVersion) line += ` (${e.result.protonVersion})`;
-      if (e.result.signature) line += ` — ${e.result.signature}`;
+      if (e.result.signature) line += ` · ${e.result.signature}`;
       return line;
     })
     .join("\n");

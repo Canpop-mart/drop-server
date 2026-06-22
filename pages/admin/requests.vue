@@ -270,7 +270,7 @@
                       >Pick metadata to attach</label
                     >
                     <p class="text-xs text-zinc-500 mb-2">
-                      Same search as the request submitter — pick the match that
+                      Same search as the request submitter. Pick the match that
                       should become the catalog entry on approve.
                     </p>
 
@@ -362,7 +362,7 @@
                     </summary>
                     <div class="mt-2 space-y-2">
                       <p class="text-xs text-zinc-500">
-                        Optional. Leave empty to just approve — you can run the
+                        Optional. Leave empty to just approve. You can run the
                         binary import later from the library page. If you pick
                         one, the game will be created in the catalog and the
                         import task starts immediately.
@@ -378,7 +378,7 @@
                         class="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100"
                       >
                         <option :value="''">
-                          — Don't import a binary right now —
+                          (Don't import a binary right now)
                         </option>
                         <option
                           v-for="opt in libraryOptions"

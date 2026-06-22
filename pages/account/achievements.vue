@@ -428,7 +428,7 @@
             :key="s.id"
             class="text-red-400"
           >
-            {{ s.id.slice(0, 8) }}... — started {{ s.ageMinutes }}m ago
+            {{ s.id.slice(0, 8) }}... started {{ s.ageMinutes }}m ago
           </div>
         </div>
       </div>

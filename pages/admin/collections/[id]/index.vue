@@ -160,7 +160,7 @@
           </button>
         </li>
         <li v-if="games.length === 0" class="px-3 py-4 text-sm text-zinc-500">
-          No games yet — add some.
+          No games yet. Add some.
         </li>
       </ul>
     </div>

@@ -373,6 +373,9 @@
       "totalPlaytime": "Total Playtime"
     },
     "title": "Community",
+    "topGames": "Most Played",
+    "topGamesEmpty": "No playtime tracked yet.",
+    "topGamesPlayers": "{count} players",
     "topPlayers": "Top Players"
   },
   "drop": {
@@ -964,8 +967,8 @@
       "yourRank": "Your rank:"
     },
     "lookAt": "Check it out",
-    "mostPlayedEmpty": "THE ARENA IS QUIET...",
-    "mostPlayedEmptySub": "No one has been playing lately. Fire it up!",
+    "mostPlayedEmpty": "Nothing played recently",
+    "mostPlayedEmptySub": "Play a game to start filling this out.",
     "nav": {
       "browse": "Browse All",
       "mostPlayed": "Most Played",
@@ -1164,7 +1167,7 @@
         "copy": "Copy",
         "description": "Generate a single-use password reset link for {0}.",
         "generateButton": "Generate link",
-        "hint": "Drop will generate a link you can hand to the user. They open it to set a new password — no email is sent.",
+        "hint": "Drop will generate a link you can hand to the user. They open it to set a new password. No email is sent.",
         "singleUseWarning": "This link can only be used once and expires in 1 hour.",
         "title": "Reset link for {0}",
         "urlLabel": "Password reset link"

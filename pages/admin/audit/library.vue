@@ -5,9 +5,9 @@
         <h1 class="text-base font-semibold text-zinc-100">Library Audit</h1>
         <p class="mt-2 text-sm text-zinc-400">
           One report-only pass over the whole library, checked against what's on
-          disk — orphaned versions, empty/unreadable folders, launch targets
-          that are missing or aren't executables, versions with no Windows
-          launch, and game folders on disk with no database row.
+          disk: orphaned versions, empty/unreadable folders, launch targets that
+          are missing or aren't executables, versions with no Windows launch,
+          and game folders on disk with no database row.
         </p>
       </div>
       <div class="mt-4 sm:mt-0 sm:flex-none flex gap-2">
@@ -70,7 +70,7 @@
       v-if="result && result.issues.length === 0"
       class="text-sm text-green-400"
     >
-      No issues found — every version, launch config, and folder checks out.
+      No issues found. Every version, launch config, and folder checks out.
     </div>
 
     <div
@@ -107,7 +107,7 @@
                 v-if="issue.command || issue.path"
                 class="mono text-zinc-500"
                 >{{ issue.command ?? issue.path }} </span
-              ><span v-if="issue.command || issue.path">— </span
+              ><span v-if="issue.command || issue.path">· </span
               >{{ issue.detail }}
             </td>
             <td class="px-3 py-2 whitespace-nowrap">

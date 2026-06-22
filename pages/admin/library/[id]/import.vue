@@ -319,7 +319,7 @@
       >
         <div class="flex items-center justify-between mb-2">
           <h3 class="text-sm font-semibold text-white font-display">
-            Dry-run preview — nothing was written
+            Dry-run preview. Nothing was written
           </h3>
           <button
             class="text-xs text-zinc-400 hover:text-zinc-200"

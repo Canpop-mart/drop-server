@@ -130,7 +130,7 @@
           </button>
         </div>
         <p v-else class="text-sm text-zinc-500">
-          No Goldberg link yet — run a scan or add one manually below.
+          No Goldberg link yet. Run a scan or add one manually below.
         </p>
 
         <div class="flex items-end gap-3 pt-3 border-t border-zinc-700/50">
@@ -293,7 +293,7 @@
             <span
               v-if="bulkRunning === job.taskGroup"
               class="text-xs text-blue-400 mt-1"
-              >Started — see Tasks panel</span
+              >Started, see Tasks panel</span
             >
           </button>
         </div>

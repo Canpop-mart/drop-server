@@ -21,7 +21,7 @@
     </div>
 
     <div v-if="collections.length === 0" class="text-sm text-zinc-500">
-      No collections yet — create one to get started.
+      No collections yet. Create one to get started.
     </div>
 
     <ul

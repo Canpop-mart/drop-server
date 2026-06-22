@@ -54,7 +54,7 @@ export default defineEventHandler(async (h3) => {
         connectToken = loginData.Token;
         logger.info(`[RA] Connect token obtained for user ${body.username}`);
       } else {
-        throw new Error("Login failed — check your password");
+        throw new Error("Login failed. Check your password");
       }
     } else {
       throw new Error(`RA login returned ${loginResponse.status}`);

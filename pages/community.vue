@@ -93,6 +93,48 @@
             :games-owned="e.gamesOwned"
           />
         </div>
+
+        <h2 class="text-xl font-bold font-display text-zinc-100 mb-4 mt-8">
+          {{ $t("community.topGames") }}
+        </h2>
+        <div class="space-y-2">
+          <NuxtLink
+            v-for="g in topGames"
+            :key="g.game.id"
+            :to="`/store/${g.game.id}`"
+            class="flex items-center gap-3 p-2 rounded-lg bg-zinc-800/40 hover:bg-zinc-700/50 transition-colors group"
+          >
+            <span
+              class="w-5 shrink-0 text-center text-sm font-bold text-zinc-500"
+              >{{ g.rank }}</span
+            >
+            <img
+              v-if="g.game.mIconObjectId"
+              :src="useObject(g.game.mIconObjectId)"
+              class="size-10 rounded shrink-0 object-cover"
+              alt=""
+            />
+            <div
+              v-else
+              class="size-10 rounded shrink-0 bg-zinc-700/50"
+              aria-hidden="true"
+            />
+            <div class="min-w-0 flex-1">
+              <p
+                class="truncate text-sm font-medium text-zinc-200 group-hover:text-blue-400 transition-colors"
+              >
+                {{ g.game.mName }}
+              </p>
+              <p class="text-xs text-zinc-500">
+                {{ g.playtimeHours }}{{ $t("community.stats.hoursSuffix") }} ·
+                {{ $t("community.topGamesPlayers", { count: g.players }) }}
+              </p>
+            </div>
+          </NuxtLink>
+          <p v-if="topGames.length === 0" class="text-sm text-zinc-500 py-2">
+            {{ $t("community.topGamesEmpty") }}
+          </p>
+        </div>
       </div>
     </div>
   </div>
@@ -185,4 +227,14 @@ const stats = await $dropFetch("/api/v1/community/stats").catch(() => null);
 const leaderboard = await $dropFetch("/api/v1/community/leaderboard").catch(
   () => ({ playtime: [] }),
 );
+
+interface TopGame {
+  rank: number;
+  game: { id: string; mName: string; mIconObjectId: string | null };
+  playtimeHours: number;
+  players: number;
+}
+const topGames = (await $dropFetch("/api/v1/community/top-games").catch(
+  () => [],
+)) as TopGame[];
 </script>

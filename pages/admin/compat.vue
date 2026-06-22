@@ -70,7 +70,7 @@
           </tr>
           <tr v-if="!summary || summary.histogram.length === 0">
             <td colspan="3" class="px-5 py-6 text-center text-zinc-500 italic">
-              No results yet — run a compatibility test from any client to
+              No results yet. Run a compatibility test from any client to
               populate this view.
             </td>
           </tr>
@@ -85,7 +85,7 @@
           Top crash signatures
         </h2>
         <p class="mt-1 text-xs text-zinc-500">
-          Failures that share a fingerprint usually share a root cause — fix one
+          Failures that share a fingerprint usually share a root cause. Fix one
           game in the cluster and the others may follow.
         </p>
       </div>
@@ -122,7 +122,7 @@
           </tr>
           <tr v-if="!summary || summary.topSignatures.length === 0">
             <td colspan="3" class="px-5 py-6 text-center text-zinc-500 italic">
-              No crashes recorded — every test so far has either succeeded or
+              No crashes recorded. Every test so far has either succeeded or
               produced a unique failure signature.
             </td>
           </tr>
@@ -184,5 +184,5 @@ const { data: summary } = await useFetch<Summary>(
   "/api/v1/admin/compat/summary",
 );
 
-useHead({ title: "Compatibility — Admin" });
+useHead({ title: "Compatibility" });
 </script>
