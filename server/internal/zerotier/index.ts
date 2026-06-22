@@ -175,6 +175,50 @@ class RoomManager {
   }
 
   /**
+   * List currently-joinable rooms so a client can join without a shared code.
+   * Returns every live (non-expired) room with enough detail to pick one; the
+   * short code is included because joining is by code. On a private Drop server
+   * that's the intended "open lobby" behaviour.
+   */
+  async browseRooms(requestingClientId: string) {
+    this.ensureEnabled();
+    await this.reapExpired();
+
+    const rooms = await prisma.room.findMany({
+      where: { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+      include: {
+        hostClient: { select: { name: true } },
+        members: { select: { status: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+
+    const gameIds = [
+      ...new Set(rooms.map((r) => r.gameId).filter((g): g is string => !!g)),
+    ];
+    const games = gameIds.length
+      ? await prisma.game.findMany({
+          where: { id: { in: gameIds } },
+          select: { id: true, mName: true },
+        })
+      : [];
+    const gameMap = Object.fromEntries(games.map((g) => [g.id, g.mName]));
+
+    return rooms.map((r) => ({
+      roomId: r.id,
+      shortCode: r.shortCode,
+      name: r.name,
+      gameId: r.gameId,
+      gameName: r.gameId ? (gameMap[r.gameId] ?? null) : null,
+      hostName: r.hostClient?.name ?? "Unknown",
+      memberCount: r.members.filter((m) => m.status === "Authorized").length,
+      createdAt: r.createdAt,
+      isSelf: r.hostClientId === requestingClientId,
+    }));
+  }
+
+  /**
    * Fetch a room's state. The caller must be the host or a member.
    */
   async getRoom(roomId: string, requestingClientId: string) {
