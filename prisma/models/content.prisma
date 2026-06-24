@@ -14,6 +14,12 @@ enum GameType {
   Dependency
 }
 
+enum ControllerSupport {
+  Full
+  Partial
+  None
+}
+
 model Game {
   id String @id @default(uuid())
 
@@ -30,6 +36,9 @@ model Game {
   mShortDescription String // Short description
   mDescription      String // Supports markdown
   mReleased         DateTime // When the game was released
+
+  // Gamepad support level, from Steam's controller_support signal.
+  mControllerSupport ControllerSupport @default(None)
 
   ratings GameRating[]
 

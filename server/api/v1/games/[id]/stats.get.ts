@@ -31,7 +31,7 @@ export default defineEventHandler(async (h3) => {
 
       prisma.achievement.findMany({
         where: { gameId },
-        select: { id: true, externalId: true },
+        select: { id: true, externalId: true, points: true },
       }),
 
       prisma.userAchievement.findMany({
@@ -57,10 +57,30 @@ export default defineEventHandler(async (h3) => {
   }
   const achievementsUnlocked = externalIdToUnlocked.size;
 
+  // Points: a game linked to both Goldberg/Steam (0 pts) and RetroAchievements
+  // stores two rows per externalId. Take the MAX points across variants so the
+  // RA value isn't masked by a 0-point row, then total / earn against the
+  // deduplicated set.
+  const maxPointsByExternal = new Map<string, number>();
+  for (const a of achievementData) {
+    if (a.points > (maxPointsByExternal.get(a.externalId) ?? 0))
+      maxPointsByExternal.set(a.externalId, a.points);
+  }
+  const totalPoints = [...maxPointsByExternal.values()].reduce(
+    (sum, p) => sum + p,
+    0,
+  );
+  let earnedPoints = 0;
+  for (const externalId of externalIdToUnlocked.keys()) {
+    earnedPoints += maxPointsByExternal.get(externalId) ?? 0;
+  }
+
   return {
     playtimeSeconds: playtime?.seconds ?? 0,
     lastPlayedAt: lastSession?.endedAt ?? lastSession?.startedAt ?? null,
     achievementsUnlocked,
     achievementsTotal,
+    earnedPoints,
+    totalPoints,
   };
 });

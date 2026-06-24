@@ -455,6 +455,7 @@ export class MetadataHandler {
               mShortDescription: metadata.shortDescription,
               mDescription: metadata.description,
               mReleased: metadata.released,
+              mControllerSupport: metadata.controllerSupport ?? "None",
 
               mIconObjectId: metadata.icon,
               mBannerObjectId: metadata.bannerId,

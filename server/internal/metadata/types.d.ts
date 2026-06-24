@@ -46,6 +46,9 @@ export interface GameMetadata {
 
   reviews: GameMetadataRating[];
 
+  /** Gamepad support level (Steam's controller_support). Defaults to None. */
+  controllerSupport?: "Full" | "Partial" | "None";
+
   // Created with another utility function
   icon: ObjectReference;
   bannerId: ObjectReference;

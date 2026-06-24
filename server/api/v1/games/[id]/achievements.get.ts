@@ -24,14 +24,22 @@ export default defineEventHandler(async (h3) => {
   // provider's metadata for display, but track all IDs so we can merge unlock data.
   const dedupedMap = new Map<
     string,
-    { best: (typeof achievements)[0]; allIds: string[] }
+    { best: (typeof achievements)[0]; allIds: string[]; maxPoints: number }
   >();
   for (const a of achievements) {
     const entry = dedupedMap.get(a.externalId);
     if (!entry) {
-      dedupedMap.set(a.externalId, { best: a, allIds: [a.id] });
+      dedupedMap.set(a.externalId, {
+        best: a,
+        allIds: [a.id],
+        maxPoints: a.points,
+      });
     } else {
       entry.allIds.push(a.id);
+      // Points live on the RA variant; the display "best" is often the
+      // 0-point Goldberg/Steam variant, so carry the max so the pts badge
+      // isn't falsely 0.
+      entry.maxPoints = Math.max(entry.maxPoints, a.points);
       const newPriority = PROVIDER_PRIORITY[a.provider] ?? 99;
       const bestPriority = PROVIDER_PRIORITY[entry.best.provider] ?? 99;
       if (newPriority < bestPriority) {
@@ -73,7 +81,7 @@ export default defineEventHandler(async (h3) => {
     unlockCounts.map((uc) => [uc.achievementId, uc._count]),
   );
 
-  return dedupedEntries.map(({ best, allIds }) => {
+  return dedupedEntries.map(({ best, allIds, maxPoints }) => {
     // Merge unlock status: unlocked if ANY provider variant is unlocked
     let unlockedAt: Date | null = null;
     for (const id of allIds) {
@@ -92,6 +100,7 @@ export default defineEventHandler(async (h3) => {
 
     return {
       ...best,
+      points: maxPoints,
       unlocked: !!unlockedAt,
       unlockedAt,
       rarity: Math.round((unlocks / ownerCount) * 100 * 10) / 10,

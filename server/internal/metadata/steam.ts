@@ -199,6 +199,7 @@ interface SteamWebAppDetailsSmall {
   mac_requirements: { minimum: string; recommended: string };
   linux_requirements: { minimum: string; recommended: string };
   legal_notice: string;
+  controller_support?: "full" | "partial";
 }
 
 interface SteamWebAppDetailsLarge extends SteamWebAppDetailsSmall {
@@ -423,7 +424,7 @@ export class SteamProvider implements MetadataProvider {
     // Parallelize web app details and SteamGridDB logo fetch
     const apiKey = getSteamGridDBApiKey();
     const [webAppDetails, sgdbLogoUrl] = await Promise.all([
-      this._getWebAppDetails(id, "metacritic"),
+      this._getWebAppDetails(id, "metacritic,controller_support"),
       apiKey
         ? sgdbGetBestLogoUrl(apiKey, id, currentGame.name)
         : Promise.resolve(null as string | null),
@@ -529,6 +530,12 @@ export class SteamProvider implements MetadataProvider {
         ]),
       ],
       reviews,
+      controllerSupport:
+        webAppDetails?.controller_support === "full"
+          ? "Full"
+          : webAppDetails?.controller_support === "partial"
+            ? "Partial"
+            : "None",
       icon,
       bannerId: banner,
       coverId: cover,
