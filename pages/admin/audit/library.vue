@@ -55,6 +55,13 @@
           }}
         </button>
         <button
+          :disabled="backfilling || loading"
+          class="block rounded-md bg-zinc-700/50 px-3 py-2 text-center text-sm font-semibold text-zinc-100 shadow-sm transition-all hover:bg-zinc-700 disabled:opacity-50"
+          @click="backfillMetadata"
+        >
+          {{ backfilling ? "Starting..." : "Backfill HLTB + controller" }}
+        </button>
+        <button
           :disabled="loading"
           class="block rounded-md bg-blue-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-500 disabled:opacity-50"
           @click="() => runAudit()"
@@ -208,6 +215,7 @@ const loading = ref(false);
 const purging = ref(false);
 const fixing = ref(false);
 const redetecting = ref(false);
+const backfilling = ref(false);
 
 // Re-derive launches for versions whose stored launch points at a
 // non-executable (an older importer picked Unity/Unreal data files). Previews
@@ -245,6 +253,29 @@ async function redetectBroken() {
     await runAudit();
   } finally {
     redetecting.value = false;
+  }
+}
+
+// Backfill HLTB times + Steam controller support onto existing games, no
+// re-import. Spawns a background task (a few minutes for a large library).
+async function backfillMetadata() {
+  if (
+    !confirm(
+      "Backfill HowLongToBeat times and Steam controller support for every existing game? It runs in the background (a few minutes for a large library) and only fills empty fields.",
+    )
+  )
+    return;
+  backfilling.value = true;
+  try {
+    await $dropFetch("/api/v1/admin/audit/backfill-metadata", {
+      method: "POST",
+      body: {},
+    });
+    alert(
+      "Backfill started. Watch progress on the Tasks page; HLTB and controller data fill in on games as it runs.",
+    );
+  } finally {
+    backfilling.value = false;
   }
 }
 
