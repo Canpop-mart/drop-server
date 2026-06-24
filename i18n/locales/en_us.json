@@ -953,6 +953,12 @@
     "details": "Details",
     "developers": "Developers | Developer | Developers",
     "featured": "Featured",
+    "howLongToBeat": {
+      "completionist": "Completionist",
+      "label": "How long to beat",
+      "mainSides": "Main + Extras",
+      "mainStory": "Main Story"
+    },
     "images": "Game Images",
     "leaderboard": {
       "empty": "No leaderboards yet for this game.",

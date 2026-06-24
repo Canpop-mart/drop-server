@@ -62,6 +62,9 @@ const DEFAULT_LIMITS: Record<string, RateLimitConfig> = {
   PCGamingWiki: { tokens: 10, intervalMs: 10_000 }, // be polite, MediaWiki
   GiantBomb: { tokens: 60, intervalMs: 60_000 }, // 60/min by their TOS
   SteamGridDB: { tokens: 30, intervalMs: 60_000 },
+  // HLTB is an unofficial scrape — stay gentle so a bulk import can't trip a
+  // temp block. Each game costs up to 2 requests (init + search).
+  HowLongToBeat: { tokens: 10, intervalMs: 10_000 },
 };
 
 const DEFAULT_TIMEOUT_MS = 20_000;

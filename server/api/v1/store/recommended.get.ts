@@ -19,7 +19,7 @@ export default defineEventHandler(async (h3) => {
 
   const limit = Math.min(Math.max(query.take, 1), 25);
 
-  // Step 1: Get the user's most-played games to extract their preferred tags
+  // The user's most-played games, to derive their preferred tags
   const userPlaytime = await prisma.playtime.findMany({
     where: { userId },
     orderBy: { seconds: "desc" },
@@ -27,7 +27,7 @@ export default defineEventHandler(async (h3) => {
     select: { gameId: true },
   });
 
-  // Step 2: Get the user's library (collection) games to exclude them
+  // Owned (collection) games, to exclude them from results
   const userCollections = await prisma.collectionEntry.findMany({
     where: { collection: { userId } },
     select: { gameId: true },
@@ -35,7 +35,6 @@ export default defineEventHandler(async (h3) => {
   const ownedGameIds = new Set(userCollections.map((c) => c.gameId));
   const playedGameIds = userPlaytime.map((p) => p.gameId);
 
-  // Step 3: Extract tags from user's most-played games
   const playedGames = await prisma.game.findMany({
     where: { id: { in: playedGameIds } },
     select: {
@@ -50,8 +49,7 @@ export default defineEventHandler(async (h3) => {
     }
   }
 
-  // Step 4: If user has tag preferences, find games with those tags
-  // that the user doesn't already own
+  // Find unowned games that share the user's most common tags
   const topTagIds = [...tagFrequency.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)

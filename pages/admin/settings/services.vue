@@ -15,7 +15,7 @@
           serviceIdx === services.length - 1
             ? 'rounded-br-lg rounded-bl-lg sm:rounded-bl-none'
             : '',
-          'group relative border-white/10 bg-zinc-800/50 p-6 focus-within:outline-2 focus-within:-outline-offset-2 focus-within:outline-indigo-500 sm:odd:not-nth-last-2:border-b sm:even:border-l sm:even:not-last:border-b',
+          'group relative border-white/10 bg-zinc-800/50 p-6 focus-within:outline-2 focus-within:-outline-offset-2 focus-within:outline-blue-600 sm:odd:not-nth-last-2:border-b sm:even:border-l sm:even:not-last:border-b',
         ]"
       >
         <div>

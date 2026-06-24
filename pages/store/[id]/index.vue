@@ -147,6 +147,27 @@
                   }}</span>
                 </td>
               </tr>
+              <tr v-if="hltbRows.length > 0">
+                <td
+                  class="whitespace-nowrap align-top py-4 pl-4 pr-3 text-sm font-medium text-zinc-100 sm:pl-3"
+                >
+                  {{ $t("store.howLongToBeat.label") }}
+                </td>
+                <td class="px-3 py-4 text-sm text-zinc-400">
+                  <ul class="flex flex-col gap-1">
+                    <li
+                      v-for="row in hltbRows"
+                      :key="row.label"
+                      class="inline-flex items-center gap-x-2"
+                    >
+                      <span class="text-zinc-300">{{ row.label }}</span>
+                      <span class="text-zinc-100 font-medium">{{
+                        row.value
+                      }}</span>
+                    </li>
+                  </ul>
+                </td>
+              </tr>
               <tr>
                 <td
                   class="whitespace-nowrap align-top py-4 pl-4 pr-3 text-sm font-medium text-zinc-100 sm:pl-3"
@@ -386,6 +407,33 @@ const averageRating = Math.round((rating._avg.mReviewRating ?? 0) * 5);
 const ratingArray = Array(5)
   .fill(null)
   .map((_, i) => i + 1 <= averageRating);
+
+// HowLongToBeat completion times (minutes -> a compact "9½ h" label). Only
+// the tiers HLTB actually had are shown; the whole row hides when empty.
+function formatHltbHours(minutes: number): string {
+  const rounded = Math.round((minutes / 60) * 2) / 2; // nearest half hour
+  const whole = Math.floor(rounded);
+  const half = rounded - whole >= 0.5;
+  if (whole === 0) return half ? "½ h" : "0 h";
+  return `${whole}${half ? "½" : ""} h`;
+}
+const hltbRows = computed(() => {
+  const fmt = (m?: number | null) => (m && m > 0 ? formatHltbHours(m) : null);
+  const rows: { label: string; value: string }[] = [];
+  const main = fmt(game.mHltbMain);
+  const mainSides = fmt(game.mHltbMainSides);
+  const completionist = fmt(game.mHltbCompletionist);
+  if (main)
+    rows.push({ label: t("store.howLongToBeat.mainStory"), value: main });
+  if (mainSides)
+    rows.push({ label: t("store.howLongToBeat.mainSides"), value: mainSides });
+  if (completionist)
+    rows.push({
+      label: t("store.howLongToBeat.completionist"),
+      value: completionist,
+    });
+  return rows;
+});
 
 const tabs = ["Achievements", "Leaderboards", "Similar"] as const;
 const tabLabels: Record<string, string> = {

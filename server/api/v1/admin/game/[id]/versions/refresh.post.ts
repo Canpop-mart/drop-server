@@ -41,7 +41,6 @@ export default defineEventHandler(async (h3) => {
     acls: ["system:import:version:read"],
     name: `Refreshing versions for ${game.mName}`,
     async run({ progress, logger, addAction, markPhase, signal }) {
-      // Step 1: Purge existing versions
       logger.info(`Purging existing versions for ${game.mName}`);
       const { count } = await prisma.gameVersion.deleteMany({
         where: { gameId },
@@ -49,7 +48,6 @@ export default defineEventHandler(async (h3) => {
       logger.info(`Purged ${count} version(s)`);
       progress(10);
 
-      // Step 2: Discover available versions from the library
       logger.info("Discovering available versions...");
       const discoveredVersions =
         await libraryManager.fetchUnimportedGameVersions(
@@ -66,7 +64,6 @@ export default defineEventHandler(async (h3) => {
       logger.info(`Found ${discoveredVersions.length} version(s) to import`);
       progress(20);
 
-      // Step 3: Re-import each discovered version
       for (let i = 0; i < discoveredVersions.length; i++) {
         const version = discoveredVersions[i];
         const preload = await libraryManager.fetchUnimportedVersionInformation(

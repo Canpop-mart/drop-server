@@ -66,7 +66,7 @@
         <p class="text-sm text-zinc-400">{{ $t("user.stats.playtime") }}</p>
       </div>
       <div class="p-4 bg-zinc-800/50 rounded-lg text-center ring-1 ring-white/5">
-        <Squares2X2Icon class="size-5 mx-auto mb-1.5 text-purple-400" />
+        <Squares2X2Icon class="size-5 mx-auto mb-1.5 text-green-400" />
         <p class="text-2xl font-bold text-zinc-100">
           {{ userStats?.gamesPlayed ?? 0 }}
         </p>

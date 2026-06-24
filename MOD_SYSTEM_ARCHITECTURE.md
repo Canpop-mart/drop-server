@@ -4,7 +4,7 @@
 
 Drop already has foundational pieces for a mod system, though none are wired up:
 
-- `DownloadType::Mod` and `DownloadType::Dlc` exist in the Rust enum but are unused — only `Game` and `Tool` are active
+- `DownloadType::Mod` and `DownloadType::Dlc` exist in the Rust enum but are unused, only `Game` and `Tool` are active
 - `GameVersion.requiredContent` is a self-referential Prisma relation defined in the schema but never populated during version import
 - The import API accepts a `requiredContent: string[]` field but ignores it
 - The versions endpoint dynamically builds dependency info from emulator references, not from the database relation
@@ -13,15 +13,15 @@ Drop already has foundational pieces for a mod system, though none are wired up:
 
 ## Design Principles
 
-1. **Mods are Games** — A mod is just a Game with `type = Mod` that declares a parent. This reuses the entire existing pipeline (upload, manifest, delta, download, scan) with minimal new code.
+1. **Mods are Games.** A mod is just a Game with `type = Mod` that declares a parent. This reuses the entire existing pipeline (upload, manifest, delta, download, scan) with minimal new code.
 
-2. **File overlay, not file patching** — Mods deliver complete replacement files that overlay onto the parent game's install directory. This is simpler, more reliable, and matches how most PC game mods work. ROM patches (xdelta/IPS) can be a Phase 2 addition.
+2. **File overlay, not file patching.** Mods deliver complete replacement files that overlay onto the parent game's install directory. This is simpler, more reliable, and matches how most PC game mods work. ROM patches (xdelta/IPS) can be a Phase 2 addition.
 
-3. **Mods install into the parent game's directory** — No separate mod folders. The download agent writes mod files directly into the parent game's install path, just like the game's own files. This means mods "just work" without launch command changes.
+3. **Mods install into the parent game's directory.** No separate mod folders. The download agent writes mod files directly into the parent game's install path, just like the game's own files. This means mods "just work" without launch command changes.
 
-4. **Mod state is tracked per-mod** — Each installed mod has its own `.moddata` file and its own entry in `game_statuses` / `installed_game_version` so it can be individually installed, updated, and uninstalled.
+4. **Mod state is tracked per-mod.** Each installed mod has its own `.moddata` file and its own entry in `game_statuses` / `installed_game_version` so it can be individually installed, updated, and uninstalled.
 
-5. **Both surfaces** — Mod browsing/discovery is a web page (embedded as iframe in client). Mod install/uninstall is native on the client (needs Tauri invoke). The game detail page shows installed mods natively.
+5. **Both surfaces.** Mod browsing/discovery is a web page (embedded as iframe in client). Mod install/uninstall is native on the client (needs Tauri invoke). The game detail page shows installed mods natively.
 
 ## Data Model
 
@@ -39,12 +39,12 @@ GameType enum:
   Game | Emulator | Dependency | Mod    ← add Mod
 ```
 
-A Mod is a Game with `type = Mod` and `parentGameId` set. It has its own GameVersions, its own icon/banner/description, its own versions — the full Game lifecycle.
+A Mod is a Game with `type = Mod` and `parentGameId` set. It has its own GameVersions, its own icon/banner/description, its own versions, the full Game lifecycle.
 
 ### Client (Rust)
 
 ```rust
-// Existing — no change needed
+// Existing, no change needed
 pub enum DownloadType {
     Game,
     Tool,
@@ -62,7 +62,7 @@ pub struct ModData {
 }
 ```
 
-The `installed_files` list is critical — it records exactly which files the mod wrote so uninstalling a mod can remove only its files without touching the base game or other mods.
+The `installed_files` list is critical, it records exactly which files the mod wrote so uninstalling a mod can remove only its files without touching the base game or other mods.
 
 ## Architecture
 
@@ -128,7 +128,7 @@ This is the trickiest part. A simpler V1 approach: "Verify Game" re-downloads th
 2. Add `parentGameId` and relations to `Game` model
 3. Migration for the new fields
 4. Update game creation API to accept `parentGameId` for mod-type games
-5. Add `GET /api/v1/games/{id}/mods` endpoint — returns mods for a parent game
+5. Add `GET /api/v1/games/{id}/mods` endpoint, returns mods for a parent game
 6. Update store game page to show available mods
 
 **Client:**
@@ -146,7 +146,7 @@ This is the trickiest part. A simpler V1 approach: "Verify Game" re-downloads th
 
 12. Mod listing on game store page (web, iframe in client)
 13. "Installed Mods" section on native game page with enable/disable/uninstall
-14. Mod install flow (similar to game install but simpler — no version selection needed for V1)
+14. Mod install flow (similar to game install but simpler, no version selection needed for V1)
 
 ### Phase 2: ROM Patching
 
@@ -192,21 +192,21 @@ This is the trickiest part. A simpler V1 approach: "Verify Game" re-downloads th
 
 ## Key Decisions to Make
 
-1. **Can mods have mods?** — Probably not for V1. Keep it flat (mods can only target base games, not other mods).
+1. **Can mods have mods?** Probably not for V1. Keep it flat (mods can only target base games, not other mods).
 
-2. **Do mods show in the main library?** — Probably not. They should be accessible from the parent game's page only. They don't need their own library card.
+2. **Do mods show in the main library?** Probably not. They should be accessible from the parent game's page only. They don't need their own library card.
 
-3. **Mod file conflicts** — When two mods write the same file, who wins? Options:
+3. **Mod file conflicts.** When two mods write the same file, who wins? Options:
    - Last installed wins (simplest)
    - Load order system (more complex but needed eventually)
    - Block conflicting installs (safest but annoying)
 
-4. **Mod compatibility with game updates** — When the base game updates, are mods invalidated? Options:
+4. **Mod compatibility with game updates.** When the base game updates, are mods invalidated? Options:
    - Mark mods as "possibly incompatible" after base game update
    - Let mods declare compatible version ranges
    - Do nothing (user responsibility)
 
-5. **Admin vs user mod uploads** — V1: admin-only (mods are curated like games). V2: user uploads with approval flow.
+5. **Admin vs user mod uploads.** V1: admin-only (mods are curated like games). V2: user uploads with approval flow.
 
 ## Estimated Effort
 

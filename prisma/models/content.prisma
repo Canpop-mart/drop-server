@@ -40,6 +40,12 @@ model Game {
   // Gamepad support level, from Steam's controller_support signal.
   mControllerSupport ControllerSupport @default(None)
 
+  // HowLongToBeat completion times in minutes (best-effort enrichment).
+  // Null when HLTB has no entry or the scrape failed at import time.
+  mHltbMain          Int? // Main Story
+  mHltbMainSides     Int? // Main + Extras
+  mHltbCompletionist Int? // Completionist
+
   ratings GameRating[]
 
   featured        Boolean @default(false)

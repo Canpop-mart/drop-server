@@ -1,4 +1,4 @@
-# Compatibility Test Rig — Phase A
+# Compatibility Test Rig (Phase A)
 
 Standalone bash tooling that launches each Drop-installed Windows game,
 classifies the outcome, and POSTs the result to drop-server's compat API.
@@ -12,7 +12,7 @@ Lets you build a per-(game, client) compatibility map of your library
    umu/Proton, watches it for ~45s, classifies the outcome (`alive_renders`,
    `alive_no_render`, `crash`, `early_exit`, `no_launch`).
 3. Asks you (Y/N) whether the menu actually rendered, when the process
-   stays alive — auto-classifying as `alive_no_render` until you confirm.
+   stays alive, auto-classifying as `alive_no_render` until you confirm.
 4. POSTs each result to `POST /api/v1/client/compat/results` so it lands
    in the `GameCompatibilityResult` table on drop-server.
 
@@ -84,7 +84,7 @@ psql -d drop -c "
   GROUP BY status ORDER BY 2 DESC
 "
 
-# Cluster crashes by signature — same fingerprint = same root cause
+# Cluster crashes by signature, same fingerprint = same root cause
 psql -d drop -c "
   SELECT signature, COUNT(*) FROM \"GameCompatibilityResult\"
   WHERE status = 'crash'
@@ -94,10 +94,10 @@ psql -d drop -c "
 
 ## What's next (Phase B/C/D)
 
-- **Phase B**: library UI badges (green/yellow/red per platform).
-- **Phase C**: drop-client background worker — install, test, uninstall,
+- Phase B: library UI badges (green/yellow/red per platform).
+- Phase C: drop-client background worker, install, test, uninstall,
   loop, all without bash. Replaces this rig for real use.
-- **Phase D**: server-side `compat:scan` task that auto-queues untested
+- Phase D: server-side `compat:scan` task that auto-queues untested
   games + a manual-confirm UI for `alive_no_render` results.
 
 This rig is intentionally minimal: it exists so we can populate the table

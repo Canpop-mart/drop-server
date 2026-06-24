@@ -25,6 +25,7 @@ import { createGameImportTaskId, libraryManager } from "../library";
 import type { GameTagModel } from "~/prisma/client/models";
 import metadataHttp from "./http";
 import metadataCache from "./cache";
+import { fetchHltbTimes } from "./hltb";
 
 export class MissingMetadataProviderConfig extends Error {
   private providerName: string;
@@ -445,6 +446,25 @@ export class MetadataHandler {
 
           progress(95);
 
+          // Best-effort HowLongToBeat enrichment. Runs regardless of which
+          // provider resolved the game (most import via Steam, which has no
+          // completion-time signal) and never blocks or fails the import.
+          const hltbYear =
+            metadata.released && metadata.released.getFullYear() > 1970
+              ? metadata.released.getFullYear()
+              : undefined;
+          const hltb = await fetchHltbTimes(metadata.name, hltbYear).catch(
+            (e) => {
+              logger.warn(`[hltb] enrichment skipped: ${e}`);
+              return null;
+            },
+          );
+          if (hltb) {
+            logger.info(
+              `[hltb] "${metadata.name}": main=${hltb.main} mainSides=${hltb.mainSides} completionist=${hltb.completionist} (minutes)`,
+            );
+          }
+
           await prisma.game.create({
             data: {
               id: gameId,
@@ -456,6 +476,10 @@ export class MetadataHandler {
               mDescription: metadata.description,
               mReleased: metadata.released,
               mControllerSupport: metadata.controllerSupport ?? "None",
+
+              mHltbMain: hltb?.main ?? null,
+              mHltbMainSides: hltb?.mainSides ?? null,
+              mHltbCompletionist: hltb?.completionist ?? null,
 
               mIconObjectId: metadata.icon,
               mBannerObjectId: metadata.bannerId,
