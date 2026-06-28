@@ -26,8 +26,9 @@ import { logger } from "~/server/internal/logging";
  * Per-provider failures are isolated by the orchestrator — a flaky Steam
  * API never blocks the RA pass and vice versa.
  *
- * The per-provider routes (`scan-goldberg`, `scan-retroachievements`) are
- * kept only as thin back-compat wrappers that call into this same code.
+ * The old per-provider routes (`scan-goldberg`, `scan-retroachievements`)
+ * have been removed — call this endpoint with `provider=goldberg` or
+ * `provider=retroachievements` (bulk = omit `gameId`) instead.
  */
 const ScanRequest = type({
   "gameId?": "string",

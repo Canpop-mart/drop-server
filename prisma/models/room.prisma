@@ -14,6 +14,16 @@ model Room {
   /// Short, human-shareable join code (ambiguity-free uppercase alphanumeric).
   shortCode String @unique
 
+  /// Third octet of this room's /24 (10.242.<octet>.0/24). Unique across live
+  /// rooms so ZeroTier never hands two rooms the same node the same address.
+  /// Null on legacy rooms created before per-room subnets (they used 10.242.0.0/24).
+  subnetOctet Int? @unique
+
+  /// The host's assigned ZeroTier IPv4 on this room's network, self-reported by
+  /// the host's client after it joins (ZeroTier assigns it asynchronously). Null
+  /// until reported; joiners connect to the game at this address.
+  hostAddress String?
+
   /// Optional game this room is for. Stored as a plain id (not a FK) because
   /// rooms are ephemeral and a deleted game shouldn't cascade into them.
   gameId String?

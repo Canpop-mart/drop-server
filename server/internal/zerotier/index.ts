@@ -21,15 +21,23 @@ const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 6;
 
-// An uncommon private subnet to minimise clashes with players' real home LANs.
-const ROOM_SUBNET = {
-  cidr: "10.242.0.0/24",
-  start: "10.242.0.1",
-  end: "10.242.0.254",
-};
+// Each room gets its own /24 inside this /16 so ZeroTier never assigns two rooms
+// the same node the same address (the third octet is allocated uniquely per
+// room). An uncommon parent to minimise clashes with players' real home LANs.
+const ROOM_SUBNET_BASE = "10.242"; // -> 10.242.<octet>.0/24
 
 // ZeroTier node ids are 40-bit → 10 lowercase hex chars.
 export const ZT_NODE_ID_RE = /^[0-9a-f]{10}$/;
+
+/** Prisma unique-constraint violation — used to retry a raced allocation. */
+function isUniqueConstraintError(e: unknown): boolean {
+  return (
+    !!e &&
+    typeof e === "object" &&
+    "code" in e &&
+    (e as { code?: string }).code === "P2002"
+  );
+}
 
 class RoomManager {
   isEnabled() {
@@ -67,7 +75,31 @@ class RoomManager {
   }
 
   /**
-   * Host a new room: mint a network, authorize the host's node, persist it.
+   * Pick a free third octet for this room's /24 (10.242.<octet>.0/24). Octets
+   * 1..254 (0 = the legacy shared subnet, 255 = broadcast). The column is
+   * @unique, so a race is caught as a P2002 on insert and createRoom re-rolls.
+   */
+  private async allocateSubnetOctet(): Promise<number> {
+    const live = await prisma.room.findMany({
+      where: { subnetOctet: { not: null } },
+      select: { subnetOctet: true },
+    });
+    const used = new Set(live.map((r) => r.subnetOctet));
+    const free: number[] = [];
+    for (let o = 1; o <= 254; o++) if (!used.has(o)) free.push(o);
+    if (free.length === 0)
+      throw createError({
+        statusCode: 503,
+        statusMessage: "Too many active co-op rooms — try again later.",
+      });
+    return free[Math.floor(Math.random() * free.length)];
+  }
+
+  /**
+   * Host a new room: allocate a unique /24, mint the network, authorize the
+   * host, and persist. Retries on a unique-constraint race (two hosts grabbing
+   * the same code or subnet octet); rolls back a minted network if the persist
+   * loses the race so the controller isn't left with an orphan.
    */
   async createRoom(opts: {
     hostClientId: string;
@@ -79,51 +111,70 @@ class RoomManager {
     // Opportunistically clean up expired rooms so they don't pile up.
     await this.reapExpired();
 
-    const shortCode = await this.allocateUniqueCode();
-    const networkId = await zerotierController.createNetwork({
-      name: `drop-${shortCode}`,
-      private: true,
-      enableBroadcast: true,
-      v4AssignMode: { zt: true },
-      ipAssignmentPools: [
-        { ipRangeStart: ROOM_SUBNET.start, ipRangeEnd: ROOM_SUBNET.end },
-      ],
-      routes: [{ target: ROOM_SUBNET.cidr, via: null }],
-    });
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const shortCode = await this.allocateUniqueCode();
+      const octet = await this.allocateSubnetOctet();
+      const base = `${ROOM_SUBNET_BASE}.${octet}`;
+      let networkId: string | undefined;
+      try {
+        networkId = await zerotierController.createNetwork({
+          name: `drop-${shortCode}`,
+          private: true,
+          enableBroadcast: true,
+          v4AssignMode: { zt: true },
+          ipAssignmentPools: [
+            { ipRangeStart: `${base}.1`, ipRangeEnd: `${base}.254` },
+          ],
+          routes: [{ target: `${base}.0/24`, via: null }],
+        });
 
-    // Authorize the host before we persist, so a controller failure doesn't
-    // leave a DB room pointing at a network nobody can use.
-    await zerotierController.setMemberAuthorized(
-      networkId,
-      opts.hostNodeId,
-      true,
-    );
+        // Authorize the host before we persist, so a controller failure doesn't
+        // leave a DB room pointing at a network nobody can use.
+        await zerotierController.setMemberAuthorized(
+          networkId,
+          opts.hostNodeId,
+          true,
+        );
 
-    const room = await prisma.room.create({
-      data: {
-        networkId,
-        shortCode,
-        gameId: opts.gameId,
-        name: opts.name,
-        hostClientId: opts.hostClientId,
-        expiresAt: new Date(Date.now() + ROOM_TTL_MS),
-        members: {
-          create: {
-            clientId: opts.hostClientId,
-            memberId: opts.hostNodeId,
-            status: "Authorized",
+        const room = await prisma.room.create({
+          data: {
+            networkId,
+            shortCode,
+            subnetOctet: octet,
+            gameId: opts.gameId,
+            name: opts.name,
+            hostClientId: opts.hostClientId,
+            expiresAt: new Date(Date.now() + ROOM_TTL_MS),
+            members: {
+              create: {
+                clientId: opts.hostClientId,
+                memberId: opts.hostNodeId,
+                status: "Authorized",
+              },
+            },
           },
-        },
-      },
-    });
+        });
 
-    return {
-      roomId: room.id,
-      shortCode: room.shortCode,
-      networkId: room.networkId,
-      gameId: room.gameId,
-      name: room.name,
-    };
+        return {
+          roomId: room.id,
+          shortCode: room.shortCode,
+          networkId: room.networkId,
+          gameId: room.gameId,
+          name: room.name,
+        };
+      } catch (e) {
+        // A losing race leaves a minted network with no DB row — delete it.
+        if (networkId)
+          await zerotierController.deleteNetwork(networkId).catch(() => {});
+        if (isUniqueConstraintError(e)) continue;
+        throw e;
+      }
+    }
+
+    throw createError({
+      statusCode: 503,
+      statusMessage: "Could not allocate a co-op room right now — please try again.",
+    });
   }
 
   /**
@@ -169,9 +220,35 @@ class RoomManager {
     return {
       roomId: room.id,
       networkId: room.networkId,
+      hostAddress: room.hostAddress,
       gameId: room.gameId,
       name: room.name,
     };
+  }
+
+  /**
+   * The host self-reports its assigned ZeroTier IP for this room (ZeroTier
+   * assigns it asynchronously after join, so it isn't known at create time).
+   * Joiners read it back from getRoom to connect by IP.
+   */
+  async setHostAddress(opts: {
+    roomId: string;
+    clientId: string;
+    address: string;
+  }) {
+    const room = await prisma.room.findUnique({ where: { id: opts.roomId } });
+    if (!room)
+      throw createError({ statusCode: 404, statusMessage: "Room not found." });
+    if (room.hostClientId !== opts.clientId)
+      throw createError({
+        statusCode: 403,
+        statusMessage: "Only the host can set the room address.",
+      });
+    await prisma.room.update({
+      where: { id: opts.roomId },
+      data: { hostAddress: opts.address },
+    });
+    return { ok: true };
   }
 
   /**
@@ -239,10 +316,19 @@ class RoomManager {
     if (!isMember)
       throw createError({ statusCode: 403, statusMessage: "Forbidden." });
 
+    let controllerNodeId: string | null = null;
+    try {
+      controllerNodeId = await zerotierController.getControllerNodeId();
+    } catch {
+      // best-effort: the client only needs this to scope its network sweep
+    }
+
     return {
       roomId: room.id,
       shortCode: room.shortCode,
       networkId: room.networkId,
+      hostAddress: room.hostAddress,
+      controllerNodeId,
       gameId: room.gameId,
       name: room.name,
       hostClientId: room.hostClientId,

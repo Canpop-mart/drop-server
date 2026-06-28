@@ -63,10 +63,10 @@ export interface UnlockInput {
  * Common surface every achievement provider implements. Keeps the scan
  * orchestrator and admin endpoints decoupled from Goldberg/RA specifics.
  *
- * `scanGame` writes definitions for one game; `listDefinitions` is the
- * read side; `syncUnlocks` pulls a user's unlock state from the provider
- * (only RA implements a meaningful version — Goldberg unlocks are pushed
- * by the client, so its `syncUnlocks` is a no-op).
+ * `scanGame` writes definitions for one game; `syncUnlocks` pulls a
+ * user's unlock state from the provider (only RA implements a meaningful
+ * version — Goldberg unlocks are pushed by the client, so its
+ * `syncUnlocks` is a no-op).
  */
 export interface AchievementProvider {
   /** Stable provider key, matches the Prisma ExternalAccountProvider enum. */
@@ -94,7 +94,4 @@ export interface AchievementProvider {
     gameId: string,
     userId: string,
   ): Promise<{ newlyUnlocked: number }>;
-
-  /** Read achievement definitions currently stored for a game. */
-  listDefinitions(gameId: string): Promise<AchievementDefinition[]>;
 }

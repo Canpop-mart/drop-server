@@ -96,25 +96,6 @@ export const achievementsRepo = {
     );
     return written;
   },
-
-  /** Read stored definitions for a game+provider, display order ascending. */
-  async listDefinitions(
-    gameId: string,
-    provider: ProviderKey,
-  ): Promise<AchievementDefinition[]> {
-    const rows = await prisma.achievement.findMany({
-      where: { gameId, provider },
-      orderBy: { displayOrder: "asc" },
-    });
-    return rows.map((r) => ({
-      externalId: r.externalId,
-      title: r.title,
-      description: r.description,
-      iconUrl: r.iconUrl,
-      iconLockedUrl: r.iconLockedUrl,
-      displayOrder: r.displayOrder,
-    }));
-  },
 };
 
 export const unlocksRepo = {
@@ -175,20 +156,5 @@ export const unlocksRepo = {
       }
       throw e;
     }
-  },
-
-  /**
-   * Bulk variant — records many unlocks for one user, returns the count
-   * that were newly created. Used by the report / poll endpoints.
-   */
-  async recordUnlocks(
-    inputs: UnlockInput[],
-  ): Promise<{ createdCount: number }> {
-    let createdCount = 0;
-    for (const input of inputs) {
-      const { created } = await this.recordUnlock(input);
-      if (created) createdCount++;
-    }
-    return { createdCount };
   },
 };

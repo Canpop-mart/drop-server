@@ -203,11 +203,4 @@ export const retroAchievementsProvider: AchievementProvider = {
     }
     return { newlyUnlocked };
   },
-
-  async listDefinitions(gameId) {
-    return achievementsRepo.listDefinitions(
-      gameId,
-      ExternalAccountProvider.RetroAchievements,
-    );
-  },
 };

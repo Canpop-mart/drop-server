@@ -21,7 +21,6 @@ import {
 import prisma from "~/server/internal/db/database";
 import { ExternalAccountProvider } from "~/prisma/client/enums";
 import { logger } from "~/server/internal/logging";
-import { achievementsRepo } from "./repo";
 import type { AchievementProvider, ScanResult } from "./types";
 
 const LOG = "[ACH:goldberg]";
@@ -88,12 +87,5 @@ export const goldbergProvider: AchievementProvider = {
   // server-side to poll, so this is a deliberate no-op.
   async syncUnlocks(): Promise<{ newlyUnlocked: number }> {
     return { newlyUnlocked: 0 };
-  },
-
-  async listDefinitions(gameId) {
-    return achievementsRepo.listDefinitions(
-      gameId,
-      ExternalAccountProvider.Goldberg,
-    );
   },
 };

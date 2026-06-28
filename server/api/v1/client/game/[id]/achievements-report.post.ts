@@ -1,7 +1,6 @@
 import { type, ArkErrors } from "arktype";
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
-import type { ExternalAccountProvider } from "~/prisma/client/enums";
 import notificationSystem from "~/server/internal/notifications";
 import { logger } from "~/server/internal/logging";
 import { unlocksRepo } from "~/server/internal/achievements";
@@ -55,13 +54,14 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     prisma.achievement.findMany({
       where: {
         gameId,
-        // Match both Goldberg-emulated AND genuinely-owned Steam achievements.
-        // The client reports every file-based unlock (Goldberg / SmartSteamEmu /
-        // CODEX / RUNE / OnlineFix / … / the real Steam client cache) under
-        // "Goldberg", but a game's achievement rows may be stored under either
-        // provider. Steam achievements share the same external IDs across both,
-        // so we match by externalId across providers (see the map below).
-        provider: { in: ["Goldberg", "Steam"] as ExternalAccountProvider[] },
+        // Every file-based unlock (Goldberg / SmartSteamEmu / CODEX / RUNE /
+        // OnlineFix / … / the real Steam client cache) is reported by the
+        // client under "Goldberg", and every Steam-style definition is stored
+        // under the Goldberg provider — the only Achievement writer is
+        // achievementsRepo.upsertDefinitions, which only ever writes Goldberg
+        // or RetroAchievements, never Steam. RA unlocks arrive via /ra-poll,
+        // not this endpoint, so we match Goldberg rows by externalId.
+        provider: "Goldberg",
         externalId: {
           in: body.achievements.map((a) => a.externalId),
         },
@@ -81,27 +81,22 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     }),
   ]);
 
-  // Build lookup maps. Key by externalId alone (not `provider:externalId`):
-  // the client reports everything file-based as "Goldberg", but the matching
-  // row may be stored under the "Steam" provider. Prefer a Goldberg row when
-  // both providers exist for the same externalId (the canonical client path).
-  const achievementMap = new Map<string, (typeof achievements)[number]>();
-  for (const a of achievements) {
-    const existing = achievementMap.get(a.externalId);
-    if (!existing || a.provider === "Goldberg") {
-      achievementMap.set(a.externalId, a);
-    }
-  }
+  // Look up reported unlocks by their externalId (the Steam API name).
+  const achievementMap = new Map<string, (typeof achievements)[number]>(
+    achievements.map((a) => [a.externalId, a]),
+  );
   const alreadyUnlockedIds = new Set(
     existingUnlocks.map((u) => u.achievementId),
   );
 
   let recorded = 0;
+  let skipped = 0;
   const newlyUnlocked: { title: string; iconUrl: string }[] = [];
 
   for (const report of body.achievements) {
     const achievement = achievementMap.get(report.externalId);
     if (!achievement) {
+      skipped++;
       logger.warn(
         `[ACH:goldberg] Achievement NOT FOUND in DB: gameId=${gameId} externalId=${report.externalId}`,
       );
@@ -161,8 +156,13 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   }
 
   logger.info(
-    `[ACH:goldberg] Report complete: game=${gameId} recorded=${recorded} newlyUnlocked=${newlyUnlocked.length}`,
+    `[ACH:goldberg] Report complete: game=${gameId} matched=${recorded} newlyUnlocked=${newlyUnlocked.length} notFound=${skipped}`,
   );
 
-  return { recorded };
+  // `recorded` = reports matched to a stored definition (kept for client
+  // back-compat); `newlyUnlocked` = rows actually created by this call;
+  // `skipped` = reports with no matching definition — the silent drop the
+  // client should surface (an externalId/definition mismatch), not a normal
+  // "already unlocked".
+  return { recorded, newlyUnlocked: newlyUnlocked.length, skipped };
 });

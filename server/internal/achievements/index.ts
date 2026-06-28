@@ -34,13 +34,6 @@ const REGISTRY: Record<ProviderName, AchievementProvider> = {
 /** All providers, for "scan everything" flows. */
 export const allProviders: AchievementProvider[] = Object.values(REGISTRY);
 
-/** Look up a provider by its lowercase name, or undefined. */
-export function getProvider(
-  name: ProviderName,
-): AchievementProvider | undefined {
-  return REGISTRY[name];
-}
-
 /** Normalise a free-form query value to a ProviderName list. */
 export function parseProviders(value: string | undefined): ProviderName[] {
   const v = (value ?? "both").toLowerCase();
