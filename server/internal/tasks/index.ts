@@ -17,6 +17,7 @@ import scanGoldbergReadiness from "./registry/goldberg-readiness";
 import refreshAchievementDefs from "./registry/refresh-achievement-defs";
 import linkRetroAchievements from "./registry/link-retroachievements";
 import regenerateManifests from "./registry/regenerate-manifests";
+import backfillGbeSwap from "./registry/backfill-gbe-swap";
 import recalculatePlaytime from "./registry/recalculate-playtime";
 import recalculateAchievements from "./registry/recalculate-achievements";
 import scanLibraryIntegrity from "./registry/library-integrity";
@@ -122,6 +123,7 @@ class TaskHandler {
     this.saveScheduledTask(linkRetroAchievements);
     this.saveScheduledTask(recalculateAchievements);
     this.saveScheduledTask(regenerateManifests);
+    this.saveScheduledTask(backfillGbeSwap);
 
     // System (on-demand)
     this.saveScheduledTask(recalculatePlaytime);

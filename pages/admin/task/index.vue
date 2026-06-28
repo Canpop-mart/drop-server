@@ -490,6 +490,11 @@ const scheduledTasks: {
     description:
       "Re-hashes every game's latest version and rewrites its droplet manifest. Run this after mass DLL swaps (or any on-disk change) so clients stop hitting checksum-invalid errors on download.",
   },
+  "backfill:gbe-swap": {
+    name: "Backfill GBE Swap",
+    description:
+      "Re-imports every eligible game so its steam_api DLL is swapped to the bundled GBE build, publishing a new version clients re-pull. Skips games already on GBE, anti-cheat titles, emulator games, and multi-disc games.",
+  },
 
   // Achievements
   "scan:goldberg-readiness": {

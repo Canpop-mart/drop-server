@@ -43,9 +43,12 @@ export default defineEventHandler(async (h3) => {
     };
   }
 
-  const hasBackup = fs.existsSync(
-    `${detection.dllDir}/${detection.dllName}.sse_backup`,
-  );
+  // A backup under either suffix means a Drop swap already happened: the legacy
+  // SSE->GBE upgrade wrote .sse_backup; the Plan B GBE-everywhere swap (incl.
+  // ex-OnlineFix games) writes .steam_backup.
+  const hasBackup =
+    fs.existsSync(`${detection.dllDir}/${detection.dllName}.sse_backup`) ||
+    fs.existsSync(`${detection.dllDir}/${detection.dllName}.steam_backup`);
 
   return {
     emulatorType: detection.type,

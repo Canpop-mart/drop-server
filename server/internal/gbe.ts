@@ -559,7 +559,10 @@ export function revertToSse(
     // Try each backup suffix in turn — SSE path first, then Steam DRM.
     for (const suffix of [BACKUP_SUFFIX, STEAM_DRM_BACKUP_SUFFIX]) {
       const dllBackup = dllPath + suffix;
-      if (fs.existsSync(dllBackup)) {
+      // Defensive (step 8): never restore a backup that is itself a GBE build —
+      // that means a prior swap overwrote the real original, and restoring would
+      // be a pointless GBE-over-GBE. Leave such a backup in place.
+      if (fs.existsSync(dllBackup) && !isGbeDll(dllBackup)) {
         fs.copyFileSync(dllBackup, dllPath);
         fs.unlinkSync(dllBackup);
       }
@@ -584,5 +587,420 @@ export function revertToSse(
       success: false,
       message: `Revert failed: ${e}`,
     };
+  }
+}
+
+// ── GBE swap (import-time DLL replacement, Plan B: GBE everywhere) ─────────
+//
+// At import every eligible game's steam_api DLL is replaced with the bundled
+// gbe_fork build so the game gets achievements + Goldberg LAN/ZeroTier
+// matchmaking (proven cross-internet on Castle Crashers). Binaries are BUNDLED
+// (not downloaded) for reproducibility + offline NAS builds.
+
+/** Architecture variants of the bundled gbe_fork binary. */
+export type GbeArch = "win64" | "win32" | "linux";
+
+/** Maps a steam_api DLL filename (lowercase) → its gbe_fork architecture. */
+const DLL_TO_ARCH: Record<string, GbeArch> = {
+  "steam_api64.dll": "win64",
+  "steam_api.dll": "win32",
+  "libsteam_api.so": "linux",
+};
+
+/**
+ * Root of the bundled gbe_fork binaries. Docker sets GBE_BUNDLE=/app/gbe-bin;
+ * in dev it resolves to the repo's gbe-bin/ relative to the server cwd.
+ */
+function gbeBundleDir(): string {
+  return process.env.GBE_BUNDLE || path.resolve("gbe-bin");
+}
+
+/** Path to the bundled GBE DLL for an arch, or undefined if not bundled. */
+function bundledGbeDll(arch: GbeArch): string | undefined {
+  const name =
+    arch === "win64"
+      ? "steam_api64.dll"
+      : arch === "win32"
+        ? "steam_api.dll"
+        : "libsteam_api.so";
+  const p = path.join(gbeBundleDir(), arch, name);
+  return fs.existsSync(p) ? p : undefined;
+}
+
+/**
+ * True if a bundled GBE binary exists for this DLL's architecture. Lets callers
+ * (e.g. the backfill task) avoid re-importing a game whose only steam_api DLL
+ * has no bundled replacement — that would publish a byte-identical new version.
+ */
+export function hasBundledGbeForDll(dllName: string): boolean {
+  const arch = DLL_TO_ARCH[dllName.toLowerCase()];
+  return arch ? bundledGbeDll(arch) !== undefined : false;
+}
+
+/**
+ * gbe_fork networking config (configs.main.ini). Pins listen_port to 47584
+ * (every peer MUST share it or LAN/ZeroTier discovery silently fails) and
+ * keeps networking + lobbies on. Validated cross-internet over ZeroTier.
+ */
+const GBE_CONFIGS_MAIN_INI =
+  "[main::connectivity]\n" +
+  "# Emulator listen port — identical on every player or peers never find each other.\n" +
+  "listen_port=47584\n" +
+  "# 0 = steam networking ON (lobbies + p2p) — required for co-op.\n" +
+  "disable_networking=0\n" +
+  "# 0 = behave as if steam is online.\n" +
+  "offline=0\n";
+
+interface SwapOptions {
+  dllDir: string;
+  dllName: string;
+  appId: string;
+  backupSuffix: string;
+  /** Optional SSE-derived Steamworks interface versions → steam_interfaces.txt. */
+  interfaces?: Map<string, string>;
+  /** Optional SSE-derived DLC map (id → name) → dlc.txt. */
+  dlcs?: Map<string, string>;
+}
+
+/**
+ * Replace one steam_api DLL with the bundled GBE build and write the
+ * steam_settings the emulator needs (appid + networking + save path, plus
+ * optional interfaces/dlc). Idempotent: backs up the original only once.
+ * Returns false (with a loud warn — never silent) if no bundled binary exists
+ * for the arch, so a missing bundle is diagnosable, not a phantom no-op.
+ */
+function swapDllAndWriteSettings(
+  opts: SwapOptions,
+  log: { info: (m: string) => void; warn: (m: string) => void },
+): boolean {
+  const arch = DLL_TO_ARCH[opts.dllName.toLowerCase()];
+  if (!arch) {
+    log.warn(`[GBE] Unknown DLL arch: ${opts.dllName}, skipping swap`);
+    return false;
+  }
+
+  const gbeDllPath = bundledGbeDll(arch);
+  if (!gbeDllPath) {
+    log.warn(
+      `[GBE] No bundled GBE binary for ${arch} (looked in ${gbeBundleDir()}); ` +
+        `skipping swap of ${opts.dllName}`,
+    );
+    return false;
+  }
+
+  const dllPath = path.join(opts.dllDir, opts.dllName);
+  const backupPath = dllPath + opts.backupSuffix;
+
+  if (fs.existsSync(dllPath) && !fs.existsSync(backupPath)) {
+    fs.copyFileSync(dllPath, backupPath);
+    log.info(
+      `[GBE] Backed up ${opts.dllName} → ${opts.dllName}${opts.backupSuffix}`,
+    );
+  }
+
+  fs.copyFileSync(gbeDllPath, dllPath);
+  log.info(`[GBE] Replaced ${opts.dllName} with bundled GBE (${arch})`);
+
+  const steamSettings = path.join(opts.dllDir, "steam_settings");
+  fs.mkdirSync(steamSettings, { recursive: true });
+
+  fs.writeFileSync(
+    path.join(steamSettings, "steam_appid.txt"),
+    opts.appId,
+    "utf-8",
+  );
+  fs.writeFileSync(
+    path.join(steamSettings, "configs.main.ini"),
+    GBE_CONFIGS_MAIN_INI,
+    "utf-8",
+  );
+  // NOTE: configs.user.ini (local_save_path + account_name) is deliberately NOT
+  // written here. The client writes it at launch with an ABSOLUTE DLL-anchored
+  // save path (configure_goldberg). If the server shipped it, that file would be
+  // in the manifest, and the client's launch-time rewrite would make the on-disk
+  // bytes diverge from the manifest checksum — a later validate()/repair would
+  // then demote the game to PartiallyInstalled. Keeping it client-owned (and out
+  // of the manifest) avoids that.
+
+  if (opts.interfaces && opts.interfaces.size > 0) {
+    fs.writeFileSync(
+      path.join(steamSettings, "steam_interfaces.txt"),
+      Array.from(opts.interfaces.values()).join("\n") + "\n",
+      "utf-8",
+    );
+  }
+  if (opts.dlcs && opts.dlcs.size > 0) {
+    fs.writeFileSync(
+      path.join(steamSettings, "dlc.txt"),
+      Array.from(opts.dlcs.entries())
+        .map(([id, n]) => `${id}=${n}`)
+        .join("\n") + "\n",
+      "utf-8",
+    );
+  }
+
+  return true;
+}
+
+/** Anti-cheat marker files Goldberg cannot satisfy — never swap these games. */
+const ANTI_CHEAT_MARKERS: ReadonlySet<string> = new Set([
+  "easyanticheat.exe",
+  "easyanticheat_eos.dll",
+  "easyanticheat_x64.dll",
+  "eaclauncher.exe",
+  "start_protected_game.exe",
+  "beservice.exe",
+  "beservice_x64.exe",
+  "beclient.dll",
+  "beclient_x64.dll",
+  "belauncher.exe",
+]);
+
+/**
+ * Returns the anti-cheat marker filename if EAC/BattlEye is present anywhere in
+ * the tree (bounded depth), else null. Goldberg can't satisfy these, so the
+ * swap is skipped + flagged rather than bricking the game.
+ */
+export function detectAntiCheat(rootDir: string): string | null {
+  return detectAntiCheatRecursive(rootDir, 0, STEAM_API_SCAN_DEPTH);
+}
+
+function detectAntiCheatRecursive(
+  dir: string,
+  depth: number,
+  maxDepth: number,
+): string | null {
+  if (depth > maxDepth) return null;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const entry of entries) {
+    if (entry.isFile() && ANTI_CHEAT_MARKERS.has(entry.name.toLowerCase())) {
+      return entry.name;
+    }
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const found = detectAntiCheatRecursive(
+      path.join(dir, entry.name),
+      depth + 1,
+      maxDepth,
+    );
+    if (found) return found;
+  }
+  return null;
+}
+
+/** Enumerate EVERY steam_api DLL in the tree (multi-arch games ship 32+64). */
+export function findAllSteamApiDlls(
+  rootDir: string,
+): { dllDir: string; dllName: string }[] {
+  const out: { dllDir: string; dllName: string }[] = [];
+  collectSteamApiDlls(rootDir, 0, STEAM_API_SCAN_DEPTH, out);
+  return out;
+}
+
+function collectSteamApiDlls(
+  dir: string,
+  depth: number,
+  maxDepth: number,
+  out: { dllDir: string; dllName: string }[],
+): void {
+  if (depth > maxDepth) return;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.isFile() && STEAM_API_DLLS.includes(entry.name.toLowerCase())) {
+      out.push({ dllDir: dir, dllName: entry.name });
+    }
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      collectSteamApiDlls(path.join(dir, entry.name), depth + 1, maxDepth, out);
+    }
+  }
+}
+
+/** Result of `ensureGbeDll`. */
+export interface EnsureGbeResult {
+  swapped: boolean;
+  alreadyGbe: boolean;
+  skipped: boolean;
+  identification?: SteamApiDllIdentification;
+  reason?: string;
+}
+
+/**
+ * Plan B swap-toward-GBE policy for a single steam_api DLL:
+ *   - gbe         → already swapped, skip.
+ *   - valve       → swap (original backed up as <dll>.steam_backup).
+ *   - unknown     → swap (we want GBE everywhere; original is backed up).
+ *   - known-crack → skip. OnlineFix/CODEX/Cream/… are left in place: removing a
+ *                   loader crack safely means also stripping its proxy loader
+ *                   DLL (winmm/dnet/version/…), which needs per-crack detection +
+ *                   Deck verification (the dedicated OnlineFix-removal step).
+ *                   setupGoldberg's directory loader guard skips most of these
+ *                   before they reach here; this per-DLL skip covers a
+ *                   signature-only crack with no loader sibling file.
+ *   - missing     → error.
+ *
+ * The directory-level anti-cheat + loader-crack guards in setupGoldberg run
+ * BEFORE this. This acts per-DLL and is idempotent.
+ */
+export function ensureGbeDll(
+  dllDir: string,
+  dllName: string,
+  appId: string,
+  log: { info: (m: string) => void; warn: (m: string) => void },
+): EnsureGbeResult {
+  const dllPath = path.join(dllDir, dllName);
+  if (!fs.existsSync(dllPath)) {
+    return {
+      swapped: false,
+      alreadyGbe: false,
+      skipped: false,
+      reason: "DLL not found",
+    };
+  }
+
+  const ident = identifySteamApiDll(dllPath);
+  if (ident.kind === "gbe") {
+    log.info(`[GBE] ${dllName} is already GBE — skipping.`);
+    return {
+      swapped: false,
+      alreadyGbe: true,
+      skipped: false,
+      identification: ident,
+    };
+  }
+  if (ident.kind === "missing") {
+    return {
+      swapped: false,
+      alreadyGbe: false,
+      skipped: false,
+      identification: ident,
+      reason: "DLL unreadable",
+    };
+  }
+  if (ident.kind === "known-crack") {
+    log.info(
+      `[GBE] ${dllName} is a known crack (${ident.crackName ?? "?"}) — ` +
+        `leaving in place (OnlineFix removal is a separate, Deck-verified step).`,
+    );
+    return {
+      swapped: false,
+      alreadyGbe: false,
+      skipped: true,
+      identification: ident,
+      reason: `known crack (${ident.crackName ?? "unknown"}) left in place`,
+    };
+  }
+
+  // valve / unknown → swap under Plan B (original backed up).
+  const swapped = swapDllAndWriteSettings(
+    { dllDir, dllName, appId, backupSuffix: STEAM_DRM_BACKUP_SUFFIX },
+    log,
+  );
+  return {
+    swapped,
+    alreadyGbe: false,
+    skipped: !swapped,
+    identification: ident,
+    reason: swapped ? undefined : "no bundled GBE binary for this arch",
+  };
+}
+
+/**
+ * NOT YET WIRED — staged for the dedicated OnlineFix-removal step. It is
+ * INCOMPLETE on its own: OnlineFix loads via a PROXY DLL (winmm/dnet/version/
+ * dinput8) that LoadLibrary's OnlineFix64.dll, and that proxy is NOT in
+ * CRACK_LOADER_MARKER_FILES — moving OnlineFix64.dll while leaving the proxy can
+ * brick the game. Before wiring this, add proxy detection (parse dlllist.txt /
+ * fingerprint candidate proxy DLLs for a crack signature) and verify on a real
+ * OnlineFix game on the Steam Deck.
+ *
+ * Plan B OnlineFix removal: move a crack's loader sibling files (the
+ * CRACK_LOADER_MARKER_FILES set — OnlineFix64.dll, OnlineFix.ini, dlllist.txt,
+ * cream_api.ini, …) OUT of the version dir into `backupDir`, preserving relative
+ * paths. Called after a known-crack's steam_api DLL has been swapped to GBE:
+ * those loader files are the multiplayer glue that fights GBE if left in place,
+ * and the manifest scan (which has no exclusion filter) would otherwise ship
+ * them to every client. Moving them out of the tree means droplet never hashes
+ * them and the client reconcile-sweep clears them from existing installs, while
+ * a recovery copy stays on the server (outside any library) for rollback.
+ *
+ * Returns the count moved. Best-effort: a file that can't be moved is left in
+ * place and logged, never deleted.
+ */
+export function stripCrackLoaderSiblings(
+  rootDir: string,
+  backupDir: string,
+  log: { info: (m: string) => void; warn: (m: string) => void },
+): number {
+  const matches: string[] = [];
+  collectCrackLoaderSiblings(rootDir, 0, STEAM_API_SCAN_DEPTH, matches);
+
+  let moved = 0;
+  for (const filePath of matches) {
+    const rel = path.relative(rootDir, filePath);
+    const dest = path.join(backupDir, rel);
+    try {
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.renameSync(filePath, dest);
+      moved++;
+      log.info(`[GBE] Moved loader file ${rel} -> ${dest}`);
+    } catch {
+      // rename fails across devices/mounts — fall back to copy + unlink.
+      try {
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.copyFileSync(filePath, dest);
+        fs.unlinkSync(filePath);
+        moved++;
+        log.info(`[GBE] Moved (copy) loader file ${rel} -> ${dest}`);
+      } catch (e) {
+        log.warn(`[GBE] Could not move loader file ${rel}: ${e}`);
+      }
+    }
+  }
+  return moved;
+}
+
+function collectCrackLoaderSiblings(
+  dir: string,
+  depth: number,
+  maxDepth: number,
+  out: string[],
+): void {
+  if (depth > maxDepth) return;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (
+      entry.isFile() &&
+      CRACK_LOADER_MARKER_FILES.has(entry.name.toLowerCase())
+    ) {
+      out.push(path.join(dir, entry.name));
+    }
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      collectCrackLoaderSiblings(
+        path.join(dir, entry.name),
+        depth + 1,
+        maxDepth,
+        out,
+      );
+    }
   }
 }

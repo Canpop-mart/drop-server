@@ -323,12 +323,34 @@ class RoomManager {
       // best-effort: the client only needs this to scope its network sweep
     }
 
+    // The OTHER members' controller-assigned overlay IPs, so the requesting
+    // client can seed Goldberg's custom_broadcasts.txt and discover peers over
+    // the ZeroTier overlay (which drops broadcast). Self is excluded by
+    // clientId; a member whose IP isn't assigned yet is simply omitted and
+    // fills in on a later poll. Best-effort — never fail getRoom over this.
+    const peerAddresses: string[] = [];
+    for (const m of room.members) {
+      if (m.clientId === requestingClientId) continue;
+      if (m.status !== "Authorized") continue;
+      try {
+        const ips = await zerotierController.getMemberIpAssignments(
+          room.networkId,
+          m.memberId,
+        );
+        const ip = ips[0]?.split("/")[0];
+        if (ip) peerAddresses.push(ip);
+      } catch {
+        // member IP not yet assigned / controller hiccup — omit this peer
+      }
+    }
+
     return {
       roomId: room.id,
       shortCode: room.shortCode,
       networkId: room.networkId,
       hostAddress: room.hostAddress,
       controllerNodeId,
+      peerAddresses,
       gameId: room.gameId,
       name: room.name,
       hostClientId: room.hostClientId,

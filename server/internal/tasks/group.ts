@@ -20,6 +20,7 @@ export const taskGroups = {
   "link:retroachievements": { concurrency: false },
   "recalculate:achievements": { concurrency: false },
   "regenerate:manifests": { concurrency: false },
+  "backfill:gbe-swap": { concurrency: false },
 
   // ── System ─────────────────────────────────────────────────────────
   "recalculate:playtime": { concurrency: false },

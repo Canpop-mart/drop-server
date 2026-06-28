@@ -78,9 +78,12 @@ COPY --from=build-system /app/prisma ./prisma
 COPY --from=build-system /app/build ./startup
 COPY --from=build-system /app/build/nginx.conf /nginx.conf
 COPY --from=torrential-build /build/target/release/torrential /usr/bin/
+# Bundled gbe_fork (Goldberg) emulator binaries for the import-time DLL swap.
+COPY --from=build-system /app/gbe-bin ./gbe-bin
 
 ENV LIBRARY="/library"
 ENV DATA="/data"
+ENV GBE_BUNDLE="/app/gbe-bin"
 ENV NGINX_CONFIG="/nginx.conf"
 # NGINX's port
 ENV PORT=4000

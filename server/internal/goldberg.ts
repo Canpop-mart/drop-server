@@ -313,17 +313,24 @@ export async function setupGoldberg(
   options?: {
     forceRefreshAchievements?: boolean;
     /**
+     * When true (the import phase), replace eligible steam_api DLLs with the
+     * bundled GBE build. The achievement-refresh / readiness tasks leave this
+     * false so they never touch binaries.
+     */
+    swapDll?: boolean;
+    /**
      * Logger that receives every status message. Defaults to the global
      * server logger; pass the task-context logger when running inside an
      * admin task so the swap progress shows up in the live task log.
      */
     logger?: GoldbergLogger;
   },
-): Promise<void> {
+): Promise<{ dllsSwapped: number }> {
   const log: GoldbergLogger = options?.logger ?? {
     info: (msg) => defaultLogger.info(msg),
     warn: (msg) => defaultLogger.warn(msg),
   };
+  let dllsSwapped = 0;
 
   try {
     // Resolve the actual directory containing the Steam API DLL.
@@ -390,7 +397,7 @@ export async function setupGoldberg(
 
     if (!appId) {
       log.info(`[GOLDBERG] No AppID for ${versionDir}, skipping`);
-      return;
+      return { dllsSwapped };
     }
 
     log.info(
@@ -410,18 +417,65 @@ export async function setupGoldberg(
       log.info(`[GOLDBERG] Wrote steam_appid.txt (${appId})`);
     }
 
-    // ── 2b. Create the runtime save directory (drop-goldberg/<AppID>/) ───
-    const saveDir = path.join(settingsRoot, "drop-goldberg", appId);
-    if (!fs.existsSync(saveDir)) {
-      fs.mkdirSync(saveDir, { recursive: true });
-      log.info(`[GOLDBERG] Created save dir ${saveDir}`);
-    }
+    // ── 2b. steam_api DLL swap (Plan B: GBE everywhere) ──────────────────
+    // Replace eligible steam_api DLLs with the bundled GBE build so the game
+    // gets achievements + Goldberg LAN/ZeroTier matchmaking. Runs only when the
+    // caller asks (import phase); the refresh/readiness tasks pass swapDll=false
+    // so they never touch binaries. Anti-cheat (EAC/BattlEye) games are skipped
+    // (Goldberg can't satisfy them). Loader cracks (OnlineFix/Cream) are also
+    // left in place for now: removing them safely means stripping the proxy
+    // loader DLL too (winmm/dnet/version/…), which needs per-crack detection +
+    // Steam Deck verification — the dedicated OnlineFix-removal step. The swap
+    // happens BEFORE the manifest phase so the GBE bytes land in the manifest.
+    //
+    // The runtime save dir (drop-goldberg/<AppID>/) is intentionally NOT created
+    // here — it's a client-side artifact; creating it (or seeding a save file)
+    // inside versionDir would hash it into the manifest and ship an all-zero
+    // save to every client, clobbering real progress on update. The client/GBE
+    // creates + owns it at launch (under the DLL-anchored drop-goldberg/, which
+    // PROTECTED_DATA_DIRS shields from the reconcile sweep).
+    if (options?.swapDll) {
+      const {
+        detectAntiCheat,
+        detectCrackLoader,
+        findAllSteamApiDlls,
+        ensureGbeDll,
+      } = await import("./gbe");
 
-    // ── 2c. steam_api DLL ────────────────────────────────────────────────
-    // Drop no longer swaps the steam_api DLL. Games ship their own Steam
-    // emulator (GBE for offline, OnlineFix for online); whatever the upload
-    // contains is left exactly in place. Only achievements + steam_settings
-    // scaffolding below.
+      const antiCheat = detectAntiCheat(versionDir);
+      const loader = detectCrackLoader(versionDir);
+      if (antiCheat) {
+        log.info(
+          `[GBE] Anti-cheat present (${antiCheat}) — Goldberg can't satisfy it; ` +
+            `leaving steam_api DLL(s) untouched.`,
+        );
+      } else if (loader) {
+        log.info(
+          `[GBE] Loader crack present (${loader}) — leaving it in place ` +
+            `(OnlineFix removal is a separate, Deck-verified step).`,
+        );
+      } else {
+        const dlls = findAllSteamApiDlls(versionDir);
+        if (dlls.length === 0) {
+          log.info(`[GBE] No steam_api DLL under ${versionDir} — nothing to swap.`);
+        } else if (dlls.length > 1) {
+          log.info(
+            `[GBE] ${dlls.length} steam_api DLLs found (multi-arch) — swapping each.`,
+          );
+        }
+        for (const { dllDir, dllName } of dlls) {
+          const res = ensureGbeDll(dllDir, dllName, appId, log);
+          if (res.swapped) {
+            dllsSwapped++;
+          } else if (res.skipped && !res.alreadyGbe) {
+            log.info(
+              `[GBE] Left ${dllName} alone: ` +
+                `${res.reason ?? res.identification?.fingerprint ?? "ineligible"}`,
+            );
+          }
+        }
+      }
+    }
 
     // ── 3. Fetch/read achievement definitions ────────────────────────────
     const forceRefresh = options?.forceRefreshAchievements ?? false;
@@ -436,42 +490,24 @@ export async function setupGoldberg(
       definitions = await fetchSteamAchievements(appId);
     }
 
-    // Write definitions to steam_settings/ (array format — GBE reads these)
-    // and a runtime seed to drop-goldberg/<AppID>/ (map format — GBE reads/writes)
+    // Write definitions to steam_settings/achievements.json (the GBE achievement
+    // SCHEMA, array format). The runtime unlock-state file
+    // (drop-goldberg/<AppID>/achievements.json) is deliberately NOT written
+    // here: it's a client-side save artifact, and writing it inside versionDir
+    // would hash it into the manifest and ship an all-zero save to every client,
+    // clobbering real progress on update. The client/GBE creates + owns it at
+    // launch under the DLL-anchored drop-goldberg/, which PROTECTED_DATA_DIRS
+    // shields from the reconcile sweep.
     if (definitions.length > 0) {
-      const defJson = JSON.stringify(definitions, null, 2);
-
       const settingsAchPath = path.join(steamSettings, "achievements.json");
-      fs.writeFileSync(settingsAchPath, defJson, "utf-8");
-
-      // Runtime file uses GBE's native map format:
-      //   {"ACH_NAME": {"earned": false, "earned_time": 0}, ...}
-      // This ensures GBE can read/write it correctly when achievements unlock.
-      // Only write if the file doesn't already exist (preserve existing unlock state).
-      const runtimeAchPath = path.join(saveDir, "achievements.json");
-      if (!fs.existsSync(runtimeAchPath)) {
-        const runtimeMap: Record<
-          string,
-          { earned: boolean; earned_time: number }
-        > = {};
-        for (const def of definitions) {
-          if (def.name) {
-            runtimeMap[def.name] = { earned: false, earned_time: 0 };
-          }
-        }
-        fs.writeFileSync(
-          runtimeAchPath,
-          JSON.stringify(runtimeMap, null, 2),
-          "utf-8",
-        );
-        log.info(
-          `[GOLDBERG] Wrote ${definitions.length} achievements: definitions to steam_settings/, runtime seed (map format) to drop-goldberg/${appId}/`,
-        );
-      } else {
-        log.info(
-          `[GOLDBERG] Wrote ${definitions.length} definitions to steam_settings/ (runtime file already exists, preserved)`,
-        );
-      }
+      fs.writeFileSync(
+        settingsAchPath,
+        JSON.stringify(definitions, null, 2),
+        "utf-8",
+      );
+      log.info(
+        `[GOLDBERG] Wrote ${definitions.length} achievement definitions to steam_settings/`,
+      );
     }
 
     // ── 4. Create/update the DB external link ────────────────────────────
@@ -521,7 +557,10 @@ export async function setupGoldberg(
         `[GOLDBERG] Done: ${count} achievements for game=${gameId} appId=${appId}`,
       );
     }
+
+    return { dllsSwapped };
   } catch (e) {
     log.warn(`[GOLDBERG] Setup failed for game=${gameId}: ${e}`);
+    return { dllsSwapped };
   }
 }

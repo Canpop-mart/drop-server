@@ -106,6 +106,21 @@ class ZeroTierController {
       body: { authorized },
     });
   }
+
+  /**
+   * The controller-assigned IPs for a member (from the network's auto-assign
+   * pool). Empty until the member comes online and the controller hands it an
+   * address. The source of truth for peers' overlay IPs.
+   */
+  async getMemberIpAssignments(
+    networkId: string,
+    memberId: string,
+  ): Promise<string[]> {
+    const member = await this.req<{ ipAssignments?: string[] }>(
+      `/controller/network/${networkId}/member/${memberId}`,
+    );
+    return member.ipAssignments ?? [];
+  }
 }
 
 export const zerotierController = new ZeroTierController();
