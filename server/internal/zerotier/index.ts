@@ -323,14 +323,15 @@ class RoomManager {
       // best-effort: the client only needs this to scope its network sweep
     }
 
-    // The OTHER members' controller-assigned overlay IPs, so the requesting
-    // client can seed Goldberg's custom_broadcasts.txt and discover peers over
-    // the ZeroTier overlay (which drops broadcast). Self is excluded by
-    // clientId; a member whose IP isn't assigned yet is simply omitted and
+    // Resolve every authorized member's controller-assigned overlay IP once. The
+    // controller is the source of truth — it assigns IPs from the room's pool as
+    // each node comes online. We use this for BOTH the host's connect address and
+    // the requester's peer list, because it's far more reliable than the host's
+    // self-report poll (which gives up if ZeroTier is slow to assign on a fresh
+    // network join). A member whose IP isn't assigned yet is simply omitted and
     // fills in on a later poll. Best-effort — never fail getRoom over this.
-    const peerAddresses: string[] = [];
+    const memberIp = new Map<string, string>();
     for (const m of room.members) {
-      if (m.clientId === requestingClientId) continue;
       if (m.status !== "Authorized") continue;
       try {
         const ips = await zerotierController.getMemberIpAssignments(
@@ -338,17 +339,26 @@ class RoomManager {
           m.memberId,
         );
         const ip = ips[0]?.split("/")[0];
-        if (ip) peerAddresses.push(ip);
+        if (ip) memberIp.set(m.clientId, ip);
       } catch {
-        // member IP not yet assigned / controller hiccup — omit this peer
+        // member IP not yet assigned / controller hiccup — omit this member
       }
     }
+    // Host connect address: prefer the controller's assignment, fall back to the
+    // host's self-report (report_host_address) when the controller doesn't have
+    // it yet. This is what populates the "Connect address" box for join-by-IP.
+    const hostAddress = memberIp.get(room.hostClientId) ?? room.hostAddress;
+    // The OTHER peers' IPs, for the requester's Goldberg custom_broadcasts.txt
+    // (broadcast is dropped on the ZeroTier L3 overlay, so peers must unicast).
+    const peerAddresses = [...memberIp.entries()]
+      .filter(([clientId]) => clientId !== requestingClientId)
+      .map(([, ip]) => ip);
 
     return {
       roomId: room.id,
       shortCode: room.shortCode,
       networkId: room.networkId,
-      hostAddress: room.hostAddress,
+      hostAddress,
       controllerNodeId,
       peerAddresses,
       gameId: room.gameId,
