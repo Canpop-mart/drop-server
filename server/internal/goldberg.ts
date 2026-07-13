@@ -65,8 +65,14 @@ function resolveLocalised(
 export interface GoldbergAchievementDef {
   /** Steam-style API name, e.g. "ACH_WIN_ONE_GAME" */
   name: string;
-  displayName?: string;
-  description?: string;
+  /**
+   * Display name and description. GBE's local `achievements.json` stores these
+   * as EITHER a plain string OR a localised object ({english, german, ...,
+   * token}) — the Steam API can too. Always run through `resolveLocalised`
+   * before writing to the DB, which requires a plain string.
+   */
+  displayName?: string | Record<string, string>;
+  description?: string | Record<string, string>;
   icon?: string;
   icon_gray?: string;
   hidden?: number;
@@ -544,8 +550,11 @@ export async function setupGoldberg(
         ExternalAccountProvider.Goldberg,
         definitions.map((def, i) => ({
           externalId: def.name ?? "",
-          title: def.displayName ?? def.name ?? "",
-          description: def.description ?? "",
+          // Resolve localised {english, ...} objects to a plain string — GBE's
+          // local achievements.json stores title/description that way, and the
+          // DB column is a String (Prisma rejects an object).
+          title: resolveLocalised(def.displayName, def.name),
+          description: resolveLocalised(def.description, ""),
           iconUrl: def.icon ?? "",
           iconLockedUrl: def.icon_gray ?? "",
           displayOrder: i,

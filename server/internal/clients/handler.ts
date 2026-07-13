@@ -155,13 +155,23 @@ export class ClientHandler {
     if (!metadata) throw new Error("Invalid client ID");
     if (!metadata.userId) throw new Error("Un-authorized client ID");
 
-    const client = await prisma.client.create({
-      data: {
-        id: id,
+    // Upsert (not create) so a duplicate / racing handshake for the same
+    // clientId can't 500 with P2002 on the unique id. Certificate generation
+    // runs BEFORE this in the endpoint, so a client that retries a slow
+    // handshake can reach here twice; on Postgres this compiles to
+    // INSERT ... ON CONFLICT DO UPDATE, so it's race-safe.
+    const client = await prisma.client.upsert({
+      where: { id },
+      create: {
+        id,
         userId: metadata.userId,
-
         capabilities: [],
-
+        name: metadata.data.name,
+        platform: metadata.data.platform,
+        lastConnected: new Date(),
+      },
+      update: {
+        userId: metadata.userId,
         name: metadata.data.name,
         platform: metadata.data.platform,
         lastConnected: new Date(),

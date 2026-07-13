@@ -104,11 +104,21 @@ export function defineClientEventHandler<T>(handler: EventHandlerFunction<T>) {
       fetchUser,
     };
 
-    // Ignore response because we don't care if this fails
-    await prisma.client.updateMany({
+    // Bump lastConnected AND verify the Client row still exists. A certificate
+    // can outlive its Client row (device removed / unpaired), and endpoints that
+    // use `clientId` directly without calling fetchClient() — e.g. sync-installed
+    // — would otherwise FK-crash (P2003) with a 500. updateMany returns the match
+    // count, so the existence check is free. A missing row means re-pair → 401.
+    const { count } = await prisma.client.updateMany({
       where: { id: clientId },
       data: { lastConnected: new Date() },
     });
+    if (count === 0)
+      throw createError({
+        statusCode: 401,
+        statusMessage:
+          "Client record not found for authenticated clientId. The client may have been deleted or unpaired.",
+      });
 
     return await handler(h3, utils);
   });
