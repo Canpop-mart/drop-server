@@ -103,6 +103,32 @@ const LINUX_EXEC_EXTS: ReadonlySet<string> = new Set([
   ".x86",
 ]);
 
+/**
+ * Files a ROM/disc launch should NEVER point at — documentation / metadata a
+ * mis-detected import can grab as the "ROM". Emulator launches otherwise skip
+ * the executable check (a ROM can be almost any extension), so this is how an
+ * emulator launch pointing at LICENSE.md / README.txt still gets flagged.
+ */
+const NON_ROM_EXTS: ReadonlySet<string> = new Set([
+  ".md",
+  ".txt",
+  ".nfo",
+  ".url",
+  ".html",
+  ".htm",
+  ".pdf",
+  ".rtf",
+  ".log",
+]);
+const NON_ROM_BASENAME =
+  /^(license|readme|changelog|credits|copying|authors|notice)\b/i;
+
+/** True if `rel` is obviously documentation/metadata, never a game ROM/disc. */
+function isNonRomTarget(rel: string): boolean {
+  const base = path.basename(rel).toLowerCase();
+  return NON_ROM_EXTS.has(path.extname(base)) || NON_ROM_BASENAME.test(base);
+}
+
 /** True if the first bytes of `fullPath` are the ELF magic (`\x7fELF`). */
 function isElf(fullPath: string): boolean {
   try {
@@ -278,9 +304,28 @@ export async function auditLibrary(): Promise<LibraryAuditResult> {
         continue;
       }
 
-      // Emulator launches point at a ROM/disc, not an executable — the
-      // existence check above is all that applies.
-      if (launch.emulatorId) continue;
+      // Emulator launches point at a ROM/disc, not an executable, so we can't
+      // demand a specific extension. But a ROM is never a documentation /
+      // metadata file — a launch pointing at LICENSE.md / README.txt means the
+      // import picker grabbed the wrong file, so still flag those. Everything
+      // else with an emulatorId only needs to exist.
+      if (launch.emulatorId) {
+        if (isNonRomTarget(rel)) {
+          issues.push({
+            type: "invalid_launch_target",
+            gameId: game.id,
+            gameName: game.mName,
+            versionId: version.versionId,
+            versionName,
+            platform: launch.platform,
+            launchId: launch.launchId,
+            launchName: launch.name,
+            command: launch.command,
+            detail: `Emulator launch points at a documentation/metadata file, not a ROM/disc (got "${rel}")`,
+          });
+        }
+        continue;
+      }
 
       const ext = path.extname(fullPath).toLowerCase();
 

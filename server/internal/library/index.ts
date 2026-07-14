@@ -603,6 +603,13 @@ class LibraryManager {
       return undefined;
     }
 
+    // A file whose base name is documentation (LICENSE, README, ...) is never a
+    // ROM, even when its extension collides with a real ROM format — e.g. ".md"
+    // is both Markdown AND a Sega Mega Drive ROM, so LICENSE.md would otherwise
+    // be auto-picked as a Genesis "ROM" for an emulator launch.
+    const DOC_BASENAME =
+      /^(license|readme|changelog|credits|copying|authors|notice|contributing)\b/i;
+
     for (const filename of files) {
       const basename = path.basename(filename);
       const dotLocation = filename.lastIndexOf(".");
@@ -623,6 +630,9 @@ class LibraryManager {
       for (const emulator of emulators) {
         for (const suggestion of emulator.emulatorSuggestions) {
           if (suggestion != ext) continue;
+          // Skip documentation files that only match a ROM extension by
+          // coincidence (LICENSE.md matching the ".md" Mega Drive format).
+          if (DOC_BASENAME.test(basename)) continue;
           const fuzzyValue = fuzzy(basename, game.mName);
           options.push({
             type: "emulator",
