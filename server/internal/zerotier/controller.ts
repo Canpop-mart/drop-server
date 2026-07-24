@@ -1,7 +1,21 @@
 /*
 Thin HTTP client for a self-hosted ZeroTier network controller (the zerotier-one
-built-in controller, REST API on :9993 authed by `authtoken.secret`). It MINTS +
-AUTHORIZES networks; it never joins one. See docs/zerotier-controller.md.
+built-in controller, REST API on :9993 authed by `authtoken.secret`). See
+docs/zerotier-controller.md.
+
+Two API surfaces live on the same daemon and share the same auth token:
+
+  /controller/network/...  — the CONTROLLER API: mint networks, authorize other
+                             nodes onto them, read their assigned IPs.
+  /network/...             — this NODE's OWN membership: join/leave a network and
+                             read the addresses it was assigned.
+
+Co-op rooms only ever use the controller API: the server mints a network for the
+players and never joins it, so it holds no overlay IP. Archipelago breaks that —
+the AP server runs ON this machine, so remote players need a routable address for
+it. `joinNetwork` (plus authorizing our own node id) puts the server on its own
+network so it has a stable overlay IP to advertise. See
+`server/internal/archipelago/index.ts`.
 */
 
 import { systemConfig } from "../config/sys-conf";
@@ -17,6 +31,19 @@ export interface ZTNetwork {
   id?: string;
   nwid?: string;
   name?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * This node's own membership of a network (the `/network/...` service API), as
+ * opposed to `ZTNetwork` which is a network we host via the controller API.
+ */
+export interface ZTNetworkMembership {
+  id?: string;
+  nwid?: string;
+  status?: string; // e.g. "OK", "REQUESTING_CONFIGURATION", "ACCESS_DENIED"
+  /** IPv4/IPv6 addresses this node actually holds on the network. */
+  assignedAddresses?: string[];
   [key: string]: unknown;
 }
 
@@ -120,6 +147,47 @@ class ZeroTierController {
       `/controller/network/${networkId}/member/${memberId}`,
     );
     return member.ipAssignments ?? [];
+  }
+
+  // --- This node's own membership (service API, not the controller API) ---
+
+  /**
+   * Join this node to a network, so the server itself is reachable on the
+   * overlay. Idempotent: joining a network we're already on is a no-op that
+   * still returns the membership.
+   *
+   * Joining alone is not enough on a private network — the member also has to be
+   * authorized. We're the controller, so we authorize ourselves via
+   * `setMemberAuthorized(networkId, await getControllerNodeId(), true)`.
+   */
+  async joinNetwork(networkId: string): Promise<ZTNetworkMembership> {
+    return await this.req<ZTNetworkMembership>(`/network/${networkId}`, {
+      method: "POST",
+      // An empty config body means "join with defaults".
+      body: {},
+    });
+  }
+
+  /** Leave a network this node has joined. */
+  async leaveNetwork(networkId: string): Promise<void> {
+    await this.req(`/network/${networkId}`, { method: "DELETE" });
+  }
+
+  /**
+   * This node's own view of a network it has joined. `assignedAddresses` is
+   * what the node actually holds (as opposed to `getMemberIpAssignments`, which
+   * is the controller's intent) — addresses arrive asynchronously after the
+   * join, so expect this to be empty for a moment.
+   */
+  async getJoinedNetwork(
+    networkId: string,
+  ): Promise<ZTNetworkMembership | undefined> {
+    try {
+      return await this.req<ZTNetworkMembership>(`/network/${networkId}`);
+    } catch {
+      // Not joined (404) — the caller decides whether that's an error.
+      return undefined;
+    }
   }
 }
 

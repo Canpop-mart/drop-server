@@ -23,6 +23,8 @@ model Client {
   compatibilityResults GameCompatibilityResult[]
   hostedRooms       Room[]       @relation("RoomHost")
   roomMemberships   RoomMember[] @relation("RoomMembership")
+  hostedArchipelagoSessions ArchipelagoSession[] @relation("ArchipelagoHost")
+  archipelagoSlots          ArchipelagoSlot[]    @relation("ArchipelagoSlotClient")
 
   // Admin Devices/Sessions list orders by most-recently-connected.
   @@index([lastConnected(sort: Desc)])

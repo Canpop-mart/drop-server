@@ -1,0 +1,99 @@
+/// Archipelago multiworld support.
+///
+/// Unlike co-op `Room`s (see room.prisma) these are NOT ephemeral: a multiworld
+/// runs for days or weeks, so there is deliberately no `expiresAt` and nothing
+/// reaps them.
+///
+/// The other structural difference: co-op rooms mint one ZeroTier network each
+/// and the server never joins them. Archipelago's server runs ON our machine, so
+/// remote players need a routable address for it — hence ONE long-lived network
+/// (`ArchipelagoNetwork`) that the server joins itself, giving it a stable
+/// overlay IP. Sessions are told apart by Archipelago's per-room port, not by
+/// network. See server/internal/archipelago/index.ts.
+
+/// Singleton (one row): the shared Archipelago overlay network.
+model ArchipelagoNetwork {
+  /// Always "singleton" — enforces one row without needing a partial index.
+  id String @id @default("singleton")
+
+  /// The ZeroTier network id our controller minted for Archipelago (16 hex).
+  networkId String @unique
+
+  /// Third octet of this network's /24 (10.243.<octet>.0/24). Kept distinct
+  /// from co-op's 10.242.x so the two can never collide.
+  subnetOctet Int
+
+  /// The server's own ZeroTier IPv4 on this network — the address players'
+  /// clients actually reach Archipelago on, and the value that goes into
+  /// Archipelago's `HOST_ADDRESS`. Null until ZeroTier assigns it (async after
+  /// join); resolved by a later poll.
+  serverAddress String?
+
+  createdAt DateTime @default(now())
+}
+
+enum ArchipelagoSessionStatus {
+  /// Collecting YAMLs from members.
+  Setup
+  /// Seed generated and a room is hosted; `connectAddress` is set.
+  Running
+  /// Finished or abandoned; kept for reference.
+  Closed
+}
+
+/// One multiworld: a group of players collecting YAMLs together, and (once
+/// generated) the Archipelago room they connect to.
+model ArchipelagoSession {
+  id String @id @default(uuid())
+
+  /// Short, human-shareable join code. Same alphabet/shape as Room.shortCode.
+  shortCode String @unique
+
+  name String?
+
+  /// The `ip:port` players enter as `/connect` in their game's client. Pasted
+  /// by the host from the Archipelago room page after generating, because the
+  /// port is chosen by Archipelago per room (from its GAME_PORTS range).
+  connectAddress String?
+
+  status ArchipelagoSessionStatus @default(Setup)
+
+  hostClientId String
+  hostClient   Client @relation("ArchipelagoHost", fields: [hostClientId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  slots ArchipelagoSlot[]
+
+  @@index([hostClientId])
+}
+
+/// One player's slot in a session: their uploaded YAML plus what we parsed out
+/// of it. One row per client device per session.
+model ArchipelagoSlot {
+  sessionId String
+  session   ArchipelagoSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  clientId String
+  client   Client @relation("ArchipelagoSlotClient", fields: [clientId], references: [id], onDelete: Cascade)
+
+  /// The raw YAML exactly as uploaded. Stored verbatim (not re-serialised) so
+  /// the bundle we hand to Archipelago is byte-identical to what the player
+  /// wrote — re-emitting it risks changing semantics of game-specific options.
+  yamlText String?
+
+  /// Parsed from the YAML's `name` / `game` keys, for the readiness list and
+  /// for duplicate-slot-name detection across the session.
+  slotName String?
+  game     String?
+
+  /// Human-readable reason the YAML was rejected; null when it validated.
+  validationError String?
+
+  uploadedAt DateTime?
+  joinedAt   DateTime  @default(now())
+
+  @@id([sessionId, clientId])
+  @@index([clientId])
+}
