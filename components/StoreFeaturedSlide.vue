@@ -36,7 +36,8 @@
           </span>
           <span
             v-if="game.updateAvailable"
-            class="text-xs font-bold px-2.5 py-1 rounded-md bg-orange-500 text-white leading-tight"
+            :title="$t('store.updateAvailableTooltip')"
+            class="text-xs font-bold px-2.5 py-1 rounded-md bg-black/70 text-amber-300 border border-amber-500/30 leading-tight"
           >
             {{ $t("store.updateAvailable") }}
           </span>

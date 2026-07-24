@@ -1030,7 +1030,8 @@
     },
     "tags": "Tags",
     "title": "Store",
-    "updateAvailable": "Outdated",
+    "updateAvailable": "Older build",
+    "updateAvailableTooltip": "Drop's copy of this game is an older build than the latest Steam release. It still installs and plays normally, and needs no action from you.",
     "view": {
       "allTags": "All",
       "filters": {

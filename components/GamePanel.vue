@@ -48,7 +48,8 @@
         <!-- Update available badge (always visible) OR version badge (hover only) -->
         <span
           v-if="game?.updateAvailable"
-          class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500 text-white leading-tight whitespace-nowrap shadow-lg"
+          :title="$t('store.updateAvailableTooltip')"
+          class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-black/70 text-amber-300 border border-amber-500/30 leading-tight whitespace-nowrap shadow-lg"
         >
           {{ $t("store.updateAvailable") }}
         </span>
