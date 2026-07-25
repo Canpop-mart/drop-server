@@ -336,6 +336,10 @@
               </div>
               <GameCarousel v-else :items="similarGames" />
             </div>
+            <!-- Mods Tab — browse only; the desktop client installs mods. -->
+            <div v-if="activeTab === 'Mods'">
+              <GameCarousel :items="mods" />
+            </div>
             <!-- Leaderboards Tab -->
             <div v-if="activeTab === 'Leaderboards'">
               <div
@@ -435,13 +439,24 @@ const hltbRows = computed(() => {
   return rows;
 });
 
-const tabs = ["Achievements", "Leaderboards", "Similar"] as const;
 const tabLabels: Record<string, string> = {
   Achievements: t("store.tabs.achievements"),
   Leaderboards: t("store.tabs.leaderboards"),
   Similar: t("store.tabs.similar"),
+  Mods: t("store.tabs.mods"),
 };
 const activeTab = ref("Achievements");
+
+// Mods available for this game (browse only — installing happens in the desktop
+// client). The Mods tab only appears when the game actually has mods.
+const mods = (await $dropFetch(`/api/v1/games/${gameId}/mods`).catch(
+  () => [],
+)) as SerializeObject<GameModel>[];
+const tabs = computed(() =>
+  mods.length > 0
+    ? ["Achievements", "Leaderboards", "Similar", "Mods"]
+    : ["Achievements", "Leaderboards", "Similar"],
+);
 const achievementsLoading = ref(true);
 const similarLoading = ref(true);
 const achievements = await $dropFetch(

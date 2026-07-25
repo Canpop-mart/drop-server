@@ -380,6 +380,11 @@ const importModes: {
     description:
       "Dependencies are setup-only files that get installed before the game is launched.",
   },
+  Mod: {
+    title: "Mod",
+    description:
+      "Mods install onto a base game's files. Pick the base game in the game editor after importing.",
+  },
 };
 
 async function updateSelectedGame(value: number) {

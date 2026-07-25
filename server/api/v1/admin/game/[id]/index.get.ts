@@ -52,6 +52,12 @@ export type AdminFetchGameType = Prisma.GameGetPayload<{
       };
     };
     tags: true;
+    parentGame: {
+      select: {
+        id: true;
+        mName: true;
+      };
+    };
   };
 }>;
 
@@ -112,6 +118,12 @@ export default defineEventHandler<
         },
       },
       tags: true,
+      parentGame: {
+        select: {
+          id: true,
+          mName: true,
+        },
+      },
     },
   });
 

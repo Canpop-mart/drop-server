@@ -196,6 +196,7 @@ export class MetadataHandler {
     type: GameType,
     discFolders?: string[],
     parentTask?: TaskRunContext,
+    parentGameId?: string,
   ) {
     return await this.createGame(
       {
@@ -208,6 +209,7 @@ export class MetadataHandler {
       type,
       discFolders,
       parentTask,
+      parentGameId,
     );
   }
 
@@ -292,6 +294,9 @@ export class MetadataHandler {
     type: GameType,
     discFolders?: string[],
     parentTask?: TaskRunContext,
+    // For type=Mod games: the base game this mod overlays onto. Callers are
+    // responsible for validating it points at an existing base game.
+    parentGameId?: string,
   ): Promise<{ taskId: string; gameId: string } | undefined> {
     const primary = this.providers.get(result.sourceId);
     if (!primary)
@@ -511,6 +516,7 @@ export class MetadataHandler {
               discFolders: discFolders ?? [],
 
               type,
+              parentGameId: parentGameId ?? null,
             },
           });
 

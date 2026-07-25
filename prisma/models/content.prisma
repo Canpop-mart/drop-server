@@ -12,6 +12,7 @@ enum GameType {
   Game
   Emulator
   Dependency
+  Mod
 }
 
 enum ControllerSupport {
@@ -28,6 +29,14 @@ model Game {
   created        DateTime       @default(now())
 
   type GameType @default(Game)
+
+  // For type=Mod games: the base game this mod applies to. A mod is a Game with
+  // its own versions/metadata/lifecycle; its files overlay into the parent's
+  // install dir on the client. Null for normal games. Self-relation mirrors the
+  // LaunchConfiguration emulator self-relation below.
+  parentGameId String?
+  parentGame   Game?   @relation("mods", fields: [parentGameId], references: [id], onDelete: SetNull)
+  mods         Game[]  @relation("mods")
 
   // Any field prefixed with m is filled in from metadata
   // Acts as a cache so we can search and filter it
@@ -99,6 +108,9 @@ model Game {
   // (libraryId is already covered by the (libraryId, libraryPath) unique
   // index — Postgres uses its leading column for equality lookups.)
   @@index([featured])
+  // A mod's page lists its siblings via `WHERE parentGameId = ?`. Postgres does
+  // not auto-index FK columns, so add it explicitly.
+  @@index([parentGameId])
 }
 
 model GameTag {

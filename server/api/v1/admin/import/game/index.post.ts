@@ -2,6 +2,7 @@ import { type } from "arktype";
 import { GameType } from "~/prisma/client/enums";
 import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
 import aclManager from "~/server/internal/acls";
+import prisma from "~/server/internal/db/database";
 import libraryManager from "~/server/internal/library";
 import metadataHandler from "~/server/internal/metadata";
 import taskHandler from "~/server/internal/tasks";
@@ -19,6 +20,9 @@ const ImportGameBody = type({
   // For multi-disc games: the ordered list of actual disc folder names
   // (e.g. ["Xenogears (USA) (Disc 1)", "Xenogears (USA) (Disc 2)"])
   ["discFolders?"]: "string[]",
+  // For type=Mod games: the base game this mod applies to. Optional here —
+  // it can also be assigned later in the admin game editor. Validated below.
+  ["parentGameId?"]: "string",
   // One-click "import game + first version": when true, after the game
   // is created the endpoint auto-queues a version import IF exactly one
   // unimported version is discovered. The admin UI gates this behind a
@@ -37,6 +41,7 @@ export default defineEventHandler<{ body: typeof ImportGameBody.infer }>(
       metadata,
       type,
       discFolders,
+      parentGameId,
       autoImportFirstVersion,
     } = await readDropValidatedBody(h3, ImportGameBody);
 
@@ -45,6 +50,25 @@ export default defineEventHandler<{ body: typeof ImportGameBody.infer }>(
         statusCode: 400,
         statusMessage: "Path missing from body",
       });
+
+    // A mod's parent must be an existing base game (type=Game). Reject a
+    // parent that is itself a mod so we never build a mod-of-mod chain.
+    if (parentGameId) {
+      const parent = await prisma.game.findUnique({
+        where: { id: parentGameId },
+        select: { type: true },
+      });
+      if (!parent)
+        throw createError({
+          statusCode: 400,
+          statusMessage: "Parent game not found.",
+        });
+      if (parent.type !== GameType.Game)
+        throw createError({
+          statusCode: 400,
+          statusMessage: "Parent must be a base game, not a mod or dependency.",
+        });
+    }
 
     const valid = await libraryManager.checkUnimportedGamePath(library, path);
     if (!valid)
@@ -62,12 +86,16 @@ export default defineEventHandler<{ body: typeof ImportGameBody.infer }>(
             path,
             type,
             discFolders,
+            undefined,
+            parentGameId,
           )
         : await metadataHandler.createGameWithoutMetadata(
             library,
             path,
             type,
             discFolders,
+            undefined,
+            parentGameId,
           );
 
       if (!created)
@@ -98,6 +126,7 @@ export default defineEventHandler<{ body: typeof ImportGameBody.infer }>(
               type,
               discFolders,
               ctx,
+              parentGameId,
             )
           : await metadataHandler.createGameWithoutMetadata(
               library,
@@ -105,6 +134,7 @@ export default defineEventHandler<{ body: typeof ImportGameBody.infer }>(
               type,
               discFolders,
               ctx,
+              parentGameId,
             );
         if (!created) {
           throw new Error(

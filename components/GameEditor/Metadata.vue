@@ -355,6 +355,78 @@
             </button>
           </div>
         </div>
+
+        <!-- Parent game (mods only) -->
+        <div v-if="game.type === 'Mod'" class="mt-8 border-t border-zinc-800 pt-6">
+          <div class="border-b border-zinc-800 pb-3">
+            <h3
+              class="text-base font-semibold font-display leading-6 text-zinc-100"
+            >
+              Parent game
+            </h3>
+            <p class="mt-1 text-sm text-zinc-400 max-w-lg">
+              The base game this mod installs onto. Players see the mod on this
+              game's store page.
+            </p>
+          </div>
+
+          <div
+            v-if="game.parentGame"
+            class="mt-3 flex items-center gap-3 rounded-lg bg-zinc-800/50 p-3 ring-1 ring-white/5"
+          >
+            <PuzzlePieceIcon class="size-5 text-blue-400 shrink-0" />
+            <p class="min-w-0 flex-1 text-sm font-medium text-zinc-100 truncate">
+              {{ game.parentGame.mName }}
+            </p>
+            <button
+              type="button"
+              class="text-sm text-zinc-400 hover:text-zinc-200 transition-colors shrink-0"
+              @click="clearParentGame"
+            >
+              Clear
+            </button>
+          </div>
+          <p v-else class="mt-3 text-sm text-amber-400">
+            No parent set. This mod stays hidden until you pick one.
+          </p>
+
+          <div class="mt-3 flex gap-2">
+            <input
+              v-model="parentSearchQuery"
+              type="text"
+              placeholder="Search base games..."
+              class="flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
+              @keyup.enter="searchParent"
+            />
+            <button
+              type="button"
+              :disabled="parentSearching || !parentSearchQuery"
+              class="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              @click="searchParent"
+            >
+              {{ parentSearching ? "Searching..." : "Search" }}
+            </button>
+          </div>
+
+          <div
+            v-if="parentSearchResults.length > 0"
+            class="mt-2 max-h-60 overflow-y-auto space-y-1"
+          >
+            <button
+              v-for="result in parentSearchResults"
+              :key="result.id"
+              class="flex items-center gap-2 w-full p-2 rounded text-left text-sm hover:bg-zinc-800 transition-colors"
+              @click="setParentGame(result)"
+            >
+              <img
+                v-if="result.icon"
+                :src="useObject(result.icon)"
+                class="size-8 rounded shrink-0"
+              />
+              <span class="text-zinc-200 truncate">{{ result.name }}</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -625,6 +697,7 @@ import {
   DocumentIcon,
   PencilIcon,
   PhotoIcon,
+  PuzzlePieceIcon,
   TrophyIcon,
 } from "@heroicons/vue/24/solid";
 import type { SerializeObject } from "nitropack";
@@ -1138,6 +1211,87 @@ async function linkRAGame() {
         : "Failed to link game";
   } finally {
     raLinkLoading.value = false;
+  }
+}
+
+// ── Parent game (mods only) ───────────────────────────────────────────────
+// A mod is a Game with type=Mod that installs onto a base game. This picker
+// sets/clears that parent via the same PATCH the rest of the editor uses.
+
+type ParentSearchResult = {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  year: number;
+};
+
+const parentSearchQuery = ref("");
+const parentSearchResults = ref<ParentSearchResult[]>([]);
+const parentSearching = ref(false);
+
+async function searchParent() {
+  if (!parentSearchQuery.value) return;
+  parentSearching.value = true;
+  try {
+    const results = await $dropFetch("/api/v1/admin/search/game", {
+      query: { q: parentSearchQuery.value, type: "Game" },
+    });
+    // A mod can never be its own parent — the type=Game filter already
+    // excludes mods, but guard anyway.
+    parentSearchResults.value = (results ?? []).filter(
+      (r) => r.id !== game.value.id,
+    );
+  } catch {
+    parentSearchResults.value = [];
+  } finally {
+    parentSearching.value = false;
+  }
+}
+
+async function setParentGame(result: ParentSearchResult) {
+  try {
+    await $dropFetch(`/api/v1/admin/game/:id`, {
+      method: "PATCH",
+      params: { id: game.value.id },
+      body: { parentGameId: result.id } satisfies PatchGameBody,
+    });
+    game.value.parentGame = { id: result.id, mName: result.name };
+    parentSearchResults.value = [];
+    parentSearchQuery.value = "";
+  } catch (e) {
+    createModal(
+      ModalType.Notification,
+      {
+        title: t("errors.unknown"),
+        description:
+          (e as H3Error)?.statusMessage ?? "Failed to set parent game",
+        buttonText: t("common.close"),
+      },
+      (e, c) => c(),
+    );
+  }
+}
+
+async function clearParentGame() {
+  try {
+    await $dropFetch(`/api/v1/admin/game/:id`, {
+      method: "PATCH",
+      params: { id: game.value.id },
+      body: { parentGameId: null } satisfies PatchGameBody,
+    });
+    game.value.parentGame = null;
+  } catch (e) {
+    createModal(
+      ModalType.Notification,
+      {
+        title: t("errors.unknown"),
+        description:
+          (e as H3Error)?.statusMessage ?? "Failed to clear parent game",
+        buttonText: t("common.close"),
+      },
+      (e, c) => c(),
+    );
   }
 }
 </script>
