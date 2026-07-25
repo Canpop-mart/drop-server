@@ -426,6 +426,51 @@
               <span class="text-zinc-200 truncate">{{ result.name }}</span>
             </button>
           </div>
+
+          <!-- Launch override (mods only) -->
+          <div class="mt-6 border-t border-zinc-800 pt-4">
+            <label class="block text-sm font-medium text-zinc-100">
+              Launch override
+            </label>
+            <p class="mt-1 text-sm text-zinc-400 max-w-lg">
+              While this mod is installed, launch this executable instead of the
+              game's normal one (path relative to the game's install dir). Leave
+              empty for content mods that don't change how the game launches.
+            </p>
+            <input
+              v-model="launchOverrideInput"
+              type="text"
+              placeholder="e.g. Stardew Valley/StardewModdingAPI.exe"
+              class="mt-2 block w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
+              @change="saveLaunchOverride"
+            />
+          </div>
+        </div>
+
+        <!-- Mod install path (base games only) -->
+        <div
+          v-if="game.type === 'Game'"
+          class="mt-8 border-t border-zinc-800 pt-6"
+        >
+          <div class="border-b border-zinc-800 pb-3">
+            <h3
+              class="text-base font-semibold font-display leading-6 text-zinc-100"
+            >
+              Mod install path
+            </h3>
+            <p class="mt-1 text-sm text-zinc-400 max-w-lg">
+              Subfolder (relative to the install dir) that mods overlay into.
+              Leave empty for the install root. Set this for games whose files
+              live in a wrapper folder so mods land next to the game.
+            </p>
+          </div>
+          <input
+            v-model="modRootInput"
+            type="text"
+            placeholder="e.g. Stardew Valley"
+            class="mt-3 block w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
+            @change="saveModRoot"
+          />
         </div>
       </div>
     </div>
@@ -1288,6 +1333,59 @@ async function clearParentGame() {
         title: t("errors.unknown"),
         description:
           (e as H3Error)?.statusMessage ?? "Failed to clear parent game",
+        buttonText: t("common.close"),
+      },
+      (e, c) => c(),
+    );
+  }
+}
+
+// ── Mod placement config ──────────────────────────────────────────────────
+// modRoot (base games): where mods overlay. launchOverride (mods): the exe to
+// launch while installed. Both save on blur/change via the same PATCH.
+
+const modRootInput = ref(game.value.modRoot ?? "");
+const launchOverrideInput = ref(game.value.launchOverride ?? "");
+
+async function saveModRoot() {
+  try {
+    await $dropFetch(`/api/v1/admin/game/:id`, {
+      method: "PATCH",
+      params: { id: game.value.id },
+      body: { modRoot: modRootInput.value } satisfies PatchGameBody,
+    });
+    game.value.modRoot = modRootInput.value;
+  } catch (e) {
+    createModal(
+      ModalType.Notification,
+      {
+        title: t("errors.unknown"),
+        description:
+          (e as H3Error)?.statusMessage ?? "Failed to save mod install path",
+        buttonText: t("common.close"),
+      },
+      (e, c) => c(),
+    );
+  }
+}
+
+async function saveLaunchOverride() {
+  // Empty input clears the override (null) so the game launches normally.
+  const value = launchOverrideInput.value.trim() || null;
+  try {
+    await $dropFetch(`/api/v1/admin/game/:id`, {
+      method: "PATCH",
+      params: { id: game.value.id },
+      body: { launchOverride: value } satisfies PatchGameBody,
+    });
+    game.value.launchOverride = value;
+  } catch (e) {
+    createModal(
+      ModalType.Notification,
+      {
+        title: t("errors.unknown"),
+        description:
+          (e as H3Error)?.statusMessage ?? "Failed to save launch override",
         buttonText: t("common.close"),
       },
       (e, c) => c(),

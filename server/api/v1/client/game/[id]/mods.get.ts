@@ -20,6 +20,9 @@ export default defineClientEventHandler(async (h3) => {
       mName: true,
       mShortDescription: true,
       mIconObjectId: true,
+      // The client records this in the mod's ledger at install time so the
+      // launcher can swap the game's exe while the mod is installed.
+      launchOverride: true,
     },
     orderBy: {
       mName: "asc",

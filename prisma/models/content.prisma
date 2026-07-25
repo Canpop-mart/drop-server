@@ -38,6 +38,19 @@ model Game {
   parentGame   Game?   @relation("mods", fields: [parentGameId], references: [id], onDelete: SetNull)
   mods         Game[]  @relation("mods")
 
+  // Mod placement config.
+  //
+  // modRoot (on a BASE game): the subdirectory, relative to the game's install
+  // dir, that mods overlay into. Empty = the install root. Set it for games
+  // whose files live in a wrapper folder (e.g. "Stardew Valley") so a mod lands
+  // next to the game rather than one level above it.
+  modRoot String @default("")
+  // launchOverride (on a MOD): when this mod is installed, launch this
+  // executable (relative to the base game's install dir) instead of the game's
+  // normal one. Null = the mod doesn't change how the game launches (most
+  // content mods). Used by loader mods like SMAPI. Reverts on uninstall.
+  launchOverride String?
+
   // Any field prefixed with m is filled in from metadata
   // Acts as a cache so we can search and filter it
   mName String // Name of game

@@ -20,6 +20,10 @@ const GameUpdate = type({
   // For type=Mod games: the base game this mod applies to. A string sets the
   // parent, null clears it, and an absent key leaves it unchanged.
   "parentGameId?": "string | null",
+  // Base game: subdirectory mods overlay into (empty = install root).
+  "modRoot?": "string",
+  // Mod: executable to launch while installed (relative to install dir), or null.
+  "launchOverride?": "string | null",
 }).configure(throwingArktype);
 
 export default defineEventHandler(async (h3) => {
