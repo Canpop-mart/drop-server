@@ -36,6 +36,10 @@ services:
       # docs/zerotier-controller.md). Inline token avoids cross-container file perms.
       - ZEROTIER_CONTROLLER_URL=http://zerotier-controller:9993
       - ZEROTIER_AUTH_TOKEN=
+      # --- Archipelago WebHost (optional) ---
+      # Browser-openable URL of your Archipelago WebHost. When set, the client's
+      # Archipelago screen links to it + deep-links a game's YAML options page.
+      - ARCHIPELAGO_WEBHOST_URL=
 
   # Self-hosted ZeroTier network controller. It MINTS + AUTHORIZES virtual-LAN
   # networks for co-op rooms but never JOINS one itself, so it needs no TUN

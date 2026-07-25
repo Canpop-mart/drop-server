@@ -12,6 +12,12 @@ class SystemConfig {
     process.env.ZEROTIER_CONTROLLER_URL?.trim() || undefined;
   private zerotierAuthToken = resolveZerotierToken();
 
+  // The Archipelago WebHost (a separate container) that owns YAML generation and
+  // room hosting. Optional: when set, the client's Archipelago screen shows a
+  // link to it and can deep-link to a game's options page. This is the
+  // browser-openable URL players use, e.g. https://archipelago.example.com.
+  private archipelagoWebHostUrl = resolveArchipelagoWebHostUrl();
+
   private metadataTimeout = parseInt(process.env.METADATA_TIMEOUT ?? "5000");
 
   private externalUrl = normalizeUrl(
@@ -92,6 +98,12 @@ class SystemConfig {
     return this.zerotierAuthToken;
   }
 
+  // The configured Archipelago WebHost URL, or undefined when the operator
+  // hasn't set one (the client then hides the WebHost link + game search).
+  getArchipelagoWebHostUrl() {
+    return this.archipelagoWebHostUrl;
+  }
+
   // Co-op rooms are available only when the controller URL + auth token resolve.
   isZerotierEnabled() {
     return Boolean(this.zerotierControllerUrl && this.zerotierAuthToken);
@@ -114,6 +126,21 @@ function resolveZerotierToken(): string | undefined {
   try {
     const token = readFileSync(path, "utf-8").trim();
     return token || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Resolves + normalises the Archipelago WebHost URL from the env. Optional, so a
+ * missing value is not fatal; a malformed one is treated as unset rather than
+ * crashing config load.
+ */
+function resolveArchipelagoWebHostUrl(): string | undefined {
+  const raw = process.env.ARCHIPELAGO_WEBHOST_URL?.trim();
+  if (!raw) return undefined;
+  try {
+    return normalizeUrl(raw, { stripWWW: false });
   } catch {
     return undefined;
   }
