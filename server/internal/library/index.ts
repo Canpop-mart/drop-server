@@ -771,20 +771,6 @@ class LibraryManager {
       }
     }
 
-    if (metadata.onlySetup) {
-      if (metadata.setups.length == 0)
-        throw createError({
-          statusCode: 400,
-          message: 'Setup required in "setup mode".',
-        });
-    } else {
-      if (metadata.launches.length == 0)
-        throw createError({
-          statusCode: 400,
-          message: "Launch executable is required.",
-        });
-    }
-
     const game = await prisma.game.findUnique({
       where: { id: gameId },
       select: {
@@ -801,6 +787,23 @@ class LibraryManager {
       },
     });
     if (!game || !game.libraryId) return undefined;
+
+    // Mods are pure file overlays — no launch or setup executable required.
+    // Every other type needs a launch (or a setup, in setup-only mode).
+    if (game.type !== GameType.Mod) {
+      if (metadata.onlySetup) {
+        if (metadata.setups.length == 0)
+          throw createError({
+            statusCode: 400,
+            message: 'Setup required in "setup mode".',
+          });
+      } else if (metadata.launches.length == 0) {
+        throw createError({
+          statusCode: 400,
+          message: "Launch executable is required.",
+        });
+      }
+    }
 
     if (game.type === GameType.Dependency && !metadata.onlySetup)
       throw createError({

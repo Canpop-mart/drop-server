@@ -1,5 +1,5 @@
 import { ArkErrors, type } from "arktype";
-import type { Platform } from "~/prisma/client/enums";
+import { GameType, Platform } from "~/prisma/client/enums";
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import { requireRouterParam } from "~/server/arktype";
 import prisma from "~/server/internal/db/database";
@@ -77,6 +77,15 @@ export default defineClientEventHandler(async (h3) => {
     },
   });
 
+  // Mods can be pure file overlays with no launch/setup configs, which would
+  // otherwise yield no download option (platform is derived from those). Detect
+  // a mod so we can offer such versions on every platform below.
+  const game = await prisma.game.findUnique({
+    where: { id },
+    select: { type: true },
+  });
+  const isMod = game?.type === GameType.Mod;
+
   const versions: Array<VersionDownloadOption> = (
     await Promise.all(
       rawVersions.map(async (v) => {
@@ -100,6 +109,18 @@ export default defineClientEventHandler(async (h3) => {
               shortDescription: gv.game.mShortDescription,
               size: (await gameSizeManager.getVersionSize(gv.versionId))!,
             });
+          }
+        }
+
+        // A launch-less mod version is a pure overlay — offer it on every
+        // platform (files are identical) so the client can pick + download it.
+        if (platformOptions.size === 0 && isMod) {
+          for (const platform of [
+            Platform.Windows,
+            Platform.Linux,
+            Platform.macOS,
+          ]) {
+            platformOptions.set(platform, []);
           }
         }
 
