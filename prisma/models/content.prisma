@@ -37,19 +37,9 @@ model Game {
   parentGameId String?
   parentGame   Game?   @relation("mods", fields: [parentGameId], references: [id], onDelete: SetNull)
   mods         Game[]  @relation("mods")
-
-  // Mod placement config.
-  //
-  // modRoot (on a BASE game): the subdirectory, relative to the game's install
-  // dir, that mods overlay into. Empty = the install root. Set it for games
-  // whose files live in a wrapper folder (e.g. "Stardew Valley") so a mod lands
-  // next to the game rather than one level above it.
-  modRoot String @default("")
-  // launchOverride (on a MOD): when this mod is installed, launch this
-  // executable (relative to the base game's install dir) instead of the game's
-  // normal one. Null = the mod doesn't change how the game launches (most
-  // content mods). Used by loader mods like SMAPI. Reverts on uninstall.
-  launchOverride String?
+  // Mod placement lives per-VERSION now (GameVersion.modInstallDir +
+  // launchOverride), set in the version import wizard so each version is
+  // self-contained.
 
   // Any field prefixed with m is filled in from metadata
   // Acts as a cache so we can search and filter it
@@ -182,6 +172,17 @@ model GameVersion {
   setups   SetupConfiguration[]
 
   onlySetup Boolean @default(false)
+
+  // Mod placement (type=Mod games only; set in the version import wizard).
+  // modInstallDir: subdirectory, relative to the base game's install dir, that
+  // this version's files overlay into. Empty = the install root. Handles both
+  // a wrapper folder and the per-mod location, e.g. "Stardew Valley" (SMAPI) or
+  // "Stardew Valley/Mods/StardewArchipelago".
+  modInstallDir String @default("")
+  // launchOverride: executable (relative to the install dir) to launch while
+  // this mod version is installed, instead of the base game's normal one. Null
+  // = no launch change. Reverts on uninstall.
+  launchOverride String?
 
   dropletManifest  Json // Results from droplet
   fileList         String[] // List of all files, for delta updates

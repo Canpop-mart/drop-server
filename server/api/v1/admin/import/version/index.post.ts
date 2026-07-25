@@ -31,6 +31,11 @@ export const ImportVersion = type({
   onlySetup: "boolean = false",
   delta: "boolean = false",
 
+  // Mod placement (type=Mod games): where this version overlays + optional
+  // launch override. Both relative to the base game's install dir.
+  ["modInstallDir?"]: "string",
+  ["launchOverride?"]: "string | null",
+
   requiredContent: type("string")
     .array()
     .default(() => []),

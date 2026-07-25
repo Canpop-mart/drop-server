@@ -82,6 +82,10 @@ export async function persistVersion(
       versionIndex: currentIndex,
       delta: metadata.delta,
       onlySetup: metadata.onlySetup,
+      // Mod placement (type=Mod games): where this version overlays + optional
+      // launch override, relative to the base game's install dir.
+      modInstallDir: metadata.modInstallDir ?? "",
+      launchOverride: metadata.launchOverride ?? null,
       setups: {
         createMany: {
           data: metadata.setups.map((v) => ({

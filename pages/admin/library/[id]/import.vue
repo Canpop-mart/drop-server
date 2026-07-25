@@ -96,6 +96,55 @@
           />
         </div>
       </div>
+
+      <!-- Mod placement (mod versions only) -->
+      <div
+        v-if="isModImport"
+        class="bg-zinc-800 p-4 rounded-xl flex flex-col gap-y-4"
+      >
+        <div>
+          <label class="block text-sm font-medium leading-6 text-zinc-100">
+            Mod install directory
+          </label>
+          <p class="text-zinc-400 text-xs">
+            Where this version's files go, relative to the base game's install
+            dir. Empty = install root. e.g. "Stardew Valley" or "Stardew
+            Valley/Mods/StardewArchipelago".
+          </p>
+          <input
+            v-model="versionSettings.modInstallDir"
+            type="text"
+            placeholder="e.g. Stardew Valley/Mods/StardewArchipelago"
+            class="mt-2 min-w-48 block w-full rounded-md bg-zinc-950 px-3 py-1.5 text-white outline-1 -outline-offset-1 outline-zinc-800 placeholder:text-zinc-500 focus:outline-1 focus:-outline-offset-1 focus:outline-blue-500 sm:text-sm/6"
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-medium leading-6 text-zinc-100">
+            Launch override (optional)
+          </label>
+          <p class="text-zinc-400 text-xs">
+            An executable to launch while this mod is installed, instead of the
+            game's normal one (e.g. a loader like SMAPI). Leave as "None" for
+            content mods.
+          </p>
+          <select
+            v-model="launchOverrideExe"
+            class="mt-2 min-w-48 block w-full rounded-md bg-zinc-950 px-3 py-1.5 text-white outline-1 -outline-offset-1 outline-zinc-800 focus:outline-1 focus:-outline-offset-1 focus:outline-blue-500 sm:text-sm/6"
+          >
+            <option value="">None</option>
+            <option v-for="exe in executableGuesses" :key="exe" :value="exe">
+              {{ exe }}
+            </option>
+          </select>
+          <p
+            v-if="versionSettings.launchOverride"
+            class="text-zinc-500 text-xs mt-1"
+          >
+            Launches: {{ versionSettings.launchOverride }}
+          </p>
+        </div>
+      </div>
+
       <!-- setup executable -->
       <div class="bg-zinc-800 p-4 rounded-xl relative flex flex-col gap-y-2">
         <div>
@@ -438,8 +487,28 @@ const versionSettings = ref<Omit<typeof ImportVersion.infer, "version" | "id">>(
     launches: [],
     setups: [],
     requiredContent: [],
+    modInstallDir: "",
   },
 );
+
+const isModImport = type === GameType.Mod;
+// Executable choices for the launch-override picker (mod versions), from the
+// version's discovered files.
+const executableGuesses = computed(() =>
+  (versionGuesses.value ?? []).map((g) => g.filename),
+);
+// The picker stores just the exe (relative to the mod install dir); we build
+// the full install-dir-relative path here.
+const launchOverrideExe = ref("");
+watch([launchOverrideExe, () => versionSettings.value.modInstallDir], () => {
+  const exe = launchOverrideExe.value;
+  if (!exe) {
+    versionSettings.value.launchOverride = null;
+    return;
+  }
+  const dir = (versionSettings.value.modInstallDir ?? "").replace(/\/+$/, "");
+  versionSettings.value.launchOverride = dir ? `${dir}/${exe}` : exe;
+});
 
 const versionGuesses = ref<Array<VersionGuess>>();
 

@@ -13,6 +13,10 @@ type VersionDownloadOption = {
   versionPath?: string | undefined;
   platform: Platform;
   size: GameVersionSize;
+  // Mod placement (type=Mod versions): where the mod overlays + optional launch
+  // override, both relative to the base game's install dir.
+  modInstallDir: string;
+  launchOverride: string | null;
   requiredContent: Array<{
     gameId: string;
     versionId: string;
@@ -51,6 +55,8 @@ export default defineClientEventHandler(async (h3) => {
       displayName: true,
       versionPath: true,
       gameId: true,
+      modInstallDir: true,
+      launchOverride: true,
       launches: {
         select: {
           platform: true,
@@ -148,6 +154,8 @@ export default defineClientEventHandler(async (h3) => {
                 platform,
                 requiredContent,
                 size,
+                modInstallDir: v.modInstallDir,
+                launchOverride: v.launchOverride,
               }) satisfies VersionDownloadOption,
           )
           .toArray();
