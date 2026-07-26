@@ -25,6 +25,14 @@ type VersionDownloadOption = {
     shortDescription: string;
     size: GameVersionSize;
   }>;
+  // Mod prerequisites: other mods this version requires (type=Mod only), enough
+  // for the client to resolve + install them onto the same parent game.
+  requiredMods: Array<{
+    gameId: string;
+    versionId: string;
+    name: string;
+    iconObjectId: string;
+  }>;
 };
 
 const Query = type({
@@ -80,6 +88,15 @@ export default defineClientEventHandler(async (h3) => {
         },
       },
       setups: true,
+      requiredContent: {
+        select: {
+          versionId: true,
+          gameId: true,
+          game: {
+            select: { type: true, mName: true, mIconObjectId: true },
+          },
+        },
+      },
     },
   });
 
@@ -163,6 +180,17 @@ export default defineClientEventHandler(async (h3) => {
         // genuinely not installable — the sole remaining reason to omit it.
         if (!size) return [];
 
+        // Prerequisite mods this version needs (the requiredContent links that
+        // point at type=Mod games). Same for every platform of the version.
+        const requiredMods = v.requiredContent
+          .filter((rc) => rc.game.type === GameType.Mod)
+          .map((rc) => ({
+            gameId: rc.gameId,
+            versionId: rc.versionId,
+            name: rc.game.mName,
+            iconObjectId: rc.game.mIconObjectId,
+          }));
+
         return platformOptions
           .entries()
           .map(
@@ -177,6 +205,7 @@ export default defineClientEventHandler(async (h3) => {
                 size,
                 modInstallDir: v.modInstallDir,
                 launchOverride: v.launchOverride,
+                requiredMods,
               }) satisfies VersionDownloadOption,
           )
           .toArray();

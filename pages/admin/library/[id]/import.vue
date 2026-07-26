@@ -143,6 +143,35 @@
             Launches: {{ versionSettings.launchOverride }}
           </p>
         </div>
+        <div v-if="siblingMods.length > 0">
+          <label class="block text-sm font-medium leading-6 text-zinc-100">
+            Required mods (optional)
+          </label>
+          <p class="text-zinc-400 text-xs">
+            Other mods that must be installed for this one to work (e.g. a loader
+            like SMAPI). Drop installs them automatically when someone installs
+            this mod.
+          </p>
+          <div class="mt-2 flex flex-col gap-y-1.5">
+            <label
+              v-for="sibling in siblingMods"
+              :key="sibling.id"
+              class="flex items-center gap-x-2 text-sm text-zinc-200"
+            >
+              <input
+                type="checkbox"
+                :checked="
+                  versionSettings.requiredContent.includes(
+                    sibling.latestVersionId,
+                  )
+                "
+                class="rounded bg-zinc-950 border-zinc-700 text-blue-500 focus:ring-blue-500"
+                @change="toggleRequiredMod(sibling.latestVersionId)"
+              />
+              {{ sibling.name }}
+            </label>
+          </div>
+        </div>
       </div>
 
       <!-- setup executable -->
@@ -476,7 +505,7 @@ const router = useRouter();
 const { t } = useI18n();
 const route = useRoute();
 const gameId = route.params.id.toString();
-const { versions, type } = await $dropFetch(
+const { versions, type, siblingMods } = await $dropFetch(
   `/api/v1/admin/import/version?id=${encodeURIComponent(gameId)}`,
 );
 const currentlySelectedVersion = ref(-1);
@@ -509,6 +538,15 @@ watch([launchOverrideExe, () => versionSettings.value.modInstallDir], () => {
   const dir = (versionSettings.value.modInstallDir ?? "").replace(/\/+$/, "");
   versionSettings.value.launchOverride = dir ? `${dir}/${exe}` : exe;
 });
+
+// Required-mods picker (mod versions): toggle a sibling mod's latest version id
+// in requiredContent, so installing this mod pulls the selected ones in first.
+function toggleRequiredMod(versionId: string) {
+  const list = versionSettings.value.requiredContent;
+  const idx = list.indexOf(versionId);
+  if (idx === -1) list.push(versionId);
+  else list.splice(idx, 1);
+}
 
 const versionGuesses = ref<Array<VersionGuess>>();
 

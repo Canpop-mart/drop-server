@@ -118,6 +118,12 @@ export async function persistVersion(
             }
           : { data: [] },
       },
+      // Prerequisite content (e.g. mod prerequisites): connect the version rows
+      // this version requires, so installing it can pull them in. Version IDs
+      // come from the import request; empty for normal imports.
+      requiredContent: {
+        connect: metadata.requiredContent.map((versionId) => ({ versionId })),
+      },
     },
   });
   logger.info(`${PHASE} Created GameVersion ${newVersion.versionId}`);
