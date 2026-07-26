@@ -188,6 +188,14 @@ model GameVersion {
   fileList         String[] // List of all files, for delta updates
   negativeFileList String[] // List of files to remove, for delta updates
 
+  // Persisted FULL (no-delta) sizes in bytes. Immutable once imported, so the
+  // client version-list endpoint reads these columns instead of re-parsing the
+  // manifest on every request — that recompute raced the client's 15s timeout on
+  // a cold cache and made installs flaky. Null on rows imported before this
+  // existed; backfilled lazily the first time a size is computed for the row.
+  installSize  BigInt?
+  downloadSize BigInt?
+
   versionIndex Int
   delta        Boolean @default(false)
 

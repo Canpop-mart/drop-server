@@ -140,6 +140,27 @@ export default defineClientEventHandler(async (h3) => {
           size = null;
         }
 
+        // Never drop a version just because its size couldn't be computed. The
+        // delta (previous set) is the slow/failure-prone path, so fall back to
+        // the full download size, then to the on-disk size. A size hiccup must
+        // not make an installed game report "no supported versions".
+        if (!size && query.previous) {
+          size = await gameSizeManager.getVersionSize(v.versionId);
+        }
+        if (!size) {
+          const diskSize = await gameSizeManager.getVersionDiskSize(
+            v.versionId,
+          );
+          if (diskSize != null)
+            size = {
+              versionId: v.versionId,
+              installSize: diskSize,
+              downloadSize: diskSize,
+            };
+        }
+
+        // Only a version with no readable manifest at all (a broken import) is
+        // genuinely not installable — the sole remaining reason to omit it.
         if (!size) return [];
 
         return platformOptions

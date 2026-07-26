@@ -16,8 +16,15 @@ export type GameSizeBreakdown = {
 };
 
 class GameSizeManager {
-  private gameVersionsSizesCache =
-    cacheHandler.createCache<GameVersionSize>("versionSizes");
+  // Version sizes are effectively immutable (a version's manifest never changes,
+  // and a delta size for a fixed (version, previous) pair is stable too), so
+  // cache them for a long time rather than the default 5 minutes. Full sizes are
+  // also persisted on the GameVersion row (see getVersionSize) and survive
+  // restarts, which the in-memory cache does not.
+  private gameVersionsSizesCache = cacheHandler.createCache<GameVersionSize>(
+    "versionSizes",
+    7 * 24 * 60 * 60 * 1000, // 7 days
+  );
   private gameBreakdownCache =
     cacheHandler.createCache<GameSizeBreakdown>("gameBreakdown");
   // Disk size is immutable per version (the manifest never changes once
@@ -39,6 +46,23 @@ class GameSizeManager {
     versionId: string,
     previousId?: string,
   ): Promise<GameVersionSize | null> {
+    // Full (no-delta) sizes are immutable once imported and are persisted on the
+    // row, which survives restarts and cache expiry. Prefer them so the common
+    // fresh-install case never re-parses the manifest on the request path (that
+    // recompute is what raced the client's 15s timeout and made installs flaky).
+    if (!previousId) {
+      const row = await prisma.gameVersion.findUnique({
+        where: { versionId },
+        select: { installSize: true, downloadSize: true },
+      });
+      if (row?.installSize != null && row?.downloadSize != null)
+        return {
+          versionId,
+          installSize: Number(row.installSize),
+          downloadSize: Number(row.downloadSize),
+        };
+    }
+
     const key = this.gameVersionSizeCacheKey(versionId, previousId);
     if (await this.gameVersionsSizesCache.has(key))
       return await this.gameVersionsSizesCache.get(key);
@@ -53,6 +77,22 @@ class GameSizeManager {
         versionId,
       } satisfies GameVersionSize;
       await this.gameVersionsSizesCache.set(key, result);
+      // Backfill the immutable full size onto the row so later lookups skip the
+      // manifest parse entirely (self-healing for versions imported before these
+      // columns existed).
+      if (!previousId) {
+        try {
+          await prisma.gameVersion.update({
+            where: { versionId },
+            data: {
+              installSize: BigInt(installSize),
+              downloadSize: BigInt(downloadSize),
+            },
+          });
+        } catch {
+          // Non-critical: the value is cached; persistence retries next time.
+        }
+      }
       return result;
     } catch {
       return null;
