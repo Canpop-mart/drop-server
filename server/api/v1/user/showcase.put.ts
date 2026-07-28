@@ -6,7 +6,7 @@ import prisma from "~/server/internal/db/database";
 const MAX_SHOWCASE_ITEMS = 12;
 
 const ShowcaseItem = type({
-  type: "'FavoriteGame' | 'Achievement' | 'Review' | 'GameStats' | 'Custom'",
+  type: "'FavoriteGame' | 'Achievement' | 'GameStats' | 'Custom'",
   gameId: "string | null | undefined",
   itemId: "string | null | undefined",
   title: "string | undefined",
