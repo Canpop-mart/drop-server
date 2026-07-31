@@ -14,12 +14,18 @@ shamefullyHoist: true
 
 overrides:
   vue3-carousel-nuxt>vue3-carousel: "^0.16.0"
-  # Dependabot 2026-06 — scoped per major so unrelated version lines are not
-  # force-bumped. Deep nuxt/nitro/vite/build-chain transitive deps. A few
-  # advisories are intentionally NOT overridden: nanotar (no fix published),
-  # lodash/lodash-es ("4.18.0" is not a real release), file-type/diff
-  # (cross-major bump, too risky to force on a transitive dep).
-  "@hono/node-server@<1.19.13": ">=1.19.13"
+  # Dependabot 2026-06 and 2026-07 - version ranges are scoped per major so
+  # unrelated version lines are not force-bumped. Deep nuxt/nitro/vite build
+  # chain transitive deps. Two advisories are intentionally NOT overridden:
+  # nanotar (advisory declares no patched version; 0.3.0 exists but is not an
+  # upstream-confirmed fix) and file-type (fix needs a cross-major 18 -> 21
+  # bump, too risky to force on a transitive dep). lodash/lodash-es are now
+  # fixed (a real 4.18.x release has since shipped) and diff is now an in-major
+  # 8.0.2 -> 8.0.3 bump.
+  "@babel/core@<7.29.6": ">=7.29.6 <8"
+  # Bare-name key so every @hono/node-server instance moves; the sole copy is
+  # 2.0.x, capped <3 to stay in the 2.x line the consumer expects.
+  "@hono/node-server": ">=2.0.10 <3"
   # Cap ajv at the 6.x line. A bare ">=6.14.0" resolves to the newest match
   # (ajv 8.x, since the range spans majors), which @eslint/eslintrc cannot
   # use — it calls ajv 6's `missingRefs` option and crashes `eslint .`. The
@@ -28,19 +34,32 @@ overrides:
   ajv@<6.14.0: ">=6.14.0 <7"
   brace-expansion@<1.1.13: ">=1.1.13"
   brace-expansion@>=2.0.0 <2.0.3: ">=2.0.3"
+  brace-expansion@>=5.0.0 <5.0.7: ">=5.0.7"
   defu@<=6.1.4: ">=6.1.5"
   devalue@<5.8.1: ">=5.8.1"
+  diff@>=8.0.0 <8.0.3: ">=8.0.3 <9"
+  dompurify@<3.4.12: ">=3.4.12"
   effect@<3.20.0: ">=3.20.0"
+  esbuild@>=0.27.3 <0.28.1: ">=0.28.1 <0.29"
   flatted@<3.4.2: ">=3.4.2"
   h3@<1.15.9: ">=1.15.9"
-  hono@<4.12.18: ">=4.12.18"
-  immutable@>=5.0.0 <5.1.5: ">=5.1.5"
+  hono@<4.12.27: ">=4.12.27"
+  immutable@>=5.0.0 <5.1.8: ">=5.1.8"
+  js-yaml@>=4.0.0 <4.3.0: ">=4.3.0 <5"
+  launch-editor@<2.14.1: ">=2.14.1"
+  lodash@<4.18.0: ">=4.18.0"
+  lodash-es@<4.18.0: ">=4.18.0"
   minimatch@<3.1.4: ">=3.1.4"
   minimatch@>=5.0.0 <5.1.8: ">=5.1.8"
   minimatch@>=9.0.0 <9.0.7: ">=9.0.7"
   minimatch@>=10.0.0 <10.2.3: ">=10.2.3"
   nitropack@<2.13.4: ">=2.13.4"
   node-forge@<1.4.0: ">=1.4.0"
+  # drop-base (my-nuxt-layer) pins nuxt ^3.14.1592, which pulled a second,
+  # older nuxt 3.20.1 sub-tree. A bare nuxt override lifts every nuxt instance
+  # to the patched 3.21.x line; its @nuxt/* deps (kit/schema/nitro-server/
+  # vite-builder) cascade with it. Capped <4 to stay off nuxt 4.
+  nuxt: ">=3.21.7 <4"
   picomatch@<2.3.2: ">=2.3.2"
   picomatch@>=4.0.0 <4.0.4: ">=4.0.4"
   postcss@<8.5.10: ">=8.5.10"
@@ -48,13 +67,19 @@ overrides:
   rollup@>=4.0.0 <4.59.0: ">=4.59.0"
   serialize-javascript@>=7.0.0 <7.0.5: ">=7.0.5"
   seroval@<1.4.1: ">=1.4.1"
+  sharp@<0.35.0: ">=0.35.0 <0.36"
+  shell-quote@<1.9.0: ">=1.9.0"
   simple-git@<3.36.0: ">=3.36.0"
   srvx@<0.11.13: ">=0.11.13"
-  svgo@>=3.0.0 <3.3.3: ">=3.3.3"
-  tar@>=7.0.0 <7.5.11: ">=7.5.11"
-  undici@>=7.0.0 <7.24.0: ">=7.24.0"
+  # Bare-name key: the two svgo copies (@nuxt/image, postcss-svgo) are both
+  # 4.0.x and a scoped @4 selector missed one. Only 4.x is in the tree, so the
+  # <5 cap keeps this off any future svgo 5 without a cross-major force.
+  svgo: ">=4.0.2 <5"
+  tar@>=7.0.0 <7.5.21: ">=7.5.21"
+  undici@>=7.0.0 <7.28.0: ">=7.28.0 <8"
   unhead@<2.1.13: ">=2.1.13"
   uuid@<11.1.1: ">=11.1.1"
+  valibot@<1.4.2: ">=1.4.2"
   vite@>=7.0.0 <=7.3.1: ">=7.3.2"
   ws@>=8.0.0 <8.20.1: ">=8.20.1"
   yaml@>=2.0.0 <2.8.3: ">=2.8.3"
