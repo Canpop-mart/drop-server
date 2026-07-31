@@ -1026,8 +1026,8 @@
     "tabs": {
       "achievements": "Achievements",
       "leaderboards": "Leaderboards",
-      "similar": "Similar Games",
-      "mods": "Mods"
+      "mods": "Mods",
+      "similar": "Similar Games"
     },
     "tags": "Tags",
     "title": "Store",

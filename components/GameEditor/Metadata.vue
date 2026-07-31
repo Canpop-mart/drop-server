@@ -357,7 +357,10 @@
         </div>
 
         <!-- Parent game (mods only) -->
-        <div v-if="game.type === 'Mod'" class="mt-8 border-t border-zinc-800 pt-6">
+        <div
+          v-if="game.type === 'Mod'"
+          class="mt-8 border-t border-zinc-800 pt-6"
+        >
           <div class="border-b border-zinc-800 pb-3">
             <h3
               class="text-base font-semibold font-display leading-6 text-zinc-100"
@@ -375,7 +378,9 @@
             class="mt-3 flex items-center gap-3 rounded-lg bg-zinc-800/50 p-3 ring-1 ring-white/5"
           >
             <PuzzlePieceIcon class="size-5 text-blue-400 shrink-0" />
-            <p class="min-w-0 flex-1 text-sm font-medium text-zinc-100 truncate">
+            <p
+              class="min-w-0 flex-1 text-sm font-medium text-zinc-100 truncate"
+            >
               {{ game.parentGame.mName }}
             </p>
             <button

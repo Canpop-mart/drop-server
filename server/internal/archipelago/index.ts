@@ -215,10 +215,14 @@ class ArchipelagoManager {
       // Joined previously but the IP hadn't landed yet — try again.
       const serverAddress = await this.resolveServerAddress(existing.networkId);
       if (!serverAddress) return existing;
-      return await prisma.archipelagoNetwork.update({
+      // updateMany (not update) per the drop/no-prisma-delete rule. This is the
+      // row we just findUnique'd, so merging the resolved address onto it is
+      // exactly what update() would have returned.
+      await prisma.archipelagoNetwork.updateMany({
         where: { id: NETWORK_ROW_ID },
         data: { serverAddress },
       });
+      return { ...existing, serverAddress };
     }
 
     let networkId: string | undefined;
@@ -332,7 +336,10 @@ class ArchipelagoManager {
       where: { shortCode: opts.shortCode.toUpperCase() },
     });
     if (!session)
-      throw createError({ statusCode: 404, statusMessage: "session_not_found" });
+      throw createError({
+        statusCode: 404,
+        statusMessage: "session_not_found",
+      });
     if (session.status === "Closed")
       throw createError({
         statusCode: 410,
@@ -364,7 +371,10 @@ class ArchipelagoManager {
       },
     });
     if (!session)
-      throw createError({ statusCode: 404, statusMessage: "session_not_found" });
+      throw createError({
+        statusCode: 404,
+        statusMessage: "session_not_found",
+      });
 
     const isMember = session.slots.some(
       (s) => s.clientId === requestingClientId,
@@ -454,21 +464,22 @@ class ArchipelagoManager {
         statusMessage: `The slot name "${clash}" is already used by someone else in this session. Pick a different \`name\`.`,
       });
 
-    return await prisma.archipelagoSlot.update({
-      where: {
-        sessionId_clientId: {
-          sessionId: opts.sessionId,
-          clientId: opts.clientId,
-        },
-      },
-      data: {
-        yamlText: opts.yamlText,
-        slotName: summary.slotNames.join(", "),
-        game: summary.games.join(", "),
-        validationError: null,
-        uploadedAt: new Date(),
-      },
+    const data = {
+      yamlText: opts.yamlText,
+      slotName: summary.slotNames.join(", "),
+      game: summary.games.join(", "),
+      validationError: null,
+      uploadedAt: new Date(),
+    };
+    // updateMany (not update) per the drop/no-prisma-delete rule. The slot was
+    // findUnique'd above, so returning it merged with `data` mirrors what
+    // update() returned. The [sessionId, clientId] pair is unique, so the
+    // field-form where matches the same single row.
+    await prisma.archipelagoSlot.updateMany({
+      where: { sessionId: opts.sessionId, clientId: opts.clientId },
+      data,
     });
+    return { ...slot, ...data };
   }
 
   /**
@@ -486,9 +497,14 @@ class ArchipelagoManager {
       include: { slots: { orderBy: { joinedAt: "asc" } } },
     });
     if (!session)
-      throw createError({ statusCode: 404, statusMessage: "session_not_found" });
+      throw createError({
+        statusCode: 404,
+        statusMessage: "session_not_found",
+      });
 
-    const usable = session.slots.filter((s) => s.yamlText && !s.validationError);
+    const usable = session.slots.filter(
+      (s) => s.yamlText && !s.validationError,
+    );
     if (usable.length === 0)
       throw createError({
         statusCode: 400,
@@ -518,7 +534,10 @@ class ArchipelagoManager {
       where: { id: opts.sessionId },
     });
     if (!session)
-      throw createError({ statusCode: 404, statusMessage: "session_not_found" });
+      throw createError({
+        statusCode: 404,
+        statusMessage: "session_not_found",
+      });
     if (session.hostClientId !== opts.clientId)
       throw createError({
         statusCode: 403,
@@ -534,10 +553,13 @@ class ArchipelagoManager {
         statusMessage: "That should look like `10.243.0.1:38281`.",
       });
 
-    return await prisma.archipelagoSession.update({
+    // updateMany (not update) per the drop/no-prisma-delete rule; the session
+    // was findUnique'd above, so the merged object is what update() returned.
+    await prisma.archipelagoSession.updateMany({
       where: { id: opts.sessionId },
       data: { connectAddress: cleaned, status: "Running" },
     });
+    return { ...session, connectAddress: cleaned, status: "Running" };
   }
 
   /**
@@ -551,7 +573,7 @@ class ArchipelagoManager {
     if (!session) return;
 
     if (session.hostClientId === opts.clientId) {
-      await prisma.archipelagoSession.update({
+      await prisma.archipelagoSession.updateMany({
         where: { id: opts.sessionId },
         data: { status: "Closed" },
       });
@@ -559,12 +581,10 @@ class ArchipelagoManager {
     }
 
     await prisma.archipelagoSlot
-      .delete({
+      .deleteMany({
         where: {
-          sessionId_clientId: {
-            sessionId: opts.sessionId,
-            clientId: opts.clientId,
-          },
+          sessionId: opts.sessionId,
+          clientId: opts.clientId,
         },
       })
       .catch(() => {});

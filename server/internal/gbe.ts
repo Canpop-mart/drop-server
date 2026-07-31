@@ -11,7 +11,6 @@
 import fs from "fs";
 import path from "path";
 import { createHash } from "crypto";
-import { logger } from "~/server/internal/logging";
 
 // ── SSE → GBE replacement ─────────────────────────────────────────────────
 

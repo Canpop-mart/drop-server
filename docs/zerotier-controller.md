@@ -7,7 +7,7 @@ works (**Milestone A**). The room API + UX that call it come later (Milestones B
 
 ## Why this needs no special privileges
 
-A ZeroTier controller only **mints and authorizes** networks for *other* nodes. It never
+A ZeroTier controller only **mints and authorizes** networks for _other_ nodes. It never
 **joins** a network itself, so it never creates a TUN interface — meaning the sidecar needs
 **no `/dev/net/tun` and no `NET_ADMIN`**. Members reach the controller over ZeroTier's free
 public roots (addressed by the controller's node ID, which is the first 10 hex of every
@@ -25,23 +25,23 @@ it. For your live NAS compose (`/volume1/docker/media-viewing/…`), add this se
 point the `drop` service at it:
 
 ```yaml
-  zerotier-controller:
-    image: zyclonite/zerotier:latest   # pin a tag once verified
-    container_name: drop-zerotier-controller
-    restart: unless-stopped
-    # Fallback ONLY if the container won't start without a tun device:
-    # devices: [ "/dev/net/tun" ]
-    # cap_add: [ "NET_ADMIN" ]
-    volumes:
-      - ./zerotier:/var/lib/zerotier-one
+zerotier-controller:
+  image: zyclonite/zerotier:latest # pin a tag once verified
+  container_name: drop-zerotier-controller
+  restart: unless-stopped
+  # Fallback ONLY if the container won't start without a tun device:
+  # devices: [ "/dev/net/tun" ]
+  # cap_add: [ "NET_ADMIN" ]
+  volumes:
+    - ./zerotier:/var/lib/zerotier-one
 ```
 
 And on the `drop` service, add the two env vars (token filled in step 3):
 
 ```yaml
-    environment:
-      - ZEROTIER_CONTROLLER_URL=http://zerotier-controller:9993
-      - ZEROTIER_AUTH_TOKEN=            # paste in step 3
+environment:
+  - ZEROTIER_CONTROLLER_URL=http://zerotier-controller:9993
+  - ZEROTIER_AUTH_TOKEN= # paste in step 3
 ```
 
 Bring it up: `sudo docker compose up -d zerotier-controller`

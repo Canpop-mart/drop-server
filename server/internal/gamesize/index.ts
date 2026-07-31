@@ -82,7 +82,7 @@ class GameSizeManager {
       // columns existed).
       if (!previousId) {
         try {
-          await prisma.gameVersion.update({
+          await prisma.gameVersion.updateMany({
             where: { versionId },
             data: {
               installSize: BigInt(installSize),

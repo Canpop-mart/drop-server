@@ -148,9 +148,9 @@
             Required mods (optional)
           </label>
           <p class="text-zinc-400 text-xs">
-            Other mods that must be installed for this one to work (e.g. a loader
-            like SMAPI). Drop installs them automatically when someone installs
-            this mod.
+            Other mods that must be installed for this one to work (e.g. a
+            loader like SMAPI). Drop installs them automatically when someone
+            installs this mod.
           </p>
           <div class="mt-2 flex flex-col gap-y-1.5">
             <label

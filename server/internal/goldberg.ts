@@ -463,7 +463,9 @@ export async function setupGoldberg(
       } else {
         const dlls = findAllSteamApiDlls(versionDir);
         if (dlls.length === 0) {
-          log.info(`[GBE] No steam_api DLL under ${versionDir} — nothing to swap.`);
+          log.info(
+            `[GBE] No steam_api DLL under ${versionDir} — nothing to swap.`,
+          );
         } else if (dlls.length > 1) {
           log.info(
             `[GBE] ${dlls.length} steam_api DLLs found (multi-arch) — swapping each.`,

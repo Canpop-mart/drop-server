@@ -16,7 +16,10 @@ export default defineEventHandler(async (h3) => {
 
   const idParam = getRouterParam(h3, "id");
   if (!idParam)
-    throw createError({ statusCode: 400, statusMessage: "No userId in route." });
+    throw createError({
+      statusCode: 400,
+      statusMessage: "No userId in route.",
+    });
 
   const user = await prisma.user.findFirst({
     where: { OR: [{ id: idParam }, { username: idParam }] },

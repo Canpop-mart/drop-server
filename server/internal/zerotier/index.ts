@@ -173,7 +173,8 @@ class RoomManager {
 
     throw createError({
       statusCode: 503,
-      statusMessage: "Could not allocate a co-op room right now — please try again.",
+      statusMessage:
+        "Could not allocate a co-op room right now — please try again.",
     });
   }
 
@@ -244,7 +245,7 @@ class RoomManager {
         statusCode: 403,
         statusMessage: "Only the host can set the room address.",
       });
-    await prisma.room.update({
+    await prisma.room.updateMany({
       where: { id: opts.roomId },
       data: { hostAddress: opts.address },
     });
