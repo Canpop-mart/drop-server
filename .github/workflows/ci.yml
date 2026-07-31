@@ -1,12 +1,11 @@
 name: CI
 
+# Run typecheck + lint once per release (matching release.yml) plus on demand,
+# rather than on every push/PR, to keep the Actions tab clear.
 on:
-  push:
-    branches:
-      - develop
-  pull_request:
-    branches:
-      - develop
+  workflow_dispatch: {}
+  release:
+    types: [published]
 
 permissions:
   contents: read
