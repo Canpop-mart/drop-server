@@ -1,10 +1,11 @@
 import { ArkErrors, type } from "arktype";
-import { GameType, Platform } from "~/prisma/client/enums";
+import { GameType, LibraryBackend, Platform } from "~/prisma/client/enums";
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import { requireRouterParam } from "~/server/arktype";
 import prisma from "~/server/internal/db/database";
 import type { GameVersionSize } from "~/server/internal/gamesize";
 import gameSizeManager from "~/server/internal/gamesize";
+import { createEmulatorResolver } from "~/server/internal/library/emulatorResolution";
 
 type VersionDownloadOption = {
   gameId: string;
@@ -68,19 +69,18 @@ export default defineClientEventHandler(async (h3) => {
       launches: {
         select: {
           platform: true,
+          // ROM path — used to re-derive the emulator by extension when the
+          // stored emulator link was wiped (SET NULL on emulator re-version).
+          command: true,
           emulator: {
             select: {
+              // Only the emulator GAME id + pinned launch name are read; the
+              // emulator's CURRENT version is resolved fresh (see below), never
+              // the pinned one, so a re-versioned emulator does not orphan ROMs.
+              name: true,
               gameVersion: {
                 select: {
-                  game: {
-                    select: {
-                      mName: true,
-                      mShortDescription: true,
-                      mIconObjectId: true,
-                      id: true,
-                    },
-                  },
-                  versionId: true,
+                  game: { select: { id: true } },
                 },
               },
             },
@@ -105,9 +105,15 @@ export default defineClientEventHandler(async (h3) => {
   // a mod so we can offer such versions on every platform below.
   const game = await prisma.game.findUnique({
     where: { id },
-    select: { type: true },
+    select: { type: true, library: { select: { backend: true } } },
   });
   const isMod = game?.type === GameType.Mod;
+  // Console ROMs live in FlatFilesystem libraries; only they re-derive a wiped
+  // emulator link by ROM extension, so PC games skip the emulator scan entirely.
+  const isConsole = game?.library?.backend === LibraryBackend.FlatFilesystem;
+
+  // Request-scoped: memoises emulator lookups across every version + launch.
+  const emulatorResolver = createEmulatorResolver();
 
   const versions: Array<VersionDownloadOption> = (
     await Promise.all(
@@ -121,18 +127,37 @@ export default defineClientEventHandler(async (h3) => {
           if (!platformOptions.has(launch.platform))
             platformOptions.set(launch.platform, []);
 
-          if ("emulator" in launch && launch.emulator) {
-            const old = platformOptions.get(launch.platform)!;
-            const gv = launch.emulator.gameVersion;
-            old.push({
-              gameId: gv.game.id,
-              versionId: gv.versionId,
-              name: gv.game.mName,
-              iconObjectId: gv.game.mIconObjectId,
-              shortDescription: gv.game.mShortDescription,
-              size: (await gameSizeManager.getVersionSize(gv.versionId))!,
-            });
-          }
+          // Only launches (not setups) can require an emulator.
+          if (!("emulator" in launch)) continue;
+
+          const emulatorGameId = launch.emulator?.gameVersion.game.id ?? null;
+          // Nothing to resolve for a PC game; a wiped link is only worth
+          // re-deriving for a console ROM.
+          if (!emulatorGameId && !isConsole) continue;
+
+          // Resolve the emulator's CURRENT version (never the pinned one), and
+          // re-derive it from the ROM extension when the link was wiped.
+          const resolved = await emulatorResolver.resolve({
+            platform: launch.platform,
+            command: launch.command,
+            emulatorGameId,
+            emulatorLaunchName: launch.emulator?.name ?? null,
+          });
+          if (!resolved) continue;
+
+          // Skip the dependency rather than emit a broken (sizeless) entry if
+          // the emulator version's size can't be computed.
+          const size = await gameSizeManager.getVersionSize(resolved.versionId);
+          if (!size) continue;
+
+          platformOptions.get(launch.platform)!.push({
+            gameId: resolved.gameId,
+            versionId: resolved.versionId,
+            name: resolved.game.mName,
+            iconObjectId: resolved.game.mIconObjectId,
+            shortDescription: resolved.game.mShortDescription,
+            size,
+          });
         }
 
         // A launch-less mod version is a pure overlay — offer it on every
