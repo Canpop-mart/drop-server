@@ -60,6 +60,24 @@ function resolveLocalised(
   return fallback;
 }
 
+/**
+ * Resolves a Goldberg achievement icon reference to a loadable URL.
+ *
+ * Steam's GetSchemaForGame returns `icon` as a full https:// URL, but a
+ * crack's local achievements.json stores only the emulator-relative path
+ * (e.g. `img/<hash>.jpg`), which 404s on any web server. For that local
+ * case we strip the directory prefix and rebuild the public Steam CDN URL
+ * (same base + path shape used for game icons in metadata/steam.ts). A
+ * fake / local-only AppID will still 404 there — the UI falls back to a
+ * trophy glyph in that case.
+ */
+function resolveGoldbergIcon(icon: string | undefined, appId: string): string {
+  if (!icon) return "";
+  if (/^https?:\/\//.test(icon)) return icon;
+  const file = icon.replace(/^.*[\\/]/, "");
+  return `https://cdn.fastly.steamstatic.com/steamcommunity/public/images/apps/${appId}/${file}`;
+}
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export interface GoldbergAchievementDef {
@@ -557,8 +575,8 @@ export async function setupGoldberg(
           // DB column is a String (Prisma rejects an object).
           title: resolveLocalised(def.displayName, def.name),
           description: resolveLocalised(def.description, ""),
-          iconUrl: def.icon ?? "",
-          iconLockedUrl: def.icon_gray ?? "",
+          iconUrl: resolveGoldbergIcon(def.icon, appId),
+          iconLockedUrl: resolveGoldbergIcon(def.icon_gray, appId),
           displayOrder: i,
           globalPercent: def.globalPercent ?? null,
         })),

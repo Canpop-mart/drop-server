@@ -338,6 +338,8 @@ export default defineNuxtConfig({
           "https://images.pcgamingwiki.com",
           "https://images.igdb.com",
           "https://*.steamstatic.com",
+          "https://*.akamaihd.net",
+          "https://media.steampowered.com",
           "https://media.retroachievements.org",
         ],
         // Script sources:

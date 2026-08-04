@@ -16,9 +16,10 @@
         class="pointer-events-auto flex items-center gap-3 px-4 py-3 bg-zinc-900 ring-1 ring-yellow-500/30 rounded-xl shadow-2xl shadow-yellow-500/10 max-w-sm"
       >
         <img
-          v-if="toast.iconUrl"
+          v-if="toast.iconUrl && !iconError"
           :src="toast.iconUrl"
           class="size-12 rounded-lg shrink-0"
+          @error="iconError = true"
         />
         <div
           v-else
@@ -55,6 +56,8 @@ interface AchievementToastItem {
 }
 
 const toasts = ref<AchievementToastItem[]>([]);
+// One icon per toast — fall back to the trophy glyph if the URL fails to load.
+const iconError = ref(false);
 const notifications = useNotifications();
 
 watch(

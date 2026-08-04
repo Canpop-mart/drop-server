@@ -160,9 +160,10 @@
             class="shrink-0 size-12 rounded-lg overflow-hidden bg-zinc-700/50 flex items-center justify-center"
           >
             <img
-              v-if="item.achievement?.iconUrl"
+              v-if="item.achievement?.iconUrl && !achievementIconErrors[item.id]"
               :src="item.achievement.iconUrl"
               class="size-full object-cover"
+              @error="achievementIconErrors[item.id] = true"
             />
             <TrophyIcon v-else class="size-6 text-yellow-500" />
           </div>
