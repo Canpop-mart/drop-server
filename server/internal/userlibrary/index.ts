@@ -47,13 +47,26 @@ class UserLibraryManager {
   }
 
   async fetchLibrary(userId: string) {
-    const userLibraryId = await this.fetchUserLibrary(userId);
-    const userLibrary = await prisma.collection.findUnique({
-      where: { id: userLibraryId },
+    // Read across ALL of the user's default collections, not just one. Nothing
+    // in the schema enforces a single default per user (there is no unique index
+    // on userId + isDefault), and the find-or-create in `fetchUserLibrary` has a
+    // race that can leave a user with two "default" libraries. Games added while
+    // the other default was the active one then vanished from this view even
+    // though the store still reported them as "in library" — the store treats
+    // membership as belonging to ANY of the user's collections
+    // (store/recommended.get.ts), so the two disagreed. Aggregating every
+    // default reconciles them.
+    const primaryId = await this.fetchUserLibrary(userId);
+    const defaults = await prisma.collection.findMany({
+      where: { userId, isDefault: true },
     });
-    if (!userLibrary) throw new Error("Failed to load user library");
+    const primary = defaults.find((c) => c.id === primaryId) ?? defaults[0];
+    if (!primary) throw new Error("Failed to load user library");
 
-    return await this.attachEntries(userLibrary);
+    return await this.attachEntries(
+      primary,
+      defaults.map((c) => c.id),
+    );
   }
 
   // Will not return the default library
@@ -118,28 +131,40 @@ class UserLibraryManager {
   }
 
   /**
-   * Attaches entries with games to a single collection, avoiding lateral joins.
+   * Attaches entries with games to a collection, avoiding lateral joins.
+   *
+   * `entryCollectionIds` defaults to the collection's own id, but callers may
+   * pass several ids to aggregate entries from more than one collection into a
+   * single view — `fetchLibrary` uses this to merge a user's default
+   * collections when a duplicate exists. Games are de-duplicated by id so a
+   * game present in two of those collections is not listed twice.
    */
   private async attachEntries<T extends { id: string }>(
     collection: T,
+    entryCollectionIds: string[] = [collection.id],
   ): Promise<T & { entries: (CollectionEntry & { game: Game })[] }> {
     const entries = await prisma.collectionEntry.findMany({
-      where: { collectionId: collection.id },
+      where: { collectionId: { in: entryCollectionIds } },
     });
 
-    const gameIds = entries.map((e) => e.gameId);
+    const gameIds = [...new Set(entries.map((e) => e.gameId))];
     const games =
       gameIds.length > 0
         ? await prisma.game.findMany({ where: { id: { in: gameIds } } })
         : [];
     const gameMap = new Map(games.map((g) => [g.id, g]));
 
-    return {
-      ...collection,
-      entries: entries
-        .filter((e) => gameMap.has(e.gameId))
-        .map((e) => ({ ...e, game: gameMap.get(e.gameId)! })),
-    };
+    const seen = new Set<string>();
+    const attachedEntries: (CollectionEntry & { game: Game })[] = [];
+    for (const entry of entries) {
+      if (seen.has(entry.gameId)) continue;
+      const game = gameMap.get(entry.gameId);
+      if (!game) continue;
+      seen.add(entry.gameId);
+      attachedEntries.push({ ...entry, game });
+    }
+
+    return { ...collection, entries: attachedEntries };
   }
 
   async collectionAdd(gameId: string, collectionId: string, userId: string) {
