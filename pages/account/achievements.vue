@@ -35,13 +35,31 @@
         </div>
         <div>
           <p class="text-sm font-medium text-zinc-100">RetroAchievements</p>
-          <p v-if="raAccount" class="text-xs text-green-400">
-            Connected as {{ raAccount.externalId }}
-          </p>
+          <template v-if="raAccount">
+            <p class="text-xs text-green-400">
+              Connected as {{ raAccount.externalId }}
+            </p>
+            <!-- RA's login token is derived from the password, lasts about 45
+                 to 60 days and cannot be renewed. Nothing on the server can
+                 tell that it has died, and the desktop client only finds out
+                 by reading RetroArch's log after a session, so say up front
+                 that this needs redoing now and then. -->
+            <p class="text-xs text-zinc-500 mt-0.5">
+              The in-game login expires after about two months. If achievements
+              stop unlocking while you play, sign in again.
+            </p>
+          </template>
           <p v-else class="text-xs text-zinc-500">Not connected</p>
         </div>
       </div>
       <div class="flex items-center gap-2">
+        <button
+          v-if="raAccount"
+          class="px-3 py-1.5 text-sm text-zinc-300 hover:text-zinc-100 transition-colors"
+          @click="openReconnect"
+        >
+          Sign in again
+        </button>
         <button
           v-if="raAccount"
           class="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 transition-colors"
@@ -511,6 +529,18 @@ try {
     accounts?.find((a) => a.provider === "RetroAchievements") ?? null;
 } catch {
   // ignore – user may not have any linked accounts
+}
+
+// Reconnecting is the same PUT as the first link: RA has no refresh endpoint,
+// so a new token can only come from the password. The username is prefilled;
+// the Web API key has to be entered again because the server never sends it
+// back to the browser.
+function openReconnect() {
+  raUsername.value = raAccount.value?.externalId ?? "";
+  raApiKey.value = "";
+  raPassword.value = "";
+  raLinkError.value = "";
+  raDialogOpen.value = true;
 }
 
 async function linkRA() {
