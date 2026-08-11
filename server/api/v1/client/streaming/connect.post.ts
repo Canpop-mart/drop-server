@@ -49,7 +49,10 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   if (session.status === "Stopped")
     throw createError({
       statusCode: 410,
-      statusMessage: "Session has ended.",
+      // The host's own words when it gave up, so a client that raced ahead to
+      // connect gets the same reason the session list would have shown it.
+      statusMessage: session.error ?? "Session has ended.",
+      data: { error: session.error },
     });
 
   return {
@@ -61,5 +64,6 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     hostLocalIp: session.hostLocalIp,
     hostExternalIp: session.hostExternalIp,
     pairingPin: session.pairingPin,
+    error: session.error,
   };
 });

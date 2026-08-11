@@ -41,6 +41,13 @@ model StreamingSession {
     /// settings take effect during streaming.
     gameConfig String?
 
+    /// Why the session ended badly, in words meant for the person who pressed
+    /// Play. Set by the host when it gives up (Sunshine missing, firewall shut,
+    /// game wouldn't launch) so the requesting device can say what happened
+    /// instead of waiting out the stale sweep and guessing. Null on a normal
+    /// stop.
+    error String?
+
     createdAt DateTime @default(now()) @db.Timestamptz(6)
     updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
