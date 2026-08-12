@@ -47,7 +47,51 @@ model CloudSave {
     /// Shown in the "deleted from <Marts Desktop>" hint in the UI.
     deletedFrom String?
 
+    /// Previous versions of this file, newest first. Capped at
+    /// MAX_SAVE_REVISIONS by the writer — see internal/cloudsaves/revisions.ts.
+    revisions CloudSaveRevision[]
+
     @@unique([gameId, userId, filename])
     @@index([gameId, userId])
     @@index([userId, deletedAt])
+}
+
+/// A copy of a CloudSave's bytes taken immediately before an upload
+/// overwrote them.
+///
+/// This table is the only thing that makes an overwrite recoverable. The
+/// live row holds exactly one blob, so without a revision the previous
+/// bytes cease to exist the moment the upsert commits — and a save file
+/// has no second copy anywhere.
+///
+/// Written inside the same transaction as the upsert (see
+/// internal/cloudsaves/revisions.ts) and pruned to the newest
+/// MAX_SAVE_REVISIONS per parent. Cascades with the parent, so the
+/// tombstone GC that hard-deletes a CloudSave reclaims its history too.
+model CloudSaveRevision {
+    id String @id @default(uuid())
+
+    saveId String
+    save   CloudSave @relation(fields: [saveId], references: [id], onDelete: Cascade)
+
+    /// Copied verbatim off the parent row as it stood before the overwrite.
+    /// saveType is included because an upload may change it (a "state"
+    /// filename being reused for a "save"), and a restore has to put the
+    /// row back exactly as it was.
+    saveType String
+    size     Int
+    data     Bytes
+    dataHash String @default("")
+
+    /// The parent's uploadedFrom for this version — the machine these
+    /// bytes actually came from, which is what the recovery UI shows.
+    uploadedFrom String @default("")
+
+    /// The parent's clientModifiedAt for this version.
+    clientModifiedAt DateTime
+
+    /// When the copy was taken, i.e. when the newer upload replaced it.
+    supersededAt DateTime @default(now()) @db.Timestamptz(6)
+
+    @@index([saveId, supersededAt])
 }

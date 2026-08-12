@@ -6,6 +6,10 @@ import {
   fetchUserQuota,
   quotaExceededMessage,
 } from "~/server/internal/cloudsaves/quota";
+import {
+  SAVE_WRITE_TRANSACTION_OPTIONS,
+  snapshotSaveRevision,
+} from "~/server/internal/cloudsaves/revisions";
 
 const MAX_SAVE_BYTES = 50 * 1024 * 1024; // 50MiB — matches bulk-upload
 const MAX_FILENAME_LEN = 255;
@@ -156,33 +160,40 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
       ? uploadedFrom.slice(0, MAX_UPLOADED_FROM_LEN)
       : "";
 
-  const result = await prisma.cloudSave.upsert({
-    where: {
-      gameId_userId_filename: { gameId, userId, filename },
-    },
-    create: {
-      gameId,
-      userId,
-      filename,
-      saveType,
-      size: buffer.length,
-      data: buffer,
-      dataHash: hash,
-      uploadedFrom: uploadedFromSafe,
-      clientModifiedAt: clientModifiedAtSafe,
-    },
-    update: {
-      data: buffer,
-      size: buffer.length,
-      saveType,
-      dataHash: hash,
-      uploadedFrom: uploadedFromSafe,
-      clientModifiedAt: clientModifiedAtSafe,
-      // Resurrect tombstoned rows on re-upload (user moved a save back).
-      deletedAt: null,
-      deletedFrom: null,
-    },
-  });
+  // Copy the bytes we're about to overwrite into history first, in the same
+  // transaction as the upsert (mirrors bulk-upload). A crash between the two
+  // would otherwise lose both the old version and the new one.
+  const result = await prisma.$transaction(async (tx) => {
+    await snapshotSaveRevision(tx, { gameId, userId, filename }, hash);
+
+    return await tx.cloudSave.upsert({
+      where: {
+        gameId_userId_filename: { gameId, userId, filename },
+      },
+      create: {
+        gameId,
+        userId,
+        filename,
+        saveType,
+        size: buffer.length,
+        data: buffer,
+        dataHash: hash,
+        uploadedFrom: uploadedFromSafe,
+        clientModifiedAt: clientModifiedAtSafe,
+      },
+      update: {
+        data: buffer,
+        size: buffer.length,
+        saveType,
+        dataHash: hash,
+        uploadedFrom: uploadedFromSafe,
+        clientModifiedAt: clientModifiedAtSafe,
+        // Resurrect tombstoned rows on re-upload (user moved a save back).
+        deletedAt: null,
+        deletedFrom: null,
+      },
+    });
+  }, SAVE_WRITE_TRANSACTION_OPTIONS);
 
   return {
     id: result.id,

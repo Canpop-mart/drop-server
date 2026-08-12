@@ -460,6 +460,11 @@ const scheduledTasks: {
     name: t("tasks.admin.scheduled.cleanupObjectsName"),
     description: t("tasks.admin.scheduled.cleanupObjectsDescription"),
   },
+  "cleanup:cloud-saves": {
+    name: "Purge Deleted Cloud Saves",
+    description:
+      "Hard-deletes cloud saves that were deleted more than 30 days ago, along with their version history, and trims any save holding more than 3 previous versions. Runs automatically every day.",
+  },
   "check:update": {
     name: t("tasks.admin.scheduled.checkUpdateName"),
     description: t("tasks.admin.scheduled.checkUpdateDescription"),

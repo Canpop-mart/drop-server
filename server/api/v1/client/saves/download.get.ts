@@ -1,10 +1,14 @@
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
+import { isReadableSave } from "~/server/internal/cloudsaves/scope";
 
 /**
  * Download a cloud save's data.
  * Query: ?id=xxx (cloud save ID)
  * Returns the raw binary data as base64.
+ *
+ * Readable if the row is yours, or if it is a PC save belonging to any
+ * account on this server — see `internal/cloudsaves/scope.ts`.
  */
 export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const user = await fetchUser();
@@ -26,7 +30,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
 
   // Tombstoned rows are invisible to downloads — a stale client holding an
   // ID from before the delete should get a 404, not the deleted bytes.
-  if (!save || save.userId !== userId || save.deletedAt !== null) {
+  if (!save || !isReadableSave(save, userId) || save.deletedAt !== null) {
     throw createError({ statusCode: 404, statusMessage: "Save not found" });
   }
 

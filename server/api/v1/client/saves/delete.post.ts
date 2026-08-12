@@ -1,5 +1,6 @@
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
+import { isReadableSave } from "~/server/internal/cloudsaves/scope";
 
 /**
  * Soft-delete a cloud save.
@@ -25,6 +26,22 @@ import prisma from "~/server/internal/db/database";
  *                               matters and the hint is just a UX nicety.
  *
  * Re-uploads automatically clear the tombstone (see upload / bulk-upload).
+ *
+ * STRICTLY PER USER, and deliberately out of step with the read endpoints.
+ * `list` / `sync-check` / `download` let any account read any account's
+ * namespaced PC saves (`internal/cloudsaves/scope.ts`), but deleting is a
+ * write and only ever touches the caller's own row.
+ *
+ * `id` therefore identifies the SAVE, not the row to tombstone. The read
+ * endpoints hand the client the winner of a filename collision, which can
+ * belong to another account; scoping the update to `{ id, userId }` then
+ * matched nothing and the user was told "Save not found" while their own copy
+ * sat there untouched. So we resolve `(gameId, filename)` from whatever row
+ * the client names and tombstone the caller's own row for that filename.
+ *
+ * The consequence is unchanged and the client UI states it: deleting a shared
+ * PC save removes your copy only, and if another account still holds an active
+ * row for that filename the save reappears on a later sync.
  */
 export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const user = await fetchUser();
@@ -46,13 +63,24 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     ""
   ).slice(0, 255);
 
-  // Two-step: only tombstone rows owned by this user, and only ones that
-  // aren't already tombstoned (so we don't churn the deletedAt timestamp
-  // when a client retries a delete). `updateMany` is required by the
-  // repo's `drop/no-prisma-delete` lint rule and gives us a rowcount we
-  // can turn into a clean 404.
+  // Which save is this, and is the caller allowed to see it at all? A row the
+  // caller cannot read is a 404 rather than a 403, so the endpoint doesn't
+  // confirm the id exists.
+  const target = await prisma.cloudSave.findUnique({
+    where: { id },
+    select: { gameId: true, userId: true, saveType: true, filename: true },
+  });
+  if (!target || !isReadableSave(target, userId)) {
+    throw createError({ statusCode: 404, statusMessage: "Save not found" });
+  }
+
+  const own = { gameId: target.gameId, userId, filename: target.filename };
+
+  // Only tombstone rows that aren't already tombstoned, so a retried delete
+  // doesn't churn the `deletedAt` timestamp. `updateMany` is required by the
+  // repo's `drop/no-prisma-delete` lint rule and gives us a rowcount.
   const result = await prisma.cloudSave.updateMany({
-    where: { id, userId, deletedAt: null },
+    where: { ...own, deletedAt: null },
     data: {
       deletedAt: new Date(),
       deletedFrom,
@@ -60,17 +88,17 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   });
 
   if (result.count === 0) {
-    // Either the row doesn't exist, doesn't belong to the user, or was
-    // already tombstoned. Distinguish "already gone" from "404" so retries
-    // are idempotent.
-    const exists = await prisma.cloudSave.findFirst({
-      where: { id, userId },
-      select: { id: true, deletedAt: true },
+    const exists = await prisma.cloudSave.findUnique({
+      where: { gameId_userId_filename: own },
+      select: { deletedAt: true },
     });
-    if (exists && exists.deletedAt !== null) {
-      return { deleted: true, alreadyTombstoned: true };
-    }
-    throw createError({ statusCode: 404, statusMessage: "Save not found" });
+    // Already gone: report success so retries are idempotent.
+    if (exists) return { deleted: true, alreadyTombstoned: true };
+    // The caller has no copy of this filename — they were looking at somebody
+    // else's row. Not an error, and specifically not "Save not found": there
+    // is simply nothing of theirs to delete, and saying so is the only honest
+    // answer given the dialog promised to remove their copy only.
+    return { deleted: false, noOwnedCopy: true };
   }
 
   return { deleted: true };

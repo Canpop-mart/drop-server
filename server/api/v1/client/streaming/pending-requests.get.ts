@@ -12,16 +12,25 @@ export default defineClientEventHandler(
   async (_h3, { clientId, fetchUser }) => {
     const user = await fetchUser();
 
-    // Expire old requests (>2 minutes)
+    // Expire old requests (>2 minutes). Every client polls this every 10s, and
+    // an updateMany is a write transaction even when it matches nothing, so
+    // check first — the overwhelmingly common case is zero stale rows and a
+    // count() is a plain read.
     const expireThreshold = new Date(Date.now() - 2 * 60 * 1000);
-    await prisma.streamingSession.updateMany({
-      where: {
-        userId: user.id,
-        status: "Requested",
-        createdAt: { lt: expireThreshold },
-      },
-      data: { status: "Stopped" },
+    const staleFilter = {
+      userId: user.id,
+      status: "Requested" as const,
+      createdAt: { lt: expireThreshold },
+    };
+    const staleCount = await prisma.streamingSession.count({
+      where: staleFilter,
     });
+    if (staleCount > 0) {
+      await prisma.streamingSession.updateMany({
+        where: staleFilter,
+        data: { status: "Stopped" },
+      });
+    }
 
     // Find pending requests targeted at this device.
     // When a stream is requested with a targetClientId, hostClientId is set to the target.

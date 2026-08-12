@@ -8,6 +8,10 @@ import {
   fetchUserQuota,
   quotaExceededMessage,
 } from "~/server/internal/cloudsaves/quota";
+import {
+  SAVE_WRITE_TRANSACTION_OPTIONS,
+  snapshotSaveRevision,
+} from "~/server/internal/cloudsaves/revisions";
 
 const MAX_SAVES_PER_REQUEST = 50;
 const MAX_SAVE_BYTES = 50 * 1024 * 1024; // 50MB
@@ -172,33 +176,40 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
           ? new Date(now)
           : parsedClientModified;
 
-      const result = await prisma.cloudSave.upsert({
-        where: {
-          gameId_userId_filename: { gameId, userId, filename },
-        },
-        create: {
-          gameId,
-          userId,
-          filename,
-          saveType,
-          size: buffer.length,
-          data: buffer,
-          dataHash: hash,
-          uploadedFrom: uploadedFrom || "",
-          clientModifiedAt: clientModifiedAtSafe,
-        },
-        update: {
-          data: buffer,
-          size: buffer.length,
-          saveType,
-          dataHash: hash,
-          uploadedFrom: uploadedFrom || "",
-          clientModifiedAt: clientModifiedAtSafe,
-          // Resurrect tombstoned rows on re-upload.
-          deletedAt: null,
-          deletedFrom: null,
-        },
-      });
+      // Preserve the bytes we're about to destroy, in the same transaction
+      // as the upsert. Split commits would leave a crash window where the
+      // old version is gone and the new one never landed.
+      const result = await prisma.$transaction(async (tx) => {
+        await snapshotSaveRevision(tx, { gameId, userId, filename }, hash);
+
+        return await tx.cloudSave.upsert({
+          where: {
+            gameId_userId_filename: { gameId, userId, filename },
+          },
+          create: {
+            gameId,
+            userId,
+            filename,
+            saveType,
+            size: buffer.length,
+            data: buffer,
+            dataHash: hash,
+            uploadedFrom: uploadedFrom || "",
+            clientModifiedAt: clientModifiedAtSafe,
+          },
+          update: {
+            data: buffer,
+            size: buffer.length,
+            saveType,
+            dataHash: hash,
+            uploadedFrom: uploadedFrom || "",
+            clientModifiedAt: clientModifiedAtSafe,
+            // Resurrect tombstoned rows on re-upload.
+            deletedAt: null,
+            deletedFrom: null,
+          },
+        });
+      }, SAVE_WRITE_TRANSACTION_OPTIONS);
 
       // Update the running tally only after a successful upsert so a thrown
       // exception doesn't lock subsequent saves out of an artificial limit.

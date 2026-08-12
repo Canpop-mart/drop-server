@@ -33,6 +33,12 @@ export default defineEventHandler(async (h3) => {
   const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
   const since = new Date(Date.now() - WEEK_MS);
 
+  // Both of these were unbounded, so a busy week could pull the whole session
+  // table into memory to render five slides. Ordered so the cap drops the rows
+  // that matter least: the shortest sessions and the oldest unlocks.
+  const SESSION_LIMIT = 5000;
+  const ACHIEVEMENT_LIMIT = 5000;
+
   // Sessions inside the window. We require durationSeconds so we can sum
   // and rank meaningfully — still-running sessions show up next week.
   const sessions = await prisma.playSession.findMany({
@@ -46,11 +52,15 @@ export default defineEventHandler(async (h3) => {
       startedAt: true,
       durationSeconds: true,
     },
+    orderBy: { durationSeconds: "desc" },
+    take: SESSION_LIMIT,
   });
 
   const achievements = await prisma.userAchievement.findMany({
     where: { unlockedAt: { gte: since } },
     select: { userId: true },
+    orderBy: { unlockedAt: "desc" },
+    take: ACHIEVEMENT_LIMIT,
   });
 
   type Slide = {
@@ -109,7 +119,14 @@ export default defineEventHandler(async (h3) => {
     referencedGameIds.add(longestSession.gameId);
   }
 
-  const [users, games] = await Promise.all([
+  // The milestone and new-player slides need these two, and neither depends on
+  // the user/game lookups, so they ride along in the same round trip instead of
+  // waiting their turn further down. They key by userId, so covering every
+  // session author (rather than only the ones that survive the enabled/system
+  // filter below) just means a couple of unused entries.
+  const allSessionUserIds = [...new Set(sessions.map((s) => s.userId))];
+
+  const [users, games, lifetimeRows, olderSessions] = await Promise.all([
     referencedUserIds.size > 0
       ? prisma.user.findMany({
           where: {
@@ -129,6 +146,25 @@ export default defineEventHandler(async (h3) => {
       ? prisma.game.findMany({
           where: { id: { in: [...referencedGameIds] } },
           select: { id: true, mName: true, mCoverObjectId: true },
+        })
+      : [],
+    // Lifetime seconds per user, for the milestone slide.
+    allSessionUserIds.length > 0
+      ? prisma.playtime.groupBy({
+          by: ["userId"],
+          where: { userId: { in: allSessionUserIds } },
+          _sum: { seconds: true },
+        })
+      : [],
+    // Anyone with a session before the window is not new, for the new-player slide.
+    allSessionUserIds.length > 0
+      ? prisma.playSession.findMany({
+          where: {
+            userId: { in: allSessionUserIds },
+            startedAt: { lt: since },
+          },
+          select: { userId: true },
+          distinct: ["userId"],
         })
       : [],
   ]);
@@ -237,12 +273,7 @@ export default defineEventHandler(async (h3) => {
     ...new Set(sessions.map((s) => s.userId).filter((id) => userMap.has(id))),
   ];
   if (sessionUserIds.length > 0) {
-    // Total seconds per user from the Playtime aggregate (lifetime).
-    const lifetimeRows = await prisma.playtime.groupBy({
-      by: ["userId"],
-      where: { userId: { in: sessionUserIds } },
-      _sum: { seconds: true },
-    });
+    // Total seconds per user from the Playtime aggregate (lifetime), fetched above.
     const lifetimeByUser = new Map(
       lifetimeRows.map((r) => [r.userId, r._sum.seconds ?? 0]),
     );
@@ -290,14 +321,6 @@ export default defineEventHandler(async (h3) => {
   // For each user with a session in the window, check if they have any
   // session that started BEFORE the window — if not, they're new this week.
   if (sessionUserIds.length > 0) {
-    const olderSessions = await prisma.playSession.findMany({
-      where: {
-        userId: { in: sessionUserIds },
-        startedAt: { lt: since },
-      },
-      select: { userId: true },
-      distinct: ["userId"],
-    });
     const veteranIds = new Set(olderSessions.map((s) => s.userId));
     const newPlayers = sessionUserIds.filter((uid) => !veteranIds.has(uid));
     if (newPlayers.length > 0) {

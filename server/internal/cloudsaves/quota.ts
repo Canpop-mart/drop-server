@@ -1,4 +1,8 @@
 import prisma from "~/server/internal/db/database";
+import {
+  MAX_SAVE_REVISIONS,
+  pruneSaveRevisions,
+} from "~/server/internal/cloudsaves/revisions";
 
 /**
  * Default per-user cloud-save quota when the User column is unset.
@@ -23,6 +27,9 @@ export type CloudSaveQuota = {
  * Tombstoned rows are excluded — they still occupy storage but the user's
  * usage figure should match what they perceive as "their saves". The 30-day
  * GC ([`gcTombstones`]) is what reclaims the bytes.
+ *
+ * Revision blobs are excluded too, deliberately — see
+ * [`fetchUserRevisionBytes`] for why and for how to surface them.
  */
 export async function fetchUserQuota(userId: string): Promise<CloudSaveQuota> {
   const [user, agg] = await Promise.all([
@@ -62,6 +69,35 @@ export async function fetchUserQuotaWithRemaining(
 }
 
 /**
+ * Total bytes this user's save history occupies.
+ *
+ * QUOTA DECISION: revision blobs do NOT count against `cloudSaveQuotaBytes`.
+ *
+ * They're storage the user never asked for, created by a safety net they
+ * can't turn off. If they counted, a user near their cap would start getting
+ * 413s on the upload path *because* we were protecting their previous
+ * upload — the backstop would cause the exact data loss it exists to
+ * prevent, and the natural fix (drop the history) is the wrong one.
+ *
+ * The overhead is bounded structurally rather than by the quota: at most
+ * MAX_SAVE_REVISIONS per file, only written when the bytes actually change,
+ * each capped by the same 50 MiB per-file limit as a live save, and reaped
+ * with the parent by the tombstone GC. Worst case is therefore roughly
+ * (1 + MAX_SAVE_REVISIONS)x a full quota of files that all keep changing.
+ *
+ * This figure is not on the upload hot path — `fetchUserQuota` stays a
+ * two-query call. Read it where an operator or the recovery UI wants the
+ * real storage picture.
+ */
+export async function fetchUserRevisionBytes(userId: string): Promise<number> {
+  const agg = await prisma.cloudSaveRevision.aggregate({
+    where: { save: { userId } },
+    _sum: { size: true },
+  });
+  return agg._sum.size ?? 0;
+}
+
+/**
  * Format a byte count for quota-exceeded error messages. Uses GiB/MiB/KiB
  * with one decimal place; matches the style used elsewhere in the upload
  * error surface.
@@ -87,10 +123,36 @@ export function quotaExceededMessage(
 }
 
 /**
+ * Count what `gcTombstones` would destroy, without destroying it.
+ *
+ * This exists because the purge has never run in production. Every save the
+ * user has ever deleted since the feature shipped is past the retention
+ * window, so the first execution hard-deletes all of them in one unattended
+ * sweep, and those rows predate CloudSaveRevision so they have no history to
+ * fall back on. The operator gets to see the number first.
+ */
+export async function countTombstonesDue(
+  now: Date = new Date(),
+): Promise<{ count: number; bytes: number }> {
+  const cutoff = new Date(now.getTime() - TOMBSTONE_RETENTION_MS);
+  const agg = await prisma.cloudSave.aggregate({
+    where: { deletedAt: { not: null, lt: cutoff } },
+    _count: { _all: true },
+    _sum: { size: true },
+  });
+  return { count: agg._count._all, bytes: agg._sum.size ?? 0 };
+}
+
+/**
  * Garbage-collect tombstones older than `TOMBSTONE_RETENTION_MS`.
  *
- * Intentionally not wired to a cron. Call this from an admin endpoint or
- * scheduled task. Returns the number of rows hard-deleted.
+ * Run through the `cleanup:cloud-saves` task (see
+ * `internal/tasks/registry/cleanup-cloud-saves.ts`), which is deliberately
+ * NOT on the daily schedule yet; also callable directly from an admin
+ * endpoint. Returns the number of rows hard-deleted.
+ *
+ * Deleting a CloudSave cascades its `CloudSaveRevision` rows, so this
+ * reclaims a purged save's history along with it.
  *
  * NOTE: uses `deleteMany` rather than `delete` to satisfy the repo's
  * `drop/no-prisma-delete` lint rule and because we want the rowcount.
@@ -101,4 +163,33 @@ export async function gcTombstones(now: Date = new Date()): Promise<number> {
     where: { deletedAt: { not: null, lt: cutoff } },
   });
   return result.count;
+}
+
+/**
+ * Re-assert the newest-N invariant across every save's history.
+ *
+ * The upload path already prunes as it writes, so in a healthy server this
+ * finds nothing. It's here to mop up the cases the write path can't: two
+ * uploads racing on one file each snapshotting the same version, and any
+ * history left behind by a future change to MAX_SAVE_REVISIONS.
+ *
+ * Count-based only. Revisions are deliberately NOT aged out — a save you
+ * haven't touched in a year still deserves its three previous versions, and
+ * expiring them would quietly remove the safety net at the moment it's least
+ * likely to be missed and most likely to be needed.
+ *
+ * Returns the number of surplus revisions deleted.
+ */
+export async function gcSaveRevisions(): Promise<number> {
+  const overflowing = await prisma.cloudSaveRevision.groupBy({
+    by: ["saveId"],
+    _count: { _all: true },
+    having: { saveId: { _count: { gt: MAX_SAVE_REVISIONS } } },
+  });
+
+  let deleted = 0;
+  for (const { saveId } of overflowing) {
+    deleted += await pruneSaveRevisions(prisma, saveId);
+  }
+  return deleted;
 }

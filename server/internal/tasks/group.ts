@@ -3,6 +3,7 @@ export const taskGroups = {
   "cleanup:auth-records": { concurrency: false },
   "cleanup:objects": { concurrency: false },
   "cleanup:compat-logs": { concurrency: false },
+  "cleanup:cloud-saves": { concurrency: false },
   "check:update": { concurrency: false },
 
   // ── Import (system-triggered, concurrent) ──────────────────────────

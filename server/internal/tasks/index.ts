@@ -12,6 +12,7 @@ import cleanupAuthRecords from "./registry/auth-records";
 import checkUpdate from "./registry/update";
 import cleanupObjects from "./registry/objects";
 import cleanupCompatLogs from "./registry/cleanup-compat-logs";
+import cleanupCloudSaves from "./registry/cleanup-cloud-saves";
 import checkGameUpdates from "./registry/game-update";
 import scanGoldbergReadiness from "./registry/goldberg-readiness";
 import refreshAchievementDefs from "./registry/refresh-achievement-defs";
@@ -95,6 +96,11 @@ class TaskHandler {
   // list of all clients currently connected to tasks
   private clientRegistry = new Map<string, PeerImpl>();
 
+  // `cleanup:cloud-saves` is registered below but deliberately NOT scheduled.
+  // Its tombstone purge has never run, so the first sweep would hard-delete
+  // every save any user has ever deleted, in one unattended pass, with no
+  // history behind it. Run it by hand first to see the count (it reports
+  // rather than deletes unless DROP_CLOUD_SAVE_GC=apply), then add it here.
   private dailyScheduledTasks: TaskGroup[] = [
     "cleanup:auth-records",
     "cleanup:compat-logs",
@@ -111,6 +117,7 @@ class TaskHandler {
     this.saveScheduledTask(checkUpdate);
     this.saveScheduledTask(cleanupObjects);
     this.saveScheduledTask(cleanupCompatLogs);
+    this.saveScheduledTask(cleanupCloudSaves);
 
     // Library maintenance (on-demand + weekly integrity audit)
     this.saveScheduledTask(checkGameUpdates);

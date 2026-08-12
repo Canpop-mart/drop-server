@@ -53,9 +53,24 @@ export class FsObjectBackend
     fs.mkdirSync(this.baseMetadataPath, { recursive: true });
   }
 
+  /**
+   * Node runs sync fs calls on the main thread, so on a NAS volume a single
+   * existsSync/readFileSync stalls every other in-flight request behind it.
+   * Everything on the request path goes through fs.promises instead — only the
+   * constructor's mkdirSync stays synchronous, and that runs once at boot.
+   */
+  private async pathExists(target: string): Promise<boolean> {
+    try {
+      await fs.promises.access(target);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // ── New minimal ObjectStorageBackend surface ─────────────────────
   async exists(id: ObjectReference): Promise<boolean> {
-    return fs.existsSync(path.join(this.baseObjectPath, id));
+    return await this.pathExists(path.join(this.baseObjectPath, id));
   }
 
   async read(id: ObjectReference): Promise<Readable | undefined> {
@@ -75,13 +90,13 @@ export class FsObjectBackend
   // ── Legacy ObjectBackend surface (consumed by ObjectHandler) ─────
   async fetch(id: ObjectReference) {
     const objectPath = path.join(this.baseObjectPath, id);
-    if (!fs.existsSync(objectPath)) return undefined;
+    if (!(await this.pathExists(objectPath))) return undefined;
     return fs.createReadStream(objectPath);
   }
 
   async write(id: ObjectReference, source: Source): Promise<boolean> {
     const objectPath = path.join(this.baseObjectPath, id);
-    if (!fs.existsSync(objectPath)) return false;
+    if (!(await this.pathExists(objectPath))) return false;
 
     // remove item from cache
     await this.hashStore.delete(id);
@@ -106,7 +121,7 @@ export class FsObjectBackend
   }
   async startWriteStream(id: ObjectReference) {
     const objectPath = path.join(this.baseObjectPath, id);
-    if (!fs.existsSync(objectPath)) return undefined;
+    if (!(await this.pathExists(objectPath))) return undefined;
     // remove item from cache
     await this.hashStore.delete(id);
     return fs.createWriteStream(objectPath);
@@ -118,14 +133,17 @@ export class FsObjectBackend
   ): Promise<ObjectReference | undefined> {
     const objectPath = path.join(this.baseObjectPath, id);
     const metadataPath = path.join(this.baseMetadataPath, `${id}.json`);
-    if (fs.existsSync(objectPath) || fs.existsSync(metadataPath))
+    if (
+      (await this.pathExists(objectPath)) ||
+      (await this.pathExists(metadataPath))
+    )
       return undefined;
 
     // Write metadata
-    fs.writeFileSync(metadataPath, JSON.stringify(metadata));
+    await fs.promises.writeFile(metadataPath, JSON.stringify(metadata));
 
     // Create file so write passes
-    fs.writeFileSync(objectPath, "");
+    await fs.promises.writeFile(objectPath, "");
 
     // Call write — previously not awaited, so callers could observe
     // a fully-registered metadata file with a zero-byte payload.
@@ -136,14 +154,17 @@ export class FsObjectBackend
   async createWithWriteStream(id: string, metadata: ObjectMetadata) {
     const objectPath = path.join(this.baseObjectPath, id);
     const metadataPath = path.join(this.baseMetadataPath, `${id}.json`);
-    if (fs.existsSync(objectPath) || fs.existsSync(metadataPath))
+    if (
+      (await this.pathExists(objectPath)) ||
+      (await this.pathExists(metadataPath))
+    )
       return undefined;
 
     // Write metadata
-    fs.writeFileSync(metadataPath, JSON.stringify(metadata));
+    await fs.promises.writeFile(metadataPath, JSON.stringify(metadata));
 
     // Create file so write passes
-    fs.writeFileSync(objectPath, "");
+    await fs.promises.writeFile(objectPath, "");
 
     const stream = await this.startWriteStream(id);
     if (!stream) throw new Error("Could not create write stream");
@@ -151,11 +172,11 @@ export class FsObjectBackend
   }
   async delete(id: ObjectReference): Promise<boolean> {
     const objectPath = path.join(this.baseObjectPath, id);
-    if (!fs.existsSync(objectPath)) return true;
-    fs.rmSync(objectPath);
+    if (!(await this.pathExists(objectPath))) return true;
+    await fs.promises.rm(objectPath);
     const metadataPath = path.join(this.baseMetadataPath, `${id}.json`);
-    if (!fs.existsSync(metadataPath)) return true;
-    fs.rmSync(metadataPath);
+    if (!(await this.pathExists(metadataPath))) return true;
+    await fs.promises.rm(metadataPath);
     // remove item from caches
     await this.metadataCache.remove(id);
     await this.hashStore.delete(id);
@@ -168,9 +189,18 @@ export class FsObjectBackend
     if (cacheResult !== null) return cacheResult;
 
     const metadataPath = path.join(this.baseMetadataPath, `${id}.json`);
-    if (!fs.existsSync(metadataPath)) return undefined;
-    const metadataRaw = JSON.parse(fs.readFileSync(metadataPath, "utf-8"));
-    const metadata = objectMetadata(metadataRaw);
+    // One read instead of exists-then-read: this is the hottest path in the
+    // object store, and a missing file is already an expected outcome. Only
+    // ENOENT is swallowed — a corrupt file or a permission problem should
+    // still surface rather than look like "no such object".
+    let raw: string;
+    try {
+      raw = await fs.promises.readFile(metadataPath, "utf-8");
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw e;
+    }
+    const metadata = objectMetadata(JSON.parse(raw));
     if (metadata instanceof type.errors) {
       logger.error("FsObjectBackend#fetchMetadata", metadata.summary);
       return undefined;
@@ -183,8 +213,8 @@ export class FsObjectBackend
     metadata: ObjectMetadata,
   ): Promise<boolean> {
     const metadataPath = path.join(this.baseMetadataPath, `${id}.json`);
-    if (!fs.existsSync(metadataPath)) return false;
-    fs.writeFileSync(metadataPath, JSON.stringify(metadata));
+    if (!(await this.pathExists(metadataPath))) return false;
+    await fs.promises.writeFile(metadataPath, JSON.stringify(metadata));
     await this.metadataCache.set(id, metadata);
     return true;
   }
@@ -227,7 +257,7 @@ export class FsObjectBackend
   }
 
   async listAll(): Promise<string[]> {
-    return fs.readdirSync(this.baseObjectPath);
+    return await fs.promises.readdir(this.baseObjectPath);
   }
 
   /**
@@ -263,7 +293,7 @@ export class FsObjectBackend
   async cleanupMetadata(taskLogger: pino.Logger) {
     const cleanupLogger = taskLogger ?? logger;
 
-    const metadataFiles = fs.readdirSync(this.baseMetadataPath);
+    const metadataFiles = await fs.promises.readdir(this.baseMetadataPath);
     const objects = await this.listAll();
 
     const extraFiles = metadataFiles.filter(
@@ -275,7 +305,7 @@ export class FsObjectBackend
     for (const file of extraFiles) {
       const filePath = path.join(this.baseMetadataPath, file);
       try {
-        fs.rmSync(filePath);
+        await fs.promises.rm(filePath);
         cleanupLogger.info(
           `[FsObjectBackend#cleanupMetadata]: Removed ${file}`,
         );

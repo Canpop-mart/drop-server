@@ -5,25 +5,18 @@ export default defineEventHandler(async (h3) => {
   const userId = await aclManager.getUserIdACL(h3, ["store:read"]);
   if (!userId) throw createError({ statusCode: 403 });
 
-  // Fetch ALL enabled users first — the Players tab should show everyone
-  const users = await prisma.user.findMany({
-    where: { enabled: true, username: { not: "system" } },
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-      profilePictureObjectId: true,
-    },
-    take: 50,
-  });
-  const userIds = users.map((u) => u.id);
+  const BOARD_SIZE = 50;
 
-  // Get playtime totals per user
+  // Rank in the database. This used to take an arbitrary 50 enabled users and
+  // then sort those in JS, so on a server with more than 50 players "Top
+  // players" was 50 random people rather than the top 50.
   const playtimeByUser = await prisma.playtime.groupBy({
     by: ["userId"],
     _sum: { seconds: true },
     _count: true,
-    where: { userId: { in: userIds } },
+    where: { user: { enabled: true, username: { not: "system" } } },
+    orderBy: { _sum: { seconds: "desc" } },
+    take: BOARD_SIZE,
   });
   const playtimeMap = Object.fromEntries(
     playtimeByUser.map((p) => [
@@ -31,6 +24,43 @@ export default defineEventHandler(async (h3) => {
       { seconds: p._sum.seconds ?? 0, games: p._count },
     ]),
   );
+
+  const rankedIds = playtimeByUser.map((p) => p.userId);
+  const userSelect = {
+    id: true,
+    username: true,
+    displayName: true,
+    profilePictureObjectId: true,
+  } as const;
+  // The Players tab should still show everyone on a small server, so any slots
+  // the ranking left over go to enabled users who have never played anything.
+  const backfill = Math.max(0, BOARD_SIZE - rankedIds.length);
+  const [rankedUsers, idleUsers] = await Promise.all([
+    rankedIds.length > 0
+      ? prisma.user.findMany({
+          where: { id: { in: rankedIds } },
+          select: userSelect,
+        })
+      : [],
+    backfill > 0
+      ? prisma.user.findMany({
+          where: {
+            enabled: true,
+            username: { not: "system" },
+            id: { notIn: rankedIds },
+          },
+          select: userSelect,
+          take: backfill,
+        })
+      : [],
+  ]);
+
+  const rankedUserMap = new Map(rankedUsers.map((u) => [u.id, u]));
+  const users = [
+    ...rankedIds.map((id) => rankedUserMap.get(id)).filter((u) => !!u),
+    ...idleUsers,
+  ];
+  const userIds = users.map((u) => u.id);
 
   // Get achievement counts per user
   const achievementByUser = await prisma.userAchievement.groupBy({
@@ -60,25 +90,18 @@ export default defineEventHandler(async (h3) => {
     collectionEntries.map((c) => [c.collectionId, c._count]),
   );
 
-  // Build leaderboard sorted by playtime (users with no playtime go last)
-  const playtimeLeaderboard = users
-    .map((u, i) => ({
-      rank: i + 1,
-      user: u,
-      playtimeHours: Math.round((playtimeMap[u.id]?.seconds ?? 0) / 3600),
-      gamesPlayed: playtimeMap[u.id]?.games ?? 0,
-      achievements: achievementMap[u.id] ?? 0,
-      gamesOwned: collectionCountMap[userCollectionIds[u.id] ?? ""] ?? 0,
-    }))
-    .sort(
-      (a, b) =>
-        b.playtimeHours - a.playtimeHours || b.gamesPlayed - a.gamesPlayed,
-    );
-
-  // Re-assign ranks after sorting
-  playtimeLeaderboard.forEach((entry, i) => {
-    entry.rank = i + 1;
-  });
+  // `users` is already in rank order (database ranking by exact seconds, then
+  // the never-played backfill), so there is nothing left to sort here. The old
+  // JS sort compared hours rounded to integers, which flattened everyone inside
+  // the same hour into a tie.
+  const playtimeLeaderboard = users.map((u, i) => ({
+    rank: i + 1,
+    user: u,
+    playtimeHours: Math.round((playtimeMap[u.id]?.seconds ?? 0) / 3600),
+    gamesPlayed: playtimeMap[u.id]?.games ?? 0,
+    achievements: achievementMap[u.id] ?? 0,
+    gamesOwned: collectionCountMap[userCollectionIds[u.id] ?? ""] ?? 0,
+  }));
 
   return { playtime: playtimeLeaderboard };
 });
