@@ -26,6 +26,7 @@ import type { GameTagModel } from "~/prisma/client/models";
 import metadataHttp from "./http";
 import metadataCache from "./cache";
 import { fetchHltbTimes } from "./hltb";
+import * as jdenticon from "jdenticon";
 
 export class MissingMetadataProviderConfig extends Error {
   private providerName: string;
@@ -447,7 +448,74 @@ export class MetadataHandler {
           logger.info(`Successfully fetched all metadata.`);
           logger.info(`Importing objects...`);
 
-          await tx.pullObjects();
+          // Providers hand us URLs that upstream advertises but does not
+          // always still serve (Steam publishes community icon hashes that
+          // 404). Tolerate individual misses here and reconcile the payload
+          // below, so a dead image never leaves a game row pointing at an
+          // object that was never stored.
+          const { failures } = await tx.pullObjects({
+            tolerateFailures: true,
+          });
+
+          if (failures.length > 0) {
+            const failedIds = new Set(failures.map((f) => f.id));
+
+            // Replacements for the three columns the schema requires
+            // (mIconObjectId, mCoverObjectId, mBannerObjectId are all
+            // non-null with no default). A generated jdenticon is what the
+            // Steam provider already uses when an asset is absent, so the
+            // game still renders instead of showing a broken image.
+            const replacements = new Map<string, string>();
+            const replaced: string[] = [];
+            const replace = (label: string, id: string, size: number) => {
+              const next = tx.createObject(
+                jdenticon.toPng(metadata.name, size),
+              );
+              replacements.set(id, next);
+              replaced.push(label);
+              return next;
+            };
+
+            if (failedIds.has(metadata.icon))
+              metadata.icon = replace("icon", metadata.icon, 512);
+            if (failedIds.has(metadata.coverId))
+              metadata.coverId = replace("cover art", metadata.coverId, 512);
+            if (failedIds.has(metadata.bannerId))
+              metadata.bannerId = replace("banner", metadata.bannerId, 512);
+            // mLogoObjectId defaults to "" and every provider that has no
+            // logo already sends "". The library page hides the logo when
+            // it is empty, so an honest blank beats a placeholder here.
+            if (failedIds.has(metadata.logoId)) metadata.logoId = "";
+
+            const reconcile = (ids: string[]) =>
+              ids
+                .map((id) =>
+                  failedIds.has(id) ? (replacements.get(id) ?? null) : id,
+                )
+                .filter((id): id is string => id !== null);
+
+            const screenshotsBefore = metadata.screenshots.length;
+            metadata.images = reconcile(metadata.images);
+            metadata.screenshots = reconcile(metadata.screenshots);
+            const screenshotsDropped =
+              screenshotsBefore - metadata.screenshots.length;
+
+            logger.warn(
+              `${failures.length} image${failures.length === 1 ? "" : "s"} could not be downloaded. The import continued.`,
+            );
+            if (replaced.length > 0)
+              logger.warn(
+                `Used a generated placeholder for the game ${replaced.join(", ")}.`,
+              );
+            if (screenshotsDropped > 0)
+              logger.warn(
+                `Left out ${screenshotsDropped} screenshot${screenshotsDropped === 1 ? "" : "s"} that could not be downloaded.`,
+              );
+
+            // Pull the generated stand-ins. Only the newly registered
+            // entries are outstanding, so this does not retry dead URLs.
+            await tx.pullObjects();
+          }
 
           progress(95);
 
@@ -617,7 +685,49 @@ export class MetadataHandler {
       if (object.mLogoObjectId == result.logo) {
         // We created, and didn't update
         // So pull objects
-        await pullObjects();
+        const { failures } = await pullObjects({ tolerateFailures: true });
+
+        // Company logo and banner are both non-null columns, and the row is
+        // already written by this point, so a dead provider URL would leave
+        // it pointing at an object that does not exist. Patch it straight
+        // back to a generated stand-in.
+        if (failures.length > 0) {
+          const failedIds = new Set(failures.map((f) => f.id));
+          const patch: { mLogoObjectId?: string; mBannerObjectId?: string } =
+            {};
+          if (failedIds.has(object.mLogoObjectId))
+            patch.mLogoObjectId = createObject(
+              jdenticon.toPng(result.name, 512),
+            );
+          if (failedIds.has(object.mBannerObjectId))
+            patch.mBannerObjectId = createObject(
+              jdenticon.toPng(result.description || result.name, 1024),
+            );
+
+          for (const failure of failures) {
+            logger.warn(
+              `[metadata:${provider.source()}] could not download an image for company "${query}": ${failure.source} (${failure.reason})`,
+            );
+          }
+
+          if (Object.keys(patch).length > 0) {
+            await pullObjects();
+            const { count } = await prisma.company.updateMany({
+              where: { id: object.id },
+              data: patch,
+            });
+            if (count === 0) {
+              // The row vanished under us. Report no company rather than
+              // hand back one that no longer exists; the import already
+              // drops companies it could not resolve.
+              logger.warn(
+                `[metadata:${provider.source()}] company "${query}" disappeared before its replacement images could be saved`,
+              );
+              return undefined;
+            }
+            return { ...object, ...patch };
+          }
+        }
       }
 
       return object;

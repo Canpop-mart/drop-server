@@ -1,5 +1,10 @@
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
+import {
+  describeUnavailableReason,
+  getAchievementAvailability,
+} from "~/server/internal/achievements/availability";
+import { resetsRepo } from "~/server/internal/achievements";
 
 /**
  * Achievement diagnostic endpoint.
@@ -94,7 +99,12 @@ export default defineEventHandler(async (h3) => {
 
   const issues: string[] = [];
 
-  if (goldbergLinks.length === 0) {
+  const raLinked = externalLinks.some(
+    (l) => l.provider === "RetroAchievements",
+  );
+  // RA-linked games track through RetroAchievements, not local files, so a
+  // missing Goldberg link only matters when there is no RA link either.
+  if (goldbergLinks.length === 0 && !raLinked) {
     issues.push(
       "NO_GOLDBERG_LINK: No GameExternalLink with provider=Goldberg exists for this game. " +
         "Local achievement detection cannot work. Run the admin achievement scan.",
@@ -112,6 +122,20 @@ export default defineEventHandler(async (h3) => {
         "The Goldberg scanner may not have been run for this game.",
     );
   }
+  const availability = await getAchievementAvailability(gameId, user.id);
+  if (availability.reason) {
+    issues.push(
+      `UNAVAILABLE (${availability.reason}): ${describeUnavailableReason(availability.reason)}`,
+    );
+  }
+  if (availability.raAccountMissing) {
+    issues.push(
+      "RA_ACCOUNT_MISSING: This game tracks through RetroAchievements and you have not " +
+        "linked a RetroAchievements account.",
+    );
+  }
+  const resetAt = await resetsRepo.getResetAt(user.id, gameId);
+
   if (activeSessions.length > 0) {
     issues.push(
       `ORPHAN_SESSIONS: ${activeSessions.length} play session(s) still open (no endedAt). ` +
@@ -144,6 +168,9 @@ export default defineEventHandler(async (h3) => {
       ),
       orphanSessions: activeSessions.length,
       connectedClients: clients.length,
+      unavailableReason: availability.reason,
+      raAccountMissing: availability.raAccountMissing,
+      resetAt,
     },
     details: {
       achievements: achievements.map((a) => ({

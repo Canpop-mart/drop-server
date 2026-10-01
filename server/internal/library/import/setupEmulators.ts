@@ -92,6 +92,8 @@ export async function setupEmulators(
     const goldberg = await setupGoldberg(ctx.gameId, versionDir, {
       logger,
       swapDll: true,
+      // The import's own manifest phase runs next, over these bytes.
+      manifest: "skip",
     });
     if (goldberg.dllsSwapped > 0) {
       dllSwapApplied = true;

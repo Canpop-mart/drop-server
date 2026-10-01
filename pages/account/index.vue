@@ -160,55 +160,129 @@
       </div>
     </section>
 
-    <!-- Game Showcase -->
-    <section>
+    <!-- Showcase could not be loaded: no editor, because saving would replace
+         the stored showcase with empty slots. -->
+    <section v-if="showcaseLoadFailed">
       <h2 class="text-xl font-bold font-display text-zinc-100 mb-1">
-        {{ $t("account.showcase.gameTitle") }}
+        {{ $t("account.showcase.title") }}
       </h2>
-      <p class="text-sm text-zinc-400 mb-6">
-        {{ $t("account.showcase.gameDescription") }}
+      <p v-if="showcaseSaveMessage" class="text-sm text-green-400 mb-2">
+        {{ showcaseSaveMessage }}
       </p>
+      <p class="text-sm text-red-400">
+        {{ $t("account.showcase.loadFailed") }}
+      </p>
+    </section>
 
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-        <div
-          v-for="(slot, idx) in gameSlots"
-          :key="'game-' + idx"
-          class="relative rounded-lg overflow-hidden bg-zinc-800/50 ring-1 ring-white/5 group"
-        >
-          <div class="aspect-[2/3]">
+    <template v-else>
+      <!-- Game Showcase -->
+      <section>
+        <h2 class="text-xl font-bold font-display text-zinc-100 mb-1">
+          {{ $t("account.showcase.gameTitle") }}
+        </h2>
+        <p class="text-sm text-zinc-400 mb-6">
+          {{ $t("account.showcase.gameDescription") }}
+        </p>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+          <div
+            v-for="(slot, idx) in gameSlots"
+            :key="'game-' + idx"
+            class="relative rounded-lg overflow-hidden bg-zinc-800/50 ring-1 ring-white/5 group"
+          >
+            <div class="aspect-[2/3]">
+              <template v-if="slot">
+                <img
+                  v-if="slot.game?.mCoverObjectId"
+                  :src="useObject(slot.game.mCoverObjectId)"
+                  :alt="slot.game?.mName"
+                  class="size-full object-cover"
+                />
+                <div
+                  v-else
+                  class="size-full flex items-center justify-center text-zinc-600"
+                >
+                  <SparklesIcon class="size-8" />
+                </div>
+                <div
+                  class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-950/90 to-transparent p-2"
+                >
+                  <p class="text-xs font-medium text-zinc-200 truncate">
+                    {{ slot.game?.mName || slot.title }}
+                  </p>
+                </div>
+                <button
+                  class="absolute top-1 right-1 p-1 rounded-full bg-zinc-900/80 text-zinc-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                  @click="removeGameSlot(idx)"
+                >
+                  <XMarkIcon class="size-4" />
+                </button>
+              </template>
+              <template v-else>
+                <button
+                  class="size-full flex flex-col items-center justify-center text-zinc-600 hover:text-zinc-400 transition-colors"
+                  @click="openGameAddDialog(idx)"
+                >
+                  <PlusIcon class="size-6 mb-1" />
+                  <span class="text-xs">{{
+                    $t("account.showcase.addSlot")
+                  }}</span>
+                </button>
+              </template>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Achievement Showcase -->
+      <section>
+        <h2 class="text-xl font-bold font-display text-zinc-100 mb-1">
+          {{ $t("account.showcase.achievementTitle") }}
+        </h2>
+        <p class="text-sm text-zinc-400 mb-6">
+          {{ $t("account.showcase.achievementDescription") }}
+        </p>
+
+        <div class="grid grid-cols-2 gap-2 mb-6">
+          <div
+            v-for="(slot, idx) in achievementSlots"
+            :key="'ach-' + idx"
+            class="relative rounded-lg bg-zinc-800/50 ring-1 ring-white/5 group"
+          >
             <template v-if="slot">
-              <img
-                v-if="slot.game?.mCoverObjectId"
-                :src="useObject(slot.game.mCoverObjectId)"
-                :alt="slot.game?.mName"
-                class="size-full object-cover"
-              />
-              <div
-                v-else
-                class="size-full flex items-center justify-center text-zinc-600"
-              >
-                <SparklesIcon class="size-8" />
-              </div>
-              <div
-                class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-950/90 to-transparent p-2"
-              >
-                <p class="text-xs font-medium text-zinc-200 truncate">
-                  {{ slot.game?.mName || slot.title }}
-                </p>
+              <div class="flex items-center gap-3 p-3">
+                <div
+                  class="shrink-0 size-12 rounded-lg overflow-hidden bg-zinc-700/50 flex items-center justify-center"
+                >
+                  <img
+                    v-if="slot.data?.iconUrl"
+                    :src="String(slot.data.iconUrl)"
+                    class="size-full object-cover"
+                  />
+                  <TrophyIcon v-else class="size-6 text-yellow-500" />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-semibold text-zinc-100 truncate">
+                    {{ slot.title }}
+                  </p>
+                  <p class="text-xs text-zinc-400 truncate">
+                    {{ slot.game?.mName }}
+                  </p>
+                </div>
               </div>
               <button
                 class="absolute top-1 right-1 p-1 rounded-full bg-zinc-900/80 text-zinc-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                @click="removeGameSlot(idx)"
+                @click="removeAchievementSlot(idx)"
               >
                 <XMarkIcon class="size-4" />
               </button>
             </template>
             <template v-else>
               <button
-                class="size-full flex flex-col items-center justify-center text-zinc-600 hover:text-zinc-400 transition-colors"
-                @click="openGameAddDialog(idx)"
+                class="w-full flex items-center justify-center gap-2 p-3 text-zinc-600 hover:text-zinc-400 transition-colors"
+                @click="openAchievementAddDialog(idx)"
               >
-                <PlusIcon class="size-6 mb-1" />
+                <PlusIcon class="size-5" />
                 <span class="text-xs">{{
                   $t("account.showcase.addSlot")
                 }}</span>
@@ -216,77 +290,24 @@
             </template>
           </div>
         </div>
-      </div>
-    </section>
 
-    <!-- Achievement Showcase -->
-    <section>
-      <h2 class="text-xl font-bold font-display text-zinc-100 mb-1">
-        {{ $t("account.showcase.achievementTitle") }}
-      </h2>
-      <p class="text-sm text-zinc-400 mb-6">
-        {{ $t("account.showcase.achievementDescription") }}
-      </p>
-
-      <div class="grid grid-cols-2 gap-2 mb-6">
-        <div
-          v-for="(slot, idx) in achievementSlots"
-          :key="'ach-' + idx"
-          class="relative rounded-lg bg-zinc-800/50 ring-1 ring-white/5 group"
-        >
-          <template v-if="slot">
-            <div class="flex items-center gap-3 p-3">
-              <div
-                class="shrink-0 size-12 rounded-lg overflow-hidden bg-zinc-700/50 flex items-center justify-center"
-              >
-                <img
-                  v-if="slot.data?.iconUrl"
-                  :src="String(slot.data.iconUrl)"
-                  class="size-full object-cover"
-                />
-                <TrophyIcon v-else class="size-6 text-yellow-500" />
-              </div>
-              <div class="min-w-0 flex-1">
-                <p class="text-sm font-semibold text-zinc-100 truncate">
-                  {{ slot.title }}
-                </p>
-                <p class="text-xs text-zinc-400 truncate">
-                  {{ slot.game?.mName }}
-                </p>
-              </div>
-            </div>
-            <button
-              class="absolute top-1 right-1 p-1 rounded-full bg-zinc-900/80 text-zinc-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-              @click="removeAchievementSlot(idx)"
-            >
-              <XMarkIcon class="size-4" />
-            </button>
-          </template>
-          <template v-else>
-            <button
-              class="w-full flex items-center justify-center gap-2 p-3 text-zinc-600 hover:text-zinc-400 transition-colors"
-              @click="openAchievementAddDialog(idx)"
-            >
-              <PlusIcon class="size-5" />
-              <span class="text-xs">{{ $t("account.showcase.addSlot") }}</span>
-            </button>
-          </template>
+        <div class="flex items-center gap-3">
+          <LoadingButton
+            :loading="showcaseSaving"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-sm font-medium transition-colors"
+            @click="saveShowcase"
+          >
+            {{ $t("account.showcase.save") }}
+          </LoadingButton>
+          <span v-if="showcaseSaveError" class="text-sm text-red-400">
+            {{ showcaseSaveError }}
+          </span>
+          <span v-else-if="showcaseSaveMessage" class="text-sm text-green-400">
+            {{ showcaseSaveMessage }}
+          </span>
         </div>
-      </div>
-
-      <div class="flex items-center gap-3">
-        <LoadingButton
-          :loading="showcaseSaving"
-          class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-sm font-medium transition-colors"
-          @click="saveShowcase"
-        >
-          {{ $t("account.showcase.save") }}
-        </LoadingButton>
-        <span v-if="showcaseSaveMessage" class="text-sm text-green-400">
-          {{ showcaseSaveMessage }}
-        </span>
-      </div>
-    </section>
+      </section>
+    </template>
 
     <!-- Add showcase item dialog -->
     <TransitionRoot as="template" :show="addDialogOpen">
@@ -462,6 +483,12 @@ import {
 import { useObject } from "~/composables/objects";
 import { useUser, updateUser } from "~/composables/user";
 import type { ShowcaseType } from "~/prisma/client/enums";
+import {
+  MAX_SHOWCASE_ITEMS,
+  mergeShowcase,
+  untouchedCount,
+  type ShowcaseEntry,
+} from "~/composables/showcase-merge";
 
 const { t } = useI18n();
 useHead({ title: t("account.home.profileSection") });
@@ -576,26 +603,40 @@ type ShowcaseItem = {
   } | null;
 };
 
-// Split current showcase into game and achievement items
-const existingGameItems = (currentShowcase?.items ?? []).filter(
-  (i: { type?: string }) => i.type === "FavoriteGame",
-);
-const existingAchItems = (currentShowcase?.items ?? []).filter(
-  (i: { type?: string }) => i.type === "Achievement",
-);
-
-const gameSlots = ref<(ShowcaseItem | null)[]>(
-  Array.from({ length: MAX_SLOTS }, (_, i) =>
-    existingGameItems[i] ? { ...existingGameItems[i] } : null,
-  ),
-);
+// Without the stored showcase the slots would start empty, and saving would
+// replace the real showcase with them.
+const showcaseLoadFailed = ref(!!currentUser.value?.id && !currentShowcase);
 
 const ACHIEVEMENT_SLOTS = 6;
-const achievementSlots = ref<(ShowcaseItem | null)[]>(
-  Array.from({ length: ACHIEVEMENT_SLOTS }, (_, i) =>
-    existingAchItems[i] ? { ...existingAchItems[i] } : null,
-  ),
-);
+const gameSlots = ref<(ShowcaseItem | null)[]>([]);
+const achievementSlots = ref<(ShowcaseItem | null)[]>([]);
+// The showcase as the server last returned it. Saving merges the slot edits
+// back into it so items these slots don't show survive (showcase-merge.ts).
+const storedShowcase = ref<ShowcaseEntry[]>([]);
+
+function toEntry(item: ShowcaseEntry): ShowcaseEntry {
+  return {
+    type: item.type,
+    gameId: item.gameId ?? null,
+    itemId: item.itemId ?? null,
+    title: item.title ?? "",
+    data: item.data ?? null,
+  };
+}
+
+/** Fill the slots with the same window of `stored` that the save merge assumes. */
+function applyStoredShowcase(stored: ShowcaseItem[]) {
+  storedShowcase.value = stored.map(toEntry);
+  const games = stored.filter((i) => i.type === "FavoriteGame");
+  const achs = stored.filter((i) => i.type === "Achievement");
+  gameSlots.value = Array.from({ length: MAX_SLOTS }, (_, i) =>
+    games[i] ? { ...games[i] } : null,
+  );
+  achievementSlots.value = Array.from({ length: ACHIEVEMENT_SLOTS }, (_, i) =>
+    achs[i] ? { ...achs[i] } : null,
+  );
+}
+applyStoredShowcase((currentShowcase?.items ?? []) as ShowcaseItem[]);
 
 const gameSearch = ref("");
 const filteredGames = computed(() => {
@@ -642,7 +683,30 @@ watch(
   },
 );
 
+// The server stores at most MAX_SHOWCASE_ITEMS, including items these slots
+// don't show. Adding past that would only fail on save.
+const showcaseFull = computed(() => {
+  const filled =
+    gameSlots.value.filter(Boolean).length +
+    achievementSlots.value.filter(Boolean).length;
+  return (
+    filled +
+      untouchedCount(storedShowcase.value, MAX_SLOTS, ACHIEVEMENT_SLOTS) >=
+    MAX_SHOWCASE_ITEMS
+  );
+});
+
+function refuseIfFull(): boolean {
+  if (!showcaseFull.value) return false;
+  showcaseSaveMessage.value = "";
+  showcaseSaveError.value = t("account.showcase.full", {
+    max: MAX_SHOWCASE_ITEMS,
+  });
+  return true;
+}
+
 function openGameAddDialog(idx: number) {
+  if (refuseIfFull()) return;
   addSlotIndex.value = idx;
   addType.value = "FavoriteGame";
   addGameId.value = null;
@@ -653,6 +717,7 @@ function openGameAddDialog(idx: number) {
 }
 
 function openAchievementAddDialog(idx: number) {
+  if (refuseIfFull()) return;
   addSlotIndex.value = idx;
   addType.value = "Achievement";
   addGameId.value = null;
@@ -713,10 +778,13 @@ function removeAchievementSlot(idx: number) {
 // Save showcase
 const showcaseSaving = ref(false);
 const showcaseSaveMessage = ref("");
+const showcaseSaveError = ref("");
 
 async function saveShowcase() {
+  if (showcaseLoadFailed.value) return;
   showcaseSaving.value = true;
   showcaseSaveMessage.value = "";
+  showcaseSaveError.value = "";
   try {
     const gameItems = gameSlots.value
       .filter((s): s is ShowcaseItem => s !== null)
@@ -736,14 +804,43 @@ async function saveShowcase() {
         title: s.title,
         data: s.data,
       }));
+    const items = mergeShowcase(
+      storedShowcase.value,
+      gameItems,
+      achItems,
+      MAX_SLOTS,
+      ACHIEVEMENT_SLOTS,
+    );
     await $dropFetch("/api/v1/user/showcase", {
       method: "PUT",
-      body: { items: [...gameItems, ...achItems] },
+      body: { items },
     });
+    // Re-read what is stored so the slots show the window the next save will
+    // merge into. The PUT response has no cover art, so fetch the full view.
+    // If that fails, hide the editor rather than save from a stale window.
+    const userId = currentUser.value?.id;
+    const refreshed = userId
+      ? await $dropFetch(`/api/v1/user/${userId}/showcase`).catch(() => null)
+      : null;
+    if (refreshed) applyStoredShowcase(refreshed.items as ShowcaseItem[]);
+    else showcaseLoadFailed.value = true;
     showcaseSaveMessage.value = t("account.showcase.saved");
     setTimeout(() => {
       showcaseSaveMessage.value = "";
     }, 3000);
+  } catch (e) {
+    const err = e as {
+      statusMessage?: string;
+      data?: { statusMessage?: string };
+      message?: string;
+    };
+    showcaseSaveError.value = t("account.showcase.saveFailed", {
+      reason:
+        err?.data?.statusMessage ??
+        err?.statusMessage ??
+        err?.message ??
+        String(e),
+    });
   } finally {
     showcaseSaving.value = false;
   }

@@ -4,7 +4,7 @@ import { ExternalAccountProvider } from "~/prisma/client/enums";
 import {
   readGoldbergAppId,
   readGoldbergDefinitions,
-  resolveGameVersionDir,
+  resolveGameVersion,
   setupGoldberg,
 } from "../../goldberg";
 import fs from "fs";
@@ -68,7 +68,8 @@ export default defineDropTask({
         continue;
       }
 
-      const versionDir = await resolveGameVersionDir(game.id);
+      const resolvedVersion = await resolveGameVersion(game.id);
+      const versionDir = resolvedVersion?.versionDir;
       if (!versionDir) {
         logger.info(`${game.mName} — no version directory, skipping`);
         progress(Math.round(((i + 1) / games.length) * 100));
@@ -100,6 +101,8 @@ export default defineDropTask({
 
         try {
           await setupGoldberg(game.id, versionDir, {
+            versionId: resolvedVersion?.versionId,
+            manifest: "now",
             forceRefreshAchievements: true,
             logger,
           });

@@ -29,6 +29,12 @@ services:
       - ./data:/data
     environment:
       - DATABASE_URL=postgres://drop:drop@postgres:5432/drop
+      # --- Steam achievements (recommended) ---
+      # Free key from https://steamcommunity.com/dev/apikey. Without it Drop can
+      # still read whatever achievement text a game shipped, but it cannot fill in
+      # missing descriptions or titles from Steam's schema, and the "Backfill
+      # Achievement Text" task has nothing to work with.
+      - STEAM_API_KEY=
       # --- ZeroTier co-op rooms (optional) ---
       # Point Drop at the self-hosted controller sidecar below. Leave blank to
       # disable the feature. ZEROTIER_AUTH_TOKEN is the controller's

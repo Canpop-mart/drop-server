@@ -456,6 +456,11 @@ const scheduledTasks: {
     description:
       "Deletes expired invitations and expired/orphaned login sessions in one pass. Runs automatically every day.",
   },
+  "cleanup:rooms": {
+    name: "Reap Expired Co-op Rooms",
+    description:
+      "Ends co-op rooms that are more than a day old and removes their networks from the ZeroTier controller. Runs automatically every day.",
+  },
   "cleanup:objects": {
     name: t("tasks.admin.scheduled.cleanupObjectsName"),
     description: t("tasks.admin.scheduled.cleanupObjectsDescription"),
@@ -495,6 +500,11 @@ const scheduledTasks: {
     description:
       "Re-hashes every game's latest version and rewrites its droplet manifest. Run this after mass DLL swaps (or any on-disk change) so clients stop hitting checksum-invalid errors on download.",
   },
+  "regenerate:manifest-version": {
+    name: "Regenerate Changed Manifests",
+    description:
+      "Re-hashes game versions whose files changed, one at a time, for example after an achievement scan wrote steam_settings files. Started automatically; not run by hand.",
+  },
   "backfill:gbe-swap": {
     name: "Backfill GBE Swap",
     description:
@@ -511,6 +521,11 @@ const scheduledTasks: {
     name: "Refresh Achievement Definitions",
     description:
       "Re-pulls achievement titles, descriptions, and icons from the Steam API for every linked game.",
+  },
+  "backfill:achievement-text": {
+    name: "Backfill Achievement Text",
+    description:
+      "Finds games whose achievements have no description and fills the blanks from Steam, keeping whatever text the game already shipped. Needs STEAM_API_KEY. Paced to stay under Steam's rate limit, and safe to re-run.",
   },
   "link:retroachievements": {
     name: "Auto-link RetroAchievements",

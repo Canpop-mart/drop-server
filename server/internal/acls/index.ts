@@ -21,6 +21,8 @@ export const userACLs = [
   "screenshots:read",
   "screenshots:delete",
 
+  "achievements:reset",
+
   "collections:new",
   "collections:read",
   "collections:delete",

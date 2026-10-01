@@ -13,9 +13,11 @@ import checkUpdate from "./registry/update";
 import cleanupObjects from "./registry/objects";
 import cleanupCompatLogs from "./registry/cleanup-compat-logs";
 import cleanupCloudSaves from "./registry/cleanup-cloud-saves";
+import cleanupRooms from "./registry/cleanup-rooms";
 import checkGameUpdates from "./registry/game-update";
 import scanGoldbergReadiness from "./registry/goldberg-readiness";
 import refreshAchievementDefs from "./registry/refresh-achievement-defs";
+import backfillAchievementText from "./registry/backfill-achievement-text";
 import linkRetroAchievements from "./registry/link-retroachievements";
 import regenerateManifests from "./registry/regenerate-manifests";
 import backfillGbeSwap from "./registry/backfill-gbe-swap";
@@ -104,6 +106,7 @@ class TaskHandler {
   private dailyScheduledTasks: TaskGroup[] = [
     "cleanup:auth-records",
     "cleanup:compat-logs",
+    "cleanup:rooms",
     "check:update",
   ];
   private weeklyScheduledTasks: TaskGroup[] = [
@@ -118,6 +121,7 @@ class TaskHandler {
     this.saveScheduledTask(cleanupObjects);
     this.saveScheduledTask(cleanupCompatLogs);
     this.saveScheduledTask(cleanupCloudSaves);
+    this.saveScheduledTask(cleanupRooms);
 
     // Library maintenance (on-demand + weekly integrity audit)
     this.saveScheduledTask(checkGameUpdates);
@@ -127,6 +131,7 @@ class TaskHandler {
     // Achievements (on-demand)
     this.saveScheduledTask(scanGoldbergReadiness);
     this.saveScheduledTask(refreshAchievementDefs);
+    this.saveScheduledTask(backfillAchievementText);
     this.saveScheduledTask(linkRetroAchievements);
     this.saveScheduledTask(recalculateAchievements);
     this.saveScheduledTask(regenerateManifests);

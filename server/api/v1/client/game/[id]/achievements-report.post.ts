@@ -3,7 +3,7 @@ import { defineClientEventHandler } from "~/server/internal/clients/event-handle
 import prisma from "~/server/internal/db/database";
 import notificationSystem from "~/server/internal/notifications";
 import { logger } from "~/server/internal/logging";
-import { unlocksRepo } from "~/server/internal/achievements";
+import { resetsRepo, unlocksRepo } from "~/server/internal/achievements";
 
 // Sanity bounds on client-reported achievement unlocks. A single report batch
 // can't exceed 500 unlocks (a single player legitimately unlocking 500
@@ -12,9 +12,16 @@ import { unlocksRepo } from "~/server/internal/achievements";
 // that are in the future or absurdly far in the past.
 const MAX_ACHIEVEMENTS_PER_REPORT = 500;
 const ALLOWED_CLOCK_SKEW_SECS = 5 * 60; // 5 min for client clock drift
+// Client/server clock difference beyond which the client clock is treated as
+// wrong rather than drifting (see largeSkew in the handler).
+const LARGE_CLOCK_SKEW_MS = 15 * 60 * 1000;
 const OLDEST_PLAUSIBLE_UNLOCK = new Date("2000-01-01T00:00:00Z");
 
 const AchievementReport = type({
+  // The client's clock when it sent the report. Newer clients send it so the
+  // server can correct `unlockedAt` for clock skew before comparing it with
+  // the (server-clock) reset marker.
+  "clientNow?": "string",
   achievements: type({
     externalId: "string",
     provider: "'Goldberg' | 'RetroAchievements'",
@@ -89,9 +96,41 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     existingUnlocks.map((u) => u.achievementId),
   );
 
+  // Clock skew: how far the server's clock is ahead of the client's. Earned
+  // times come from the client's clock (the emulator stamps them), while the
+  // reset marker is server time; without this a client running a few minutes
+  // slow would have genuine post-reset unlocks dropped as "before the reset".
+  const serverNowMs = Date.now();
+  const clientNowMs = body.clientNow ? new Date(body.clientNow).getTime() : NaN;
+  const skewMs = Number.isNaN(clientNowMs) ? 0 : serverNowMs - clientNowMs;
+  // Beyond this the client's clock is simply wrong (a Deck that lost its
+  // time, say), and the correction is only right for unlocks stamped under
+  // the current wrong clock, not for ones earned earlier while it was right.
+  // Then the reset check takes whichever of the raw and corrected times is
+  // earlier: a reset must never be undone by a correction, at the cost of
+  // dropping genuinely new unlocks until the clock is fixed.
+  const largeSkew = Math.abs(skewMs) > LARGE_CLOCK_SKEW_MS;
+  if (Math.abs(skewMs) > 60_000) {
+    logger.info(
+      `[ACH:goldberg] Server clock is ${Math.round(skewMs / 1000)}s ahead of the client's ` +
+        `for user=${user.id} (negative = behind); correcting reported unlock times`,
+    );
+  }
+
+  // The player's reset marker for this game, looked up once. Unlocks earned
+  // before it are ignored so a reset isn't undone by the save file on disk.
+  const resetAt = await resetsRepo.getResetAt(user.id, gameId);
+
   let recorded = 0;
   let skipped = 0;
-  const newlyUnlocked: { title: string; iconUrl: string }[] = [];
+  let ignoredBeforeReset = 0;
+  const newlyUnlocked: {
+    id: string;
+    externalId: string;
+    title: string;
+    description: string;
+    iconUrl: string;
+  }[] = [];
 
   for (const report of body.achievements) {
     const achievement = achievementMap.get(report.externalId);
@@ -107,8 +146,12 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     // to [OLDEST_PLAUSIBLE_UNLOCK, now + ALLOWED_CLOCK_SKEW]. Out-of-range values
     // are coerced to "now" rather than rejected — we already validated the
     // unlock against the achievement definition, so the unlock itself is
-    // legitimate; we just don't trust the reported time.
-    const parsedUnlockedAt = new Date(report.unlockedAt);
+    // legitimate; we just don't trust the reported time. "Now" is after any
+    // reset, so an unlock with no usable time gets past the reset marker;
+    // the client clears its local save file on reset to cover that case.
+    // Shifted onto the server's clock (see skewMs above).
+    const rawMs = new Date(report.unlockedAt).getTime();
+    const parsedUnlockedAt = new Date(rawMs + skewMs);
     const nowMs = Date.now();
     const maxAllowedMs = nowMs + ALLOWED_CLOCK_SKEW_SECS * 1000;
     const unlockedAt =
@@ -117,24 +160,37 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
       parsedUnlockedAt < OLDEST_PLAUSIBLE_UNLOCK
         ? new Date(nowMs)
         : parsedUnlockedAt;
+    // What the reset marker is compared against (see largeSkew above).
+    const resetCheckTime =
+      largeSkew && !isNaN(rawMs) && rawMs < unlockedAt.getTime()
+        ? new Date(rawMs)
+        : unlockedAt;
 
     // Canonical unlock write path — idempotent upsert keyed on
     // (userId, achievementId). The RA poll / session-end paths use the
     // same repo, so the same unlock can never be double-credited.
-    const { created } = await unlocksRepo.recordUnlock({
-      userId: user.id,
-      achievementId: achievement.id,
-      source: "client-report",
-      occurredAt: unlockedAt,
-    });
+    const { created, beforeReset } = await unlocksRepo.recordUnlock(
+      {
+        userId: user.id,
+        gameId,
+        achievementId: achievement.id,
+        source: "client-report",
+        occurredAt: unlockedAt,
+      },
+      { resetAt, resetCheckTime },
+    );
 
     recorded++;
+    if (beforeReset) ignoredBeforeReset++;
 
     // `created` from the repo is the source of truth, but cross-check
     // against the pre-fetched set too (defends against a stale read).
     if (created && !alreadyUnlockedIds.has(achievement.id)) {
       newlyUnlocked.push({
+        id: achievement.id,
+        externalId: achievement.externalId,
         title: achievement.title,
+        description: achievement.description ?? "",
         iconUrl: achievement.iconUrl ?? "",
       });
     }
@@ -156,13 +212,23 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   }
 
   logger.info(
-    `[ACH:goldberg] Report complete: game=${gameId} matched=${recorded} newlyUnlocked=${newlyUnlocked.length} notFound=${skipped}`,
+    `[ACH:goldberg] Report complete: game=${gameId} matched=${recorded} newlyUnlocked=${newlyUnlocked.length} ` +
+      `notFound=${skipped} ignoredBeforeReset=${ignoredBeforeReset}`,
   );
 
   // `recorded` = reports matched to a stored definition (kept for client
   // back-compat); `newlyUnlocked` = rows actually created by this call;
+  // `unlocks` = those same rows, so the client toasts exactly what the
+  // server just recorded instead of diffing a cached config;
   // `skipped` = reports with no matching definition — the silent drop the
   // client should surface (an externalId/definition mismatch), not a normal
-  // "already unlocked".
-  return { recorded, newlyUnlocked: newlyUnlocked.length, skipped };
+  // "already unlocked"; `ignoredBeforeReset` = matched reports earned before
+  // the player's reset of this game.
+  return {
+    recorded,
+    newlyUnlocked: newlyUnlocked.length,
+    unlocks: newlyUnlocked,
+    skipped,
+    ignoredBeforeReset,
+  };
 });

@@ -95,6 +95,7 @@ model Game {
   gameRequests           GameRequest[]
   favoritedBy            FavoriteGame[]
   achievements           Achievement[]
+  achievementResets      AchievementReset[]
   externalLinks          GameExternalLink[]
   externalHashes         GameExternalHash[]
   leaderboards           Leaderboard[]

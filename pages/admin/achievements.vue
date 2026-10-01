@@ -9,6 +9,29 @@
       </p>
     </div>
 
+    <!-- Missing server credentials: without these, Steam / RA fetches come
+         back empty and the only trace is a warning in the server log. -->
+    <div
+      v-if="credentialStatus && !credentialStatus.steamApiKeySet"
+      class="rounded-md bg-yellow-500/10 ring-1 ring-yellow-500/30 px-4 py-3 text-sm text-yellow-200"
+    >
+      STEAM_API_KEY is not set. Steam achievement lists, text and icons cannot
+      be fetched. Games whose files ship no achievements.json will show no
+      achievements. See .env.example.
+    </div>
+    <div
+      v-if="credentialStatusError"
+      class="flex items-center justify-between gap-3 rounded-md bg-red-500/10 ring-1 ring-red-500/30 px-4 py-3 text-sm text-red-300"
+    >
+      <span>Could not check the server's achievement settings.</span>
+      <button
+        class="text-red-200 underline hover:text-red-100"
+        @click="loadCredentialStatus"
+      >
+        Retry
+      </button>
+    </div>
+
     <!-- ── Tab bar ─────────────────────────────────────────────────── -->
     <div class="flex gap-1 border-b border-zinc-800">
       <button
@@ -348,6 +371,24 @@ type RASearchResult = {
   achievementCount: number;
 };
 
+// Which server credentials are configured (presence only).
+const credentialStatus = ref<{
+  steamApiKeySet: boolean;
+  raServerCredentialsSet: boolean;
+} | null>(null);
+const credentialStatusError = ref(false);
+async function loadCredentialStatus() {
+  credentialStatusError.value = false;
+  try {
+    credentialStatus.value = await $dropFetch(
+      "/api/v1/admin/achievements/status",
+    );
+  } catch {
+    credentialStatusError.value = true;
+  }
+}
+await loadCredentialStatus();
+
 // Load games + linked-game IDs for the picker.
 const games = (await $dropFetch("/api/v1/admin/game").catch(
   () => [],
@@ -532,6 +573,11 @@ const bulkJobs: { taskGroup: string; label: string; description: string }[] = [
     taskGroup: "refresh:achievement-defs",
     label: "Refresh achievement definitions",
     description: "Re-pull Steam achievement titles, descriptions and icons.",
+  },
+  {
+    taskGroup: "backfill:achievement-text",
+    label: "Backfill achievement text",
+    description: "Fill in missing achievement descriptions from Steam.",
   },
   {
     taskGroup: "link:retroachievements",

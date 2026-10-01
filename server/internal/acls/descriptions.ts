@@ -26,6 +26,9 @@ export const userACLDescriptions: ObjectFromList<typeof userACLs> = {
   "screenshots:read": "Read all screenshots for this account",
   "screenshots:delete": "Delete a screenshot for this account",
 
+  "achievements:reset":
+    "Reset this account's unlocked achievements, for one game or all of them.",
+
   "collections:new": "Create collections for this account.",
   "collections:read": "Fetch all collections (including library).",
   "collections:delete": "Delete a collection for this account.",

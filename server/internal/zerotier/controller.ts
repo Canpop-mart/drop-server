@@ -18,6 +18,7 @@ network so it has a stable overlay IP to advertise. See
 `server/internal/archipelago/index.ts`.
 */
 
+import { ofetch } from "ofetch";
 import { systemConfig } from "../config/sys-conf";
 
 export interface ZTStatus {
@@ -73,7 +74,10 @@ class ZeroTierController {
         statusMessage: "ZeroTier controller is not configured on this server.",
       });
 
-    return await $fetch<T>(`${baseUrl}${path}`, {
+    // Plain ofetch rather than Nitro's `$fetch`: this is always an external
+    // URL, and `$fetch`'s route-typed overloads fail with TS2589 ("excessively
+    // deep") once the app's route table is large enough.
+    return await ofetch<T>(`${baseUrl}${path}`, {
       method: init?.method ?? "GET",
       headers: {
         "X-ZT1-Auth": token,

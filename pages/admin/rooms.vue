@@ -18,6 +18,12 @@
         </button>
       </div>
     </div>
+    <div
+      v-if="actionError"
+      class="mt-6 rounded-md border border-red-500/30 bg-red-900/30 px-4 py-3 text-sm text-red-200"
+    >
+      {{ actionError }}
+    </div>
     <div class="mt-8 flow-root">
       <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
         <div class="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
@@ -113,7 +119,21 @@
                     </span>
                   </td>
                 </tr>
-                <tr v-if="rooms.length === 0">
+                <tr v-if="loadError">
+                  <td colspan="6" class="px-6 py-8 text-center text-sm">
+                    <p class="text-red-300">
+                      Couldn't load co-op rooms: {{ loadError }}
+                    </p>
+                    <button
+                      :disabled="busy"
+                      class="mt-3 rounded-md bg-zinc-800 px-3 py-1.5 text-sm font-semibold text-zinc-100 hover:bg-zinc-700 disabled:opacity-50"
+                      @click="reload"
+                    >
+                      Retry
+                    </button>
+                  </td>
+                </tr>
+                <tr v-else-if="rooms.length === 0">
                   <td
                     colspan="6"
                     class="px-6 py-8 text-center text-sm text-zinc-500"
@@ -157,11 +177,39 @@ definePageMeta({ layout: "admin" });
 const rooms = ref<AdminRoom[]>([]);
 const busy = ref(false);
 const confirmId = ref<string | null>(null);
+// A failed load is shown instead of the "no rooms" row, with a retry; a failed
+// delete/reap is shown above the table and leaves the list as it was.
+const loadError = ref("");
+const actionError = ref("");
+
+function errorText(e: unknown): string {
+  const data = (e as { data?: { statusMessage?: string; message?: string } })
+    ?.data;
+  return (
+    data?.statusMessage ||
+    data?.message ||
+    (e instanceof Error ? e.message : String(e))
+  );
+}
 
 async function load() {
-  rooms.value = (await $dropFetch("/api/v1/admin/room")) as AdminRoom[];
+  try {
+    rooms.value = (await $dropFetch("/api/v1/admin/room")) as AdminRoom[];
+    loadError.value = "";
+  } catch (e) {
+    loadError.value = errorText(e);
+  }
 }
 await load();
+
+async function reload() {
+  busy.value = true;
+  try {
+    await load();
+  } finally {
+    busy.value = false;
+  }
+}
 
 function fmt(iso: string) {
   return new Date(iso).toLocaleString();
@@ -173,20 +221,26 @@ function expiringSoon(iso: string | null) {
 async function deleteRoom(id: string) {
   confirmId.value = null;
   busy.value = true;
+  actionError.value = "";
   try {
     await $dropFetch(`/api/v1/admin/room/${id}`, { method: "DELETE" });
-    await load();
+  } catch (e) {
+    actionError.value = `Couldn't delete the room: ${errorText(e)}`;
   } finally {
+    await load();
     busy.value = false;
   }
 }
 
 async function reapExpired() {
   busy.value = true;
+  actionError.value = "";
   try {
     await $dropFetch("/api/v1/admin/room/reset", { method: "POST" });
-    await load();
+  } catch (e) {
+    actionError.value = `Couldn't reap expired rooms: ${errorText(e)}`;
   } finally {
+    await load();
     busy.value = false;
   }
 }

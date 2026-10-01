@@ -19,6 +19,10 @@ export const CLIENT_WEBTOKEN_ACLS: UserACL = [
 
   "library:add",
   "library:remove",
+
+  // The desktop client's settings page resets achievements through
+  // server:// with this token.
+  "achievements:reset",
 ];
 
 export default defineNitroPlugin(async () => {

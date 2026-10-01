@@ -5,6 +5,7 @@ import {
   getGameAchievementConfig,
   ACHIEVEMENT_CONFIG_TTL_MS,
 } from "~/server/internal/achievements/config-cache";
+import { getAchievementAvailability } from "~/server/internal/achievements/availability";
 
 // Lower number = higher priority when deduplicating cross-provider achievements
 const PROVIDER_PRIORITY: Record<string, number> = {
@@ -74,6 +75,16 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     externalLinks: gameConfig.externalLinks,
     raHashes: gameConfig.raHashes,
     raConsoleId: gameConfig.raConsoleId,
+    // Why the list is empty, or why RA unlocks can't record for this player.
+    // Only computed when it can say something, so the 15s poll path stays
+    // cheap for the normal case. See achievements/availability.ts.
+    ...(gameConfig.achievements.length === 0 ||
+    gameConfig.externalLinks.some((l) => l.provider === "RetroAchievements")
+      ? await getAchievementAvailability(gameId, user.id).then((a) => ({
+          reason: a.reason,
+          raAccountMissing: a.raAccountMissing,
+        }))
+      : { reason: null, raAccountMissing: false }),
   };
 
   logger.info(

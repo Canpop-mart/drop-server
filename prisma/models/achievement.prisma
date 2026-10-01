@@ -90,3 +90,23 @@ model UserExternalAccount {
     @@unique([userId, provider])
     @@index([provider, externalId])
 }
+
+/// Marks the moment a user reset their achievements for one game.
+///
+/// Deleting UserAchievement rows alone does not stick: the client's local
+/// emulator save file (and RetroAchievements) still say those achievements
+/// are earned, so the next launch reports them all again. Every unlock
+/// writer (unlocksRepo.recordUnlock) ignores an unlock whose earned time is
+/// before `resetAt`. A reset of "all games" writes one row per game the user
+/// had unlocks in. Re-resetting moves `resetAt` forward.
+model AchievementReset {
+    id      String   @id @default(uuid())
+    userId  String
+    user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    gameId  String
+    game    Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+    resetAt DateTime
+
+    @@unique([userId, gameId])
+    @@index([gameId])
+}

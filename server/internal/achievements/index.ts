@@ -87,6 +87,7 @@ export async function scanGame(
 }
 
 export { achievementsRepo, unlocksRepo } from "./repo";
+export { resetsRepo, isBeforeReset } from "./reset";
 export type {
   AchievementProvider,
   AchievementDefinition,

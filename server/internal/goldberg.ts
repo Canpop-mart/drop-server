@@ -112,6 +112,18 @@ export interface GoldbergAchievementUnlock extends GoldbergAchievementDef {
 export async function resolveGameVersionDir(
   gameId: string,
 ): Promise<string | undefined> {
+  return (await resolveGameVersion(gameId))?.versionDir;
+}
+
+/**
+ * The newest version of a game that has files on disk: its directory and its
+ * versionId. Pass the versionId to `setupGoldberg` so a manifest regeneration
+ * targets the version whose files were actually changed (the newest version
+ * overall may have no directory, e.g. a depot version).
+ */
+export async function resolveGameVersion(
+  gameId: string,
+): Promise<{ versionDir: string; versionId: string } | undefined> {
   const game = await prisma.game.findUnique({
     where: { id: gameId },
     select: {
@@ -121,7 +133,7 @@ export async function resolveGameVersionDir(
         where: { versionPath: { not: null } },
         orderBy: { versionIndex: "desc" },
         take: 1,
-        select: { versionPath: true },
+        select: { versionPath: true, versionId: true },
       },
     },
   });
@@ -150,25 +162,31 @@ export async function resolveGameVersionDir(
   }
 
   const versionPath = game.versions[0].versionPath!;
+  const versionId = game.versions[0].versionId;
 
   if (backend === "FlatFilesystem") {
     const resolved = path.join(options.baseDir, game.libraryPath);
     defaultLogger.info(
       `[PHASE:emulator] resolveGameVersionDir: FlatFilesystem => ${resolved}`,
     );
-    return resolved;
+    return { versionDir: resolved, versionId };
   }
 
   const resolved = path.join(options.baseDir, game.libraryPath, versionPath);
   defaultLogger.info(
     `[PHASE:emulator] resolveGameVersionDir: Filesystem => baseDir="${options.baseDir}" libraryPath="${game.libraryPath}" versionPath="${versionPath}" => ${resolved}`,
   );
-  return resolved;
+  return { versionDir: resolved, versionId };
 }
 
 /**
  * Reads the Goldberg achievement definition file from a game's directory.
  * Returns an empty array if the file doesn't exist.
+ *
+ * Volatile fields (`globalPercent`) are dropped on read: files written by
+ * older builds carry a Steam rarity snapshot from whenever they were written,
+ * and reading it back would overwrite the fresher value in the DB on every
+ * scan. See VOLATILE_DEFINITION_FIELDS.
  */
 export function readGoldbergDefinitions(
   versionDir: string,
@@ -180,7 +198,7 @@ export function readGoldbergDefinitions(
     const raw = fs.readFileSync(filePath, "utf-8");
     const data: unknown = JSON.parse(raw);
     if (!Array.isArray(data)) return [];
-    return data as GoldbergAchievementDef[];
+    return stripVolatile(data) as GoldbergAchievementDef[];
   } catch {
     return [];
   }
@@ -310,6 +328,218 @@ async function fetchSteamGlobalPercentages(
   return map;
 }
 
+// ── Local ↔ Steam definition merge ─────────────────────────────────────────
+
+/**
+ * True when a (possibly localised) field carries usable text.
+ * `{ english: "" }` and `"   "` both count as empty.
+ */
+function hasText(value: string | Record<string, string> | undefined): boolean {
+  return resolveLocalised(value, "").trim().length > 0;
+}
+
+/**
+ * Per-field gap counts for a set of definitions.
+ *
+ * Text and icons only. `globalPercent` is deliberately NOT tracked here — see
+ * the note on `mergeSteamIntoLocal`.
+ */
+export type DefinitionGaps = {
+  displayName: number;
+  description: number;
+  icon: number;
+};
+
+/**
+ * Counts what a local `achievements.json` is missing.
+ *
+ * A crack's shipped schema is frequently name + icon only, or name +
+ * displayName only. Those entries are still valid GBE unlock keys, but they
+ * give the player nothing to read, which is why Drop showed bare titles where
+ * Steam shows "Complete Chapter 1."
+ *
+ * `hidden` entries are deliberately exempt from the description check: a
+ * hidden achievement is *supposed* to have no description until it unlocks,
+ * and Steam returns an empty one for them too. Counting those as a gap would
+ * make every future scan call Steam forever for a hole Steam cannot fill.
+ */
+export function countDefinitionGaps(
+  defs: GoldbergAchievementDef[],
+): DefinitionGaps {
+  const gaps: DefinitionGaps = {
+    displayName: 0,
+    description: 0,
+    icon: 0,
+  };
+  for (const def of defs) {
+    if (!hasText(def.displayName)) gaps.displayName++;
+    if (!hasText(def.description) && !def.hidden) gaps.description++;
+    if (!def.icon?.trim()) gaps.icon++;
+  }
+  return gaps;
+}
+
+/** True when at least one definition has a gap Steam could plausibly fill. */
+export function needsSteamEnrichment(defs: GoldbergAchievementDef[]): boolean {
+  const gaps = countDefinitionGaps(defs);
+  return gaps.displayName > 0 || gaps.description > 0 || gaps.icon > 0;
+}
+
+export type DefinitionMergeResult = {
+  definitions: GoldbergAchievementDef[];
+  /** How many entries each field was filled in for. */
+  filled: DefinitionGaps;
+  /** Steam names with no local counterpart. Reported, never added — see below. */
+  steamOnly: string[];
+};
+
+/**
+ * Fills the gaps in a local GBE schema from Steam's, matched on `name`.
+ *
+ * Two authorities, split by what each one actually knows:
+ *
+ *   - The LOCAL file decides WHICH achievements exist and in what order.
+ *     `name` is the key the game passes to `SetAchievement()`, so an entry
+ *     the crack never shipped can never fire. This is why Steam-only names
+ *     are counted and logged but NOT added: they would be permanently
+ *     unearnable rows that cap every player's completion below 100%.
+ *   - STEAM is the authority for the human-readable text a crack's schema
+ *     does not reliably carry: title, description, icon.
+ *
+ * Every field is filled only when the local value is empty AND Steam's is
+ * not. Steam legitimately returns an empty description for `hidden: 1`
+ * achievements, so a blind overwrite would erase real text the crack shipped.
+ *
+ * `globalPercent` is NOT merged, on purpose. Drop reports rarity across its
+ * OWN player base (`unlocks / ownerCount`, computed in
+ * `achievements/gameDetail.ts`), and the client prefers a stored
+ * `globalPercent` over that figure when one exists. Copying Steam's global
+ * percentage in here would silently reinterpret every "% of players" label on
+ * these games from "of Drop's players" to "of Steam's". That is a product
+ * decision, not a side effect of repairing missing descriptions, so this
+ * function leaves the field exactly as the local file had it.
+ *
+ * Local icons are kept when present: they are emulator-relative paths
+ * (`img/<hash>.jpg`) that GBE's in-game overlay loads off disk, and
+ * `resolveGoldbergIcon` already rebuilds a CDN URL from them for the DB.
+ * Replacing them with Steam's https URL would break the overlay.
+ *
+ * Pure — no I/O, no DB, no clock. The one piece of logic here worth testing;
+ * drop-server has no test runner, so it is exported and untested.
+ */
+export function mergeSteamIntoLocal(
+  local: GoldbergAchievementDef[],
+  steam: GoldbergAchievementDef[],
+): DefinitionMergeResult {
+  const bySteamName = new Map<string, GoldbergAchievementDef>();
+  for (const s of steam) {
+    if (s.name) bySteamName.set(s.name, s);
+  }
+
+  const filled: DefinitionGaps = {
+    displayName: 0,
+    description: 0,
+    icon: 0,
+  };
+  const matched = new Set<string>();
+
+  const definitions = local.map((def) => {
+    const remote = def.name ? bySteamName.get(def.name) : undefined;
+    if (!remote) return def;
+    matched.add(def.name);
+
+    const merged: GoldbergAchievementDef = { ...def };
+
+    if (!hasText(merged.displayName) && hasText(remote.displayName)) {
+      merged.displayName = remote.displayName;
+      filled.displayName++;
+    }
+    if (!hasText(merged.description) && hasText(remote.description)) {
+      merged.description = remote.description;
+      filled.description++;
+    }
+    if (!merged.icon?.trim() && remote.icon?.trim()) {
+      merged.icon = remote.icon;
+      filled.icon++;
+    }
+    if (!merged.icon_gray?.trim() && remote.icon_gray?.trim()) {
+      merged.icon_gray = remote.icon_gray;
+    }
+    // Carries the "no description by design" flag across, so the next scan
+    // stops treating this entry's blank description as a fillable gap. Note
+    // that GBE reads this field too: an entry the crack shipped without it
+    // (GBE default 0, visible) that Steam marks hidden will also become
+    // hidden in the in-game overlay, which matches how the real game behaves.
+    if (merged.hidden === undefined && typeof remote.hidden === "number") {
+      merged.hidden = remote.hidden;
+    }
+    // `globalPercent` is intentionally not copied across. See above.
+
+    return merged;
+  });
+
+  return {
+    definitions,
+    filled,
+    steamOnly: [...bySteamName.keys()].filter((name) => !matched.has(name)),
+  };
+}
+
+// ── steam_settings/achievements.json contents ─────────────────────────────
+
+/**
+ * Fields left out of the achievements.json written into the game files.
+ *
+ * `globalPercent` is Steam's global unlock rarity. It changes daily, and
+ * nothing reads it from this file: GBE ignores unknown fields, the desktop
+ * client gets rarity from the server, and `readGoldbergDefinitions` drops it
+ * so the DB keeps its stored value (`upsertDefinitions` falls back to the
+ * previous one). Writing it would make every definition refresh rewrite every
+ * game's file and regenerate every manifest.
+ */
+const VOLATILE_DEFINITION_FIELDS = ["globalPercent"] as const;
+
+function stripVolatile(defs: unknown[]): unknown[] {
+  const volatile = new Set<string>(VOLATILE_DEFINITION_FIELDS);
+  return defs.map((d) => {
+    if (!d || typeof d !== "object" || Array.isArray(d)) return d;
+    return Object.fromEntries(
+      Object.entries(d as Record<string, unknown>).filter(
+        ([key]) => !volatile.has(key),
+      ),
+    );
+  });
+}
+
+/** The exact text written to steam_settings/achievements.json. */
+export function serialiseDefinitionsFile(
+  defs: GoldbergAchievementDef[],
+): string {
+  return JSON.stringify(stripVolatile(defs), null, 2);
+}
+
+/**
+ * True when the file on disk already holds these definitions, ignoring the
+ * volatile fields. Files written by older builds still carry `globalPercent`;
+ * they compare equal here, so they aren't rewritten just to drop it.
+ *
+ * Pure. drop-server has no test runner, so this is exported and untested.
+ */
+export function sameDefinitionsFile(
+  existing: string | null,
+  serialised: string,
+): boolean {
+  if (existing === null) return false;
+  if (existing === serialised) return true;
+  try {
+    const parsed: unknown = JSON.parse(existing);
+    if (!Array.isArray(parsed)) return false;
+    return JSON.stringify(stripVolatile(parsed), null, 2) === serialised;
+  } catch {
+    return false;
+  }
+}
+
 // ── Post-import achievement setup ──────────────────────────────────────────
 
 /**
@@ -325,8 +555,20 @@ async function fetchSteamGlobalPercentages(
  *    preserved as `<dll>.steam_backup`.
  * 4. Creates/updates the `GameExternalLink` (Goldberg ↔ AppID)
  * 5. Upserts all `Achievement` definition records in the DB
- * 6. Regenerates the droplet manifest if the DLL was swapped, so client
- *    downloads don't fail checksum validation against the new bytes.
+ * 6. When it changed anything on disk (steam_settings/ created, steam_appid.txt
+ *    or achievements.json written, a stale steam_settings/ removed, a DLL
+ *    swapped), regenerates the droplet manifest of `options.versionId` (the
+ *    version this directory belongs to), so clients get the new files and
+ *    don't fail checksum validation. `options.manifest` says how:
+ *      - "now" (default): hash here; for admin tasks, which are already
+ *        background work.
+ *      - "queue": start a background task and return; for HTTP requests
+ *        (the admin achievement scan).
+ *      - "skip": the import phase. Its own manifest phase runs afterwards
+ *        over the post-setup bytes, and the version being imported isn't
+ *        in the DB yet.
+ *    Without a versionId nothing is regenerated and a warning says to run
+ *    "Regenerate Manifests".
  *
  * Failures are logged but never thrown — Goldberg setup should never
  * block a version import.
@@ -348,13 +590,34 @@ export async function setupGoldberg(
      * admin task so the swap progress shows up in the live task log.
      */
     logger?: GoldbergLogger;
+    /** How to regenerate the manifest after changing files (step 6). */
+    manifest?: "now" | "queue" | "skip";
+    /** The GameVersion that `versionDir` belongs to (step 6). */
+    versionId?: string;
   },
-): Promise<{ dllsSwapped: number }> {
+): Promise<{
+  dllsSwapped: number;
+  definitionsFileChanged: boolean;
+  /** Anything under the version directory was created, written or removed. */
+  filesChanged: boolean;
+  /** The manifest was regenerated by this call. */
+  manifestRegenerated: boolean;
+}> {
   const log: GoldbergLogger = options?.logger ?? {
     info: (msg) => defaultLogger.info(msg),
     warn: (msg) => defaultLogger.warn(msg),
   };
   let dllsSwapped = 0;
+  let fileChanged = false;
+  // Any write/removal under versionDir, not just achievements.json.
+  let diskChanged = false;
+  let manifestRegenerated = false;
+  const result = () => ({
+    dllsSwapped,
+    definitionsFileChanged: fileChanged,
+    filesChanged: diskChanged || fileChanged || dllsSwapped > 0,
+    manifestRegenerated,
+  });
 
   try {
     // Resolve the actual directory containing the Steam API DLL.
@@ -371,6 +634,7 @@ export async function setupGoldberg(
       const staleSettings = path.join(versionDir, "steam_settings");
       if (fs.existsSync(staleSettings)) {
         fs.rmSync(staleSettings, { recursive: true, force: true });
+        diskChanged = true;
         log.info(
           `[GOLDBERG] Removed stale steam_settings/ at version root (DLL is in ${settingsRoot})`,
         );
@@ -421,7 +685,8 @@ export async function setupGoldberg(
 
     if (!appId) {
       log.info(`[GOLDBERG] No AppID for ${versionDir}, skipping`);
-      return { dllsSwapped };
+      await maybeRegenerate();
+      return result();
     }
 
     log.info(
@@ -432,12 +697,14 @@ export async function setupGoldberg(
     const steamSettings = path.join(settingsRoot, "steam_settings");
     if (!fs.existsSync(steamSettings)) {
       fs.mkdirSync(steamSettings, { recursive: true });
+      diskChanged = true;
       log.info(`[GOLDBERG] Created ${steamSettings}`);
     }
 
     const appIdPath = path.join(steamSettings, "steam_appid.txt");
     if (!fs.existsSync(appIdPath)) {
       fs.writeFileSync(appIdPath, appId, "utf-8");
+      diskChanged = true;
       log.info(`[GOLDBERG] Wrote steam_appid.txt (${appId})`);
     }
 
@@ -504,6 +771,11 @@ export async function setupGoldberg(
     }
 
     // ── 3. Fetch/read achievement definitions ────────────────────────────
+    // The local file and Steam each know something the other doesn't, so we
+    // merge rather than pick a winner. See `mergeSteamIntoLocal`. Before this,
+    // a non-empty local file short-circuited Steam entirely, which is why a
+    // crack that shipped name + icon only produced achievements that showed a
+    // title and nothing else anywhere in Drop.
     const forceRefresh = options?.forceRefreshAchievements ?? false;
     let definitions = forceRefresh ? [] : readGoldbergDefinitions(settingsRoot);
 
@@ -514,6 +786,45 @@ export async function setupGoldberg(
           : `[GOLDBERG] No local achievements.json, fetching from Steam API`,
       );
       definitions = await fetchSteamAchievements(appId);
+    } else if (needsSteamEnrichment(definitions)) {
+      const gaps = countDefinitionGaps(definitions);
+      log.info(
+        `[GOLDBERG] Local achievements.json has gaps across ${definitions.length} entries ` +
+          `(${gaps.description} without a description, ${gaps.displayName} without a title, ` +
+          `${gaps.icon} without an icon) — filling from Steam`,
+      );
+
+      const steamDefs = await fetchSteamAchievements(appId);
+      if (steamDefs.length === 0) {
+        // Network down, rate limited, no API key, or a fake AppID. The local
+        // definitions still unlock correctly, so keep them exactly as they
+        // are — an outage must never cost the player working achievements.
+        log.warn(
+          `[GOLDBERG] Steam returned nothing for AppID ${appId} — keeping the ` +
+            `${definitions.length} local definition(s) unchanged`,
+        );
+      } else {
+        const merged = mergeSteamIntoLocal(definitions, steamDefs);
+        definitions = merged.definitions;
+        log.info(
+          `[GOLDBERG] Filled ${merged.filled.description} description(s), ` +
+            `${merged.filled.displayName} title(s) and ${merged.filled.icon} icon(s) from Steam`,
+        );
+        if (merged.steamOnly.length > 0) {
+          // Not added on purpose: the emulator can only ever unlock names the
+          // crack shipped, so these would be permanently unearnable rows that
+          // hold every player's completion below 100%.
+          log.info(
+            `[GOLDBERG] ${merged.steamOnly.length} achievement(s) exist on Steam but not in ` +
+              `this build's schema and were left out (${merged.steamOnly.slice(0, 5).join(", ")}` +
+              `${merged.steamOnly.length > 5 ? ", …" : ""})`,
+          );
+        }
+      }
+    } else {
+      log.info(
+        `[GOLDBERG] Local achievements.json is complete (${definitions.length} entries) — not calling Steam`,
+      );
     }
 
     // Write definitions to steam_settings/achievements.json (the GBE achievement
@@ -524,16 +835,31 @@ export async function setupGoldberg(
     // clobbering real progress on update. The client/GBE creates + owns it at
     // launch under the DLL-anchored drop-goldberg/, which PROTECTED_DATA_DIRS
     // shields from the reconcile sweep.
+    //
+    // The shape written is exactly the shape `readGoldbergDefinitions` reads
+    // back — a flat array of the same objects the local file already held,
+    // with empty text fields filled in — so a merged file survives the next
+    // scan and the in-game GBE overlay picks up the better text too. That
+    // persistence is what stops the next scan from calling Steam again.
     if (definitions.length > 0) {
       const settingsAchPath = path.join(steamSettings, "achievements.json");
-      fs.writeFileSync(
-        settingsAchPath,
-        JSON.stringify(definitions, null, 2),
-        "utf-8",
-      );
-      log.info(
-        `[GOLDBERG] Wrote ${definitions.length} achievement definitions to steam_settings/`,
-      );
+      const serialised = serialiseDefinitionsFile(definitions);
+      const existing = fs.existsSync(settingsAchPath)
+        ? fs.readFileSync(settingsAchPath, "utf-8")
+        : null;
+      // Only write when the definitions actually differ. This file sits inside
+      // the version directory, so a rewrite changes its hash, regenerates the
+      // manifest and makes every installed copy stale — worth doing when we
+      // have better text to store, never for identical content. Compared with
+      // volatile fields removed (see serialiseDefinitionsFile), so Steam's
+      // daily-moving rarity figures can't force a rewrite of every game.
+      if (!sameDefinitionsFile(existing, serialised)) {
+        fs.writeFileSync(settingsAchPath, serialised, "utf-8");
+        fileChanged = true;
+        log.info(
+          `[GOLDBERG] Wrote ${definitions.length} achievement definitions to steam_settings/`,
+        );
+      }
     }
 
     // ── 4. Create/update the DB external link ────────────────────────────
@@ -587,9 +913,67 @@ export async function setupGoldberg(
       );
     }
 
-    return { dllsSwapped };
+    await maybeRegenerate();
+    return result();
   } catch (e) {
     log.warn(`[GOLDBERG] Setup failed for game=${gameId}: ${e}`);
-    return { dllsSwapped };
+    // A failure part-way can still have written files; the manifest has to
+    // match whatever is on disk now.
+    await maybeRegenerate();
+    return result();
+  }
+
+  async function maybeRegenerate() {
+    if (manifestRegenerated) return;
+    const mode = options?.manifest ?? "now";
+    if (mode === "skip") return;
+    if (!result().filesChanged) return;
+    const versionId = options?.versionId;
+    if (!versionId) {
+      log.warn(
+        `[GOLDBERG] Files under ${versionDir} changed but the caller gave no versionId, so ` +
+          `no manifest was regenerated. Run "Regenerate Manifests".`,
+      );
+      return;
+    }
+    try {
+      if (mode === "queue") {
+        // Lazy import: the library manager's import pipeline imports this file.
+        const { queueManifestRegeneration } = await import(
+          "./library/manifest-queue"
+        );
+        const taskId = await queueManifestRegeneration(
+          gameId,
+          versionId,
+          `achievement files changed for game ${gameId}`,
+        );
+        log.info(
+          `[GOLDBERG] Files under ${versionDir} changed; manifest regeneration queued` +
+            (taskId
+              ? ` (worker task ${taskId})`
+              : " (worker already running, or see above)"),
+        );
+        return;
+      }
+      const { libraryManager } = await import("./library");
+      log.info(
+        `[GOLDBERG] Files under ${versionDir} changed, regenerating the manifest for game=${gameId}`,
+      );
+      manifestRegenerated =
+        await libraryManager.regenerateManifestForLatestVersion(gameId, log, {
+          versionId,
+        });
+      if (!manifestRegenerated) {
+        log.warn(
+          `[GOLDBERG] Manifest was NOT regenerated for game=${gameId} (reason above). ` +
+            `Clients may fail checksum validation until "Regenerate Manifests" runs.`,
+        );
+      }
+    } catch (e) {
+      log.warn(
+        `[GOLDBERG] Manifest regeneration failed for game=${gameId}: ${e}. ` +
+          `Run "Regenerate Manifests" before clients download this game.`,
+      );
+    }
   }
 }

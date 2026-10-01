@@ -39,6 +39,7 @@ model User {
     reviewedGameRequests GameRequest[] @relation(name: "requestsReviewed")
 
     achievements     UserAchievement[]
+    achievementResets AchievementReset[]
     showcases        ProfileShowcase[]
     leaderboardEntries LeaderboardEntry[]
     requestVotes     RequestVote[]

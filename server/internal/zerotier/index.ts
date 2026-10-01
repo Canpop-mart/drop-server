@@ -29,6 +29,29 @@ const ROOM_SUBNET_BASE = "10.242"; // -> 10.242.<octet>.0/24
 // ZeroTier node ids are 40-bit → 10 lowercase hex chars.
 export const ZT_NODE_ID_RE = /^[0-9a-f]{10}$/;
 
+/**
+ * Is `address` a usable host IPv4 inside a room's /24? Legacy rooms (null
+ * octet) used 10.242.0.0/24. Pure so it can be checked by hand; there is no
+ * server test runner, so this is untested.
+ */
+export function isAddressInRoomSubnet(
+  address: string,
+  subnetOctet: number | null,
+): boolean {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(address);
+  if (!m) return false;
+  const parts = m.slice(1).map(Number);
+  if (parts.some((p) => p > 255)) return false;
+  const [base0, base1] = ROOM_SUBNET_BASE.split(".").map(Number);
+  return (
+    parts[0] === base0 &&
+    parts[1] === base1 &&
+    parts[2] === (subnetOctet ?? 0) &&
+    parts[3] >= 1 &&
+    parts[3] <= 254
+  );
+}
+
 /** Prisma unique-constraint violation — used to retry a raced allocation. */
 function isUniqueConstraintError(e: unknown): boolean {
   return (
@@ -110,6 +133,19 @@ class RoomManager {
     this.ensureEnabled();
     // Opportunistically clean up expired rooms so they don't pile up.
     await this.reapExpired();
+
+    if (opts.gameId) {
+      const game = await prisma.game.findUnique({
+        where: { id: opts.gameId },
+        select: { id: true },
+      });
+      if (!game)
+        throw createError({ statusCode: 400, statusMessage: "Unknown game." });
+    }
+
+    // A device is in at most one room: hosting a new one ends any room it was
+    // still hosting (e.g. after a crash) and leaves any it had joined.
+    await this.leaveOtherRooms(opts.hostClientId);
 
     for (let attempt = 0; attempt < 8; attempt++) {
       const shortCode = await this.allocateUniqueCode();
@@ -199,6 +235,11 @@ class RoomManager {
         statusMessage: "Room has expired.",
       });
 
+    // One room per device. Excludes this room so a host rejoining its own
+    // room after a restart (the client does that through this endpoint)
+    // doesn't end it.
+    await this.leaveOtherRooms(opts.clientId, room.id);
+
     await zerotierController.setMemberAuthorized(
       room.networkId,
       opts.nodeId,
@@ -220,11 +261,96 @@ class RoomManager {
 
     return {
       roomId: room.id,
+      shortCode: room.shortCode,
       networkId: room.networkId,
       hostAddress: room.hostAddress,
       gameId: room.gameId,
       name: room.name,
+      // True when the host rejoins its own room (restart recovery).
+      isHost: room.hostClientId === opts.clientId,
     };
+  }
+
+  /**
+   * End every room `clientId` hosts and leave every room it has joined,
+   * except `keepRoomId`. Best-effort per room: one controller hiccup doesn't
+   * block the new host/join.
+   */
+  private async leaveOtherRooms(clientId: string, keepRoomId?: string) {
+    const notKept = keepRoomId ? { not: keepRoomId } : undefined;
+    const hosted = await prisma.room.findMany({
+      where: { hostClientId: clientId, id: notKept },
+      select: { id: true, networkId: true },
+    });
+    const joined = await prisma.roomMember.findMany({
+      where: {
+        clientId,
+        status: "Authorized",
+        roomId: notKept,
+        room: { hostClientId: { not: clientId } },
+      },
+      select: { roomId: true },
+    });
+    for (const r of hosted) {
+      try {
+        await this.destroyRoom(r.id, r.networkId);
+        logger.info(`[ZeroTier] Ended earlier room ${r.id} of ${clientId}`);
+      } catch (e) {
+        logger.warn(`[ZeroTier] Failed to end earlier room ${r.id}: ${e}`);
+      }
+    }
+    for (const m of joined) {
+      try {
+        await this.leaveRoom({ roomId: m.roomId, clientId });
+      } catch (e) {
+        logger.warn(
+          `[ZeroTier] Failed to leave earlier room ${m.roomId}: ${e}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * The live room this client is in, as host or authorized member, newest
+   * first; null when none. Used by a restarted client to offer a rejoin. Works
+   * even when rooms are disabled (it only reads the DB), so a client can still
+   * find out it has nothing to rejoin.
+   */
+  async getMyRoom(clientId: string) {
+    const room = await prisma.room.findFirst({
+      where: {
+        AND: [
+          { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+          {
+            OR: [
+              { hostClientId: clientId },
+              { members: { some: { clientId, status: "Authorized" } } },
+            ],
+          },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!room) return null;
+    return {
+      roomId: room.id,
+      shortCode: room.shortCode,
+      networkId: room.networkId,
+      gameId: room.gameId,
+      gameName: await this.gameName(room.gameId),
+      name: room.name,
+      isHost: room.hostClientId === clientId,
+      expiresAt: room.expiresAt,
+    };
+  }
+
+  private async gameName(gameId: string | null): Promise<string | null> {
+    if (!gameId) return null;
+    const game = await prisma.game.findUnique({
+      where: { id: gameId },
+      select: { mName: true },
+    });
+    return game?.mName ?? null;
   }
 
   /**
@@ -245,9 +371,15 @@ class RoomManager {
         statusCode: 403,
         statusMessage: "Only the host can set the room address.",
       });
+    const address = opts.address.trim();
+    if (!isAddressInRoomSubnet(address, room.subnetOctet))
+      throw createError({
+        statusCode: 400,
+        statusMessage: "That address isn't inside this room's network.",
+      });
     await prisma.room.updateMany({
       where: { id: opts.roomId },
-      data: { hostAddress: opts.address },
+      data: { hostAddress: address },
     });
     return { ok: true };
   }
@@ -317,34 +449,35 @@ class RoomManager {
     if (!isMember)
       throw createError({ statusCode: 403, statusMessage: "Forbidden." });
 
-    let controllerNodeId: string | null = null;
-    try {
-      controllerNodeId = await zerotierController.getControllerNodeId();
-    } catch {
-      // best-effort: the client only needs this to scope its network sweep
-    }
-
-    // Resolve every authorized member's controller-assigned overlay IP once. The
-    // controller is the source of truth — it assigns IPs from the room's pool as
+    // Resolve every authorized member's controller-assigned overlay IP. The
+    // controller is the source of truth: it assigns IPs from the room's pool as
     // each node comes online. We use this for BOTH the host's connect address and
     // the requester's peer list, because it's far more reliable than the host's
     // self-report poll (which gives up if ZeroTier is slow to assign on a fresh
     // network join). A member whose IP isn't assigned yet is simply omitted and
-    // fills in on a later poll. Best-effort — never fail getRoom over this.
+    // fills in on a later poll. All controller calls run in parallel (each has
+    // its own timeout), and none of them can fail getRoom.
+    const authorized = room.members.filter((m) => m.status === "Authorized");
+    const [controllerResult, gameName, ...ipResults] = await Promise.all([
+      zerotierController.getControllerNodeId().then(
+        (id) => id,
+        // best-effort: the client only needs this to scope its network sweep
+        () => null,
+      ),
+      this.gameName(room.gameId),
+      ...authorized.map((m) =>
+        zerotierController
+          .getMemberIpAssignments(room.networkId, m.memberId)
+          .then(
+            (ips) => [m.clientId, ips[0]?.split("/")[0]] as const,
+            // not yet assigned / controller hiccup: omit this member
+            () => [m.clientId, undefined] as const,
+          ),
+      ),
+    ]);
+    const controllerNodeId: string | null = controllerResult;
     const memberIp = new Map<string, string>();
-    for (const m of room.members) {
-      if (m.status !== "Authorized") continue;
-      try {
-        const ips = await zerotierController.getMemberIpAssignments(
-          room.networkId,
-          m.memberId,
-        );
-        const ip = ips[0]?.split("/")[0];
-        if (ip) memberIp.set(m.clientId, ip);
-      } catch {
-        // member IP not yet assigned / controller hiccup — omit this member
-      }
-    }
+    for (const [clientId, ip] of ipResults) if (ip) memberIp.set(clientId, ip);
     // Host connect address: prefer the controller's assignment, fall back to the
     // host's self-report (report_host_address) when the controller doesn't have
     // it yet. This is what populates the "Connect address" box for join-by-IP.
@@ -363,6 +496,7 @@ class RoomManager {
       controllerNodeId,
       peerAddresses,
       gameId: room.gameId,
+      gameName,
       name: room.name,
       hostClientId: room.hostClientId,
       expiresAt: room.expiresAt,
@@ -424,19 +558,26 @@ class RoomManager {
     await prisma.room.deleteMany({ where: { id: roomId } });
   }
 
-  /** Tear down rooms whose TTL has elapsed. Best-effort; never throws. */
+  /**
+   * Tear down rooms whose TTL has elapsed. Best-effort per room; returns how
+   * many were torn down. Runs on create/browse, from the admin page, and from
+   * the daily `cleanup:rooms` task.
+   */
   async reapExpired() {
     const expired = await prisma.room.findMany({
       where: { expiresAt: { lt: new Date() } },
       select: { id: true, networkId: true },
     });
+    let reaped = 0;
     for (const room of expired) {
       try {
         await this.destroyRoom(room.id, room.networkId);
+        reaped++;
       } catch (e) {
         logger.warn(`[ZeroTier] Failed to reap room ${room.id}: ${e}`);
       }
     }
+    return reaped;
   }
 }
 

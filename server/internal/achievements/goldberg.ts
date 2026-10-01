@@ -14,10 +14,7 @@
  * `setupGoldberg` pipeline, and `listDefinitions` reads back via the
  * canonical `achievementsRepo`.
  */
-import {
-  resolveGameVersionDir,
-  setupGoldberg,
-} from "~/server/internal/goldberg";
+import { resolveGameVersion, setupGoldberg } from "~/server/internal/goldberg";
 import prisma from "~/server/internal/db/database";
 import { ExternalAccountProvider } from "~/prisma/client/enums";
 import { logger } from "~/server/internal/logging";
@@ -32,7 +29,8 @@ export const goldbergProvider: AchievementProvider = {
     const ctx = opts?.ctx;
     ctx?.markPhase?.("goldberg:resolve-dir");
 
-    const versionDir = await resolveGameVersionDir(gameId);
+    const resolvedVersion = await resolveGameVersion(gameId);
+    const versionDir = resolvedVersion?.versionDir;
     if (!versionDir) {
       logger.warn(
         `${LOG} scanGame: cannot resolve version dir for game=${gameId} (not filesystem-backed?)`,
@@ -49,8 +47,12 @@ export const goldbergProvider: AchievementProvider = {
     // It already writes Achievement rows itself; the audit keeps that
     // (it's the import-time write path) but `setupGoldberg` now shares
     // the same upsert shape as achievementsRepo so the records match.
+    // This runs inside the admin's HTTP request, so a manifest regeneration
+    // (whole-game hashing) is queued as a background task, not done here.
     ctx?.markPhase?.("goldberg:setup");
     await setupGoldberg(gameId, versionDir, {
+      versionId: resolvedVersion?.versionId,
+      manifest: "queue",
       logger: ctx?.logger ?? logger,
     });
 

@@ -55,6 +55,7 @@ export default defineEventHandler(async (h3) => {
   const achievements: TaskGroup[] = [
     "scan:goldberg-readiness",
     "refresh:achievement-defs",
+    "backfill:achievement-text",
     "link:retroachievements",
     "recalculate:achievements",
   ];

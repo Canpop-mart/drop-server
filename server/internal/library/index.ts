@@ -1021,7 +1021,7 @@ class LibraryManager {
 
   /**
    * Regenerates the droplet manifest + file list for a game's latest
-   * version and persists them. Needed after any server-side mutation of
+   * version (or `opts.versionId`) and persists them. Needed after any server-side mutation of
    * the on-disk files (e.g. admin-triggered GBE DLL swap) so the depot's
    * download checksums match what's actually on disk.
    *
@@ -1034,6 +1034,13 @@ class LibraryManager {
   async regenerateManifestForLatestVersion(
     gameId: string,
     taskLogger: { info: (msg: string) => void; warn: (msg: string) => void },
+    opts?: {
+      /**
+       * Regenerate this version instead of the latest one — the version
+       * whose directory the caller actually changed.
+       */
+      versionId?: string;
+    },
   ): Promise<boolean> {
     const game = await prisma.game.findUnique({
       where: { id: gameId },
@@ -1043,6 +1050,7 @@ class LibraryManager {
         libraryPath: true,
         discFolders: true,
         versions: {
+          ...(opts?.versionId ? { where: { versionId: opts.versionId } } : {}),
           orderBy: { versionIndex: "desc" },
           take: 1,
           select: { versionId: true, versionPath: true },
@@ -1086,6 +1094,40 @@ class LibraryManager {
       return false;
     }
 
+    // One regeneration per version at a time. A second caller (the
+    // "Regenerate Manifests" task and a queued per-game regeneration, say)
+    // waits for the first and then hashes again, so the stored manifest
+    // always reflects the files as they are after the later write.
+    const key = version.versionId;
+    while (this.manifestRegenInFlight.has(key)) {
+      taskLogger.info(
+        `Manifest regen: waiting for a regeneration of ${game.mName} already in progress`,
+      );
+      await this.manifestRegenInFlight.get(key)!.catch(() => false);
+    }
+    const run = this.runManifestRegen(
+      game as typeof game & { libraryId: string },
+      library,
+      version as { versionId: string; versionPath: string },
+      taskLogger,
+    );
+    this.manifestRegenInFlight.set(key, run);
+    try {
+      return await run;
+    } finally {
+      this.manifestRegenInFlight.delete(key);
+    }
+  }
+
+  /** versionId -> the regeneration currently hashing that version. */
+  private manifestRegenInFlight = new Map<string, Promise<boolean>>();
+
+  private async runManifestRegen(
+    game: { mName: string; libraryPath: string },
+    library: LibraryProvider<unknown>,
+    version: { versionId: string; versionPath: string },
+    taskLogger: { info: (msg: string) => void; warn: (msg: string) => void },
+  ): Promise<boolean> {
     taskLogger.info(
       `Regenerating manifest for ${game.mName} (version ${version.versionPath})...`,
     );

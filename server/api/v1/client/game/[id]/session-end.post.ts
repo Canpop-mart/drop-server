@@ -14,7 +14,8 @@ import { retroAchievementsProvider } from "~/server/internal/achievements/retroa
  * Unlock recording goes through `unlocksRepo.recordUnlock` inside the
  * provider, which upserts on `(userId, achievementId)` — so a session-end
  * sync can never double-credit an unlock the live `ra-poll` already
- * recorded mid-session.
+ * recorded mid-session. Rows it creates are labelled `source: "session-end"`,
+ * and unlocks earned before an achievement reset are ignored (reset.ts).
  */
 export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const user = await fetchUser();
@@ -27,6 +28,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     const { newlyUnlocked } = await retroAchievementsProvider.syncUnlocks(
       gameId,
       user.id,
+      { source: "session-end" },
     );
     if (newlyUnlocked > 0) {
       logger.info(

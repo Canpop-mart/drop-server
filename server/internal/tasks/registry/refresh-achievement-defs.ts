@@ -1,7 +1,7 @@
 import { defineDropTask } from "..";
 import prisma from "../../db/database";
 import { ExternalAccountProvider } from "~/prisma/client/enums";
-import { resolveGameVersionDir, setupGoldberg } from "../../goldberg";
+import { resolveGameVersion, setupGoldberg } from "../../goldberg";
 
 /**
  * Re-pulls Steam achievement definitions for every Steam/Goldberg game,
@@ -39,7 +39,8 @@ export default defineDropTask({
 
     for (let i = 0; i < games.length; i++) {
       const game = games[i];
-      const versionDir = await resolveGameVersionDir(game.id);
+      const resolvedVersion = await resolveGameVersion(game.id);
+      const versionDir = resolvedVersion?.versionDir;
       if (!versionDir) {
         progress(Math.round(((i + 1) / games.length) * 100));
         continue;
@@ -47,6 +48,8 @@ export default defineDropTask({
 
       try {
         await setupGoldberg(game.id, versionDir, {
+          versionId: resolvedVersion?.versionId,
+          manifest: "now",
           forceRefreshAchievements: true,
           logger,
         });

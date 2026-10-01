@@ -48,11 +48,33 @@
               The in-game login expires after about two months. If achievements
               stop unlocking while you play, sign in again.
             </p>
+            <!-- Linked before RetroArch sign-ins (Connect tokens) were
+                 stored, so the desktop app can't sign RetroArch in. -->
+            <p
+              v-if="raAccount.hasConnectToken === false"
+              class="text-xs text-amber-400 mt-0.5"
+            >
+              RetroArch can't sign in with this link yet. Sign in again once to
+              fix that.
+            </p>
+            <p v-if="raUnlinkError" class="text-xs text-red-400 mt-0.5">
+              {{ raUnlinkError }}
+            </p>
           </template>
+          <p v-else-if="accountsError" class="text-xs text-red-400">
+            Could not load your connected accounts.
+          </p>
           <p v-else class="text-xs text-zinc-500">Not connected</p>
         </div>
       </div>
       <div class="flex items-center gap-2">
+        <button
+          v-if="accountsError"
+          class="px-3 py-1.5 text-sm text-zinc-300 hover:text-zinc-100 transition-colors"
+          @click="loadAccounts"
+        >
+          Retry
+        </button>
         <button
           v-if="raAccount"
           class="px-3 py-1.5 text-sm text-zinc-300 hover:text-zinc-100 transition-colors"
@@ -69,7 +91,7 @@
           {{ raUnlinking ? "Unlinking..." : "Unlink" }}
         </button>
         <button
-          v-else
+          v-else-if="!accountsError"
           class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-md transition-colors"
           @click="raDialogOpen = true"
         >
@@ -130,8 +152,12 @@
                     class="text-blue-400 hover:underline"
                     >RA settings</a
                   >
-                  under "Keys". Your password is used once to obtain a login
-                  token for in-game achievement tracking and is never stored.
+                  under "Keys".
+                  <template v-if="!raApiKeyRequired">
+                    This server can track unlocks without it, so it is optional.
+                  </template>
+                  Your password is used once to obtain a login token for in-game
+                  achievement tracking and is never stored.
                 </p>
 
                 <div class="space-y-3">
@@ -149,6 +175,9 @@
                   <div>
                     <label class="block text-sm font-medium text-zinc-300 mb-1">
                       Web API Key
+                      <span v-if="!raApiKeyRequired" class="text-zinc-500"
+                        >(optional)</span
+                      >
                     </label>
                     <input
                       v-model="raApiKey"
@@ -187,7 +216,11 @@
                   </button>
                   <LoadingButton
                     :loading="raLinking"
-                    :disabled="!raUsername || !raApiKey || !raPassword"
+                    :disabled="
+                      !raUsername ||
+                      (raApiKeyRequired && !raApiKey) ||
+                      !raPassword
+                    "
                     class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     @click="linkRA"
                   >
@@ -234,7 +267,23 @@
     </div>
 
     <!-- Achievements grid -->
-    <div v-if="filteredAchievements.length === 0" class="py-12 text-center">
+    <div
+      v-if="listError"
+      class="py-12 text-center rounded-lg bg-zinc-800/50 ring-1 ring-red-500/20"
+    >
+      <p class="text-red-400">Could not load your achievements.</p>
+      <button
+        class="mt-3 px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-100 text-sm rounded-md transition-colors"
+        :disabled="refreshing"
+        @click="refreshList"
+      >
+        {{ refreshing ? $t("common.srLoading") : "Retry" }}
+      </button>
+    </div>
+    <div
+      v-else-if="filteredAchievements.length === 0"
+      class="py-12 text-center"
+    >
       <TrophyIcon class="size-12 text-zinc-700 mx-auto mb-3" />
       <p class="text-zinc-500">{{ $t("account.achievements.empty") }}</p>
     </div>
@@ -318,6 +367,9 @@
       </div>
       <p v-if="resetMessage" class="mt-3 text-sm text-green-400">
         {{ resetMessage }}
+      </p>
+      <p v-if="resetError" class="mt-3 text-sm text-red-400">
+        {{ resetError }}
       </p>
     </div>
 
@@ -509,6 +561,8 @@ type ExternalAccount = {
   id: string;
   provider: string;
   externalId: string;
+  /** False when the server holds no RetroArch sign-in for this account. */
+  hasConnectToken?: boolean;
 };
 
 const raAccount = ref<ExternalAccount | null>(null);
@@ -519,17 +573,28 @@ const raPassword = ref("");
 const raLinking = ref(false);
 const raUnlinking = ref(false);
 const raLinkError = ref("");
+const raUnlinkError = ref("");
+// True until the server says it has RA credentials of its own.
+const raApiKeyRequired = ref(true);
+const accountsError = ref(false);
 
-// Fetch existing external accounts
-try {
-  const { accounts } = (await $dropFetch("/api/v1/user/external-accounts")) as {
-    accounts: ExternalAccount[];
-  };
-  raAccount.value =
-    accounts?.find((a) => a.provider === "RetroAchievements") ?? null;
-} catch {
-  // ignore – user may not have any linked accounts
+// Fetch existing external accounts. No linked account is an empty list, not
+// an error, so a failure here is a real one and gets a retry.
+async function loadAccounts() {
+  accountsError.value = false;
+  try {
+    const res = (await $dropFetch("/api/v1/user/external-accounts")) as {
+      accounts: ExternalAccount[];
+      raApiKeyRequired?: boolean;
+    };
+    raAccount.value =
+      res.accounts?.find((a) => a.provider === "RetroAchievements") ?? null;
+    raApiKeyRequired.value = res.raApiKeyRequired ?? true;
+  } catch {
+    accountsError.value = true;
+  }
 }
+await loadAccounts();
 
 // Reconnecting is the same PUT as the first link: RA has no refresh endpoint,
 // so a new token can only come from the password. The username is prefilled;
@@ -544,7 +609,12 @@ function openReconnect() {
 }
 
 async function linkRA() {
-  if (!raUsername.value || !raApiKey.value || !raPassword.value) return;
+  if (
+    !raUsername.value ||
+    (raApiKeyRequired.value && !raApiKey.value) ||
+    !raPassword.value
+  )
+    return;
   raLinking.value = true;
   raLinkError.value = "";
   try {
@@ -554,12 +624,17 @@ async function linkRA() {
         method: "PUT",
         body: {
           username: raUsername.value,
-          apiKey: raApiKey.value,
+          ...(raApiKey.value ? { apiKey: raApiKey.value } : {}),
           password: raPassword.value,
         },
       },
-    )) as ExternalAccount;
-    raAccount.value = account;
+    )) as ExternalAccount & { connectToken?: string };
+    raAccount.value = {
+      id: account.id,
+      provider: account.provider,
+      externalId: account.externalId,
+      hasConnectToken: !!account.connectToken,
+    };
     raDialogOpen.value = false;
     raUsername.value = "";
     raApiKey.value = "";
@@ -577,11 +652,18 @@ async function linkRA() {
 
 async function unlinkRA() {
   raUnlinking.value = true;
+  raUnlinkError.value = "";
   try {
     await $dropFetch("/api/v1/user/external-accounts/retroachievements", {
       method: "DELETE",
     });
     raAccount.value = null;
+  } catch (e) {
+    raUnlinkError.value = `Could not unlink: ${
+      e && typeof e === "object" && "statusMessage" in e
+        ? String((e as { statusMessage: string }).statusMessage)
+        : String(e)
+    }`;
   } finally {
     raUnlinking.value = false;
   }
@@ -591,6 +673,7 @@ async function unlinkRA() {
 const resetGameId = ref("");
 const resetting = ref(false);
 const resetMessage = ref("");
+const resetError = ref("");
 
 // Diagnostics state
 const debugGameId = ref("");
@@ -652,11 +735,20 @@ const sortOptions = computed(
   ],
 );
 
-// Load achievements
-const data = (await $dropFetch("/api/v1/user/achievements/list").catch(
-  () => [],
-)) as AchievementItem[];
-allAchievements.value = data;
+// Load achievements. A failed fetch shows an error with a retry instead of
+// the "no achievements yet" empty state.
+const listError = ref(false);
+async function loadList() {
+  try {
+    allAchievements.value = (await $dropFetch(
+      "/api/v1/user/achievements/list",
+    )) as AchievementItem[];
+    listError.value = false;
+  } catch {
+    listError.value = true;
+  }
+}
+await loadList();
 
 // Distinct games that have achievements
 const gamesWithAchievements = computed(() => {
@@ -698,10 +790,7 @@ const filteredAchievements = computed(() => {
 async function refreshList() {
   refreshing.value = true;
   try {
-    const refreshed = (await $dropFetch("/api/v1/user/achievements/list").catch(
-      () => [],
-    )) as AchievementItem[];
-    allAchievements.value = refreshed;
+    await loadList();
   } finally {
     refreshing.value = false;
   }
@@ -720,6 +809,7 @@ async function resetAchievements() {
 
   resetting.value = true;
   resetMessage.value = "";
+  resetError.value = "";
 
   try {
     const query = resetGameId.value ? `?gameId=${resetGameId.value}` : "";
@@ -730,16 +820,18 @@ async function resetAchievements() {
     resetMessage.value = `${t("account.achievements.resetSuccess")} (${res.deleted})`;
 
     // Refresh achievement list
-    const refreshed = (await $dropFetch("/api/v1/user/achievements/list").catch(
-      () => [],
-    )) as AchievementItem[];
-    allAchievements.value = refreshed;
+    await loadList();
 
     setTimeout(() => {
       resetMessage.value = "";
     }, 5000);
-  } catch {
+  } catch (e) {
     resetMessage.value = "";
+    resetError.value = `Could not reset achievements: ${
+      e && typeof e === "object" && "statusMessage" in e
+        ? String((e as { statusMessage: string }).statusMessage)
+        : String(e)
+    }`;
   } finally {
     resetting.value = false;
   }

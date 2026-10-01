@@ -54,6 +54,8 @@ export type UnlockSource = "client-report" | "ra-poll" | "session-end";
 /** A single unlock to be persisted. */
 export interface UnlockInput {
   userId: string;
+  /** The achievement's game. Used to look up the user's reset marker. */
+  gameId: string;
   achievementId: string;
   source: UnlockSource;
   occurredAt: Date;
@@ -93,5 +95,6 @@ export interface AchievementProvider {
   syncUnlocks(
     gameId: string,
     userId: string,
+    opts?: { source?: UnlockSource },
   ): Promise<{ newlyUnlocked: number }>;
 }

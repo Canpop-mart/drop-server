@@ -365,7 +365,72 @@ export function createRAClient(
 }
 
 /**
+ * True when the server has its own RetroAchievements Web API credentials
+ * (RA_USERNAME + RA_API_KEY). With them, the server can read any player's
+ * progress by username, so a player does not need to hand over their own
+ * Web API key to have unlocks tracked.
+ */
+export function serverHasRACredentials(): boolean {
+  return !!(process.env.RA_USERNAME && process.env.RA_API_KEY);
+}
+
+/**
+ * Parses a RetroAchievements date. The Web API returns them as
+ * "YYYY-MM-DD HH:MM:SS" with no zone; RA serves UTC. `new Date()` on that
+ * string would read it as the SERVER's local time, which skews unlock times
+ * (and the reset cut-off) on any server not running in UTC. Anything else is
+ * handed to `new Date()` unchanged. Returns null for a missing/unparseable
+ * value.
+ *
+ * Pure. drop-server has no test runner, so this is exported and untested.
+ */
+export function parseRADate(value: string | undefined | null): Date | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  const naive = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})$/.exec(trimmed);
+  const date = naive ? new Date(`${naive[1]}T${naive[2]}Z`) : new Date(trimmed);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * RetroAchievements Web API credentials for reading ONE player's progress:
+ * the server's own RA_USERNAME / RA_API_KEY, else that player's own linked
+ * Web API key. Never another player's key: `resolveRACredentials` falls back
+ * to "any linked user" for system tasks, and polling someone's progress with
+ * a different player's personal key would spend that player's API quota and
+ * act in their name without them knowing.
+ */
+export async function resolveRACredentialsForPlayer(
+  userId: string,
+): Promise<{ username: string; apiKey: string } | null> {
+  const envUsername = process.env.RA_USERNAME ?? "";
+  const envApiKey = process.env.RA_API_KEY ?? "";
+  if (envUsername && envApiKey) {
+    return { username: envUsername, apiKey: envApiKey };
+  }
+
+  const { default: prisma } = await import("~/server/internal/db/database");
+  const { ExternalAccountProvider } = await import("~/prisma/client/enums");
+  const own = await prisma.userExternalAccount.findUnique({
+    where: {
+      userId_provider: {
+        userId,
+        provider: ExternalAccountProvider.RetroAchievements,
+      },
+    },
+    select: { externalId: true, token: true },
+  });
+  if (own && own.externalId && own.token) {
+    return { username: own.externalId, apiKey: own.token };
+  }
+  return null;
+}
+
+/**
  * Resolve RetroAchievements API credentials.
+ * For reading a specific player's progress use
+ * `resolveRACredentialsForPlayer` instead; this one may borrow another
+ * player's key (step 3) and is meant for definition scans and system tasks.
  * Priority:
  *   1. Environment variables (RA_USERNAME + RA_API_KEY)
  *   2. Specific user's linked RA account (when userId provided)
