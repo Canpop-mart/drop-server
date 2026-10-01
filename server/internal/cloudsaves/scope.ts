@@ -1,76 +1,39 @@
 /**
- * Who may READ whose cloud saves.
+ * Who may READ whose cloud saves: the account that uploaded them, and nobody
+ * else.
  *
- * Drop stores two kinds of save and they have different owners:
+ * PC saves (`saveType` "pc") used to be readable by every account on the
+ * server, on the grounds that two accounts playing one PC game on one machine
+ * read and write the same files on disk. That made a housemate's progress
+ * land in your library and turned every PC save into a newest-wins race
+ * between accounts. Saves are now strictly per user, every type alike.
  *
- *   - Emulator saves (`saveType` "save" / "state") live under
- *     `drop-saves/{userId}/` on the client. A file there belongs to exactly
- *     one account, so only that account reads it.
+ * The cost, accepted on purpose: two Drop accounts on the same PC still share
+ * one set of PC save files on disk, because the game decides where those
+ * live. Switching accounts there can therefore raise a conflict prompt (this
+ * account's cloud copy against the file the other account's session wrote),
+ * and the prompt says whose copy is whose.
  *
- *   - PC game saves (`saveType` "pc") are found by where the game writes them
- *     on this computer — Ludusavi looks in `%APPDATA%`, `Documents`, the Steam
- *     userdata folder. None of that depends on who is signed in to Drop. Two
- *     accounts playing the same PC game on one machine are reading and writing
- *     the same bytes on disk, so keeping their cloud rows apart would only
- *     mean each account silently loses the other's progress.
+ * No migration was needed. Rows another account uploaded simply stop being
+ * visible to you; nothing is moved or deleted.
  *
- * The split is READ-ONLY, and this module is the only place on the server that
- * knows about it. Writes stay keyed on `(gameId, userId, filename)`: an upload
- * upserts only the caller's own row, and a delete tombstones only the caller's
- * own row (see `delete.post.ts`). One account can shadow another's PC save in
- * a read; it can never overwrite or delete it.
- *
- * `saveType` is client-supplied and there is no game-ownership check on
- * upload, so "it says pc" is not on its own a reason to hand a row to another
- * account. A shared row must also carry the client's PC namespace in its
- * filename (see {@link isPcNamespacedFilename}) — without that gate, any
- * account could plant a row named like an emulator save against an emulator
- * game's id and have another account's launch write it straight into that
- * person's own per-user save directory.
- *
- * The visible consequence of sharing: deleting a shared PC save removes your
- * row only. If another account on this server still holds an active row for
- * the same filename, that row is what your next read returns, and the save
- * comes back. The client UI says so out loud.
+ * Writes were already keyed on `(gameId, userId, filename)` and are unchanged.
  */
 
-/** The one `saveType` that is shared across accounts on this server. */
-export const SHARED_SAVE_TYPE = "pc";
-
 /**
- * Prefixes the client puts on a PC save's filename. `pc__` is current; `pc/`
- * is the original, kept because rows uploaded under it still exist. Emulator
- * saves never carry either.
- */
-const PC_FILENAME_PREFIXES = ["pc__", "pc/"];
-
-/** Whether a filename was written by the client's PC-save encoder. */
-export function isPcNamespacedFilename(filename: string): boolean {
-  return PC_FILENAME_PREFIXES.some((prefix) => filename.startsWith(prefix));
-}
-
-/**
- * Prisma `where` fragment for "rows this user could be allowed to read": their
- * own, plus every account's PC saves. Compose it with `gameId` / `deletedAt` /
- * `id` as needed.
- *
- * This is the coarse half. Prisma cannot express the filename-namespace gate,
- * so every caller must still run the rows through {@link isReadableSave} or
- * {@link collapseByFilename}.
+ * Prisma `where` fragment for "rows this user may read". Compose it with
+ * `gameId` / `deletedAt` / `id` as needed.
  */
 export function readableSaveScope(userId: string) {
-  return { OR: [{ userId }, { saveType: SHARED_SAVE_TYPE }] };
+  return { userId };
 }
 
 /** Row-level form of {@link readableSaveScope}, for single-row lookups. */
 export function isReadableSave(
-  save: { userId: string; saveType: string; filename: string },
+  save: { userId: string },
   userId: string,
 ): boolean {
-  if (save.userId === userId) return true;
-  return (
-    save.saveType === SHARED_SAVE_TYPE && isPcNamespacedFilename(save.filename)
-  );
+  return save.userId === userId;
 }
 
 /**
@@ -107,17 +70,14 @@ export interface CollapsedSave<T> {
  * Collapse rows that share a filename down to one winner, without hiding the
  * caller's own row from them.
  *
- * Once PC saves are read across accounts, two users can hold a row for the
- * same filename of the same game. The client keys its entire save model on the
- * filename, so it must be handed exactly one row per name — but "one row per
- * name" used to mean the loser vanished from every read surface its own owner
- * had. They could not list it, delete it, or reach its revision history, which
- * made the point-in-time restore unreachable for any save another account
- * currently wins. So the loser comes back out of here too, and the endpoints
- * key their own-row lookups on `(gameId, userId, filename)`.
+ * With reads scoped to the caller's own rows and `(gameId, userId, filename)`
+ * unique, every group here holds exactly one row: the winner is that row,
+ * `shadowedOwn` is null and `alsoHeldBy` is empty. It is kept, rather than
+ * deleted, because `list` / `summary` still answer with `shadowedSaveId` and
+ * `alsoHeldBy` and older clients read them. Should reads ever widen again,
+ * this is the rule they would go through.
  *
- * THE RULE: the newest `clientModifiedAt` wins — the most recently played
- * session is the one whose progress everyone should see.
+ * THE RULE: the newest `clientModifiedAt` wins.
  */
 export function collapseByFilename<T extends CollapsibleSave>(
   rows: T[],

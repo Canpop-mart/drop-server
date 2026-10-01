@@ -13,8 +13,9 @@ import { collapseByFilename, isReadableSave } from "./scope";
  * filename collapse, the same newest-wins winner. That is why this takes rows
  * that have already been through `readableSaveScope` and runs them through the
  * shared `isReadableSave` / `collapseByFilename` rather than counting the raw
- * `findMany` result — a plain `groupBy` would count both accounts' copies of a
- * shared PC save as two files, and the panel would then show one.
+ * `findMany` result. With per-user reads the collapse is one row per filename
+ * and the shared/own split below is all-own; the fields stay for older
+ * clients.
  */
 
 /** The row shape this module needs. Widen the `select` in the endpoint, not this. */
@@ -44,25 +45,14 @@ export interface GameSaveSummary {
   /** Newest client mtime across the shown files, ISO 8601. */
   lastModifiedAt: string;
   /**
-   * How many of the shown files are another account's copy of a shared PC
-   * save. Non-zero means part of what this game reports is not the caller's
-   * own backup, and the UI has to be able to say so rather than let someone
-   * read a housemate's progress as their own safety net.
+   * How many of the shown files are another account's copy. Always 0 now that
+   * reads are per user; kept for older clients.
    */
   sharedCount: number;
   /**
-   * How many files of this game the caller has actually backed up themselves.
-   *
-   * This, not `fileCount`, is what any surface claiming "your saves are backed
-   * up" must count. A row is only in this endpoint's output because the caller
-   * can READ it, and PC saves are readable across every account on the server,
-   * so a game whose only rows belong to a housemate arrives here with
-   * `fileCount > 0` and `ownCount === 0`. Badging that game, or adding it to a
-   * "N games backed up" total, tells someone their progress is safe when they
-   * have never backed a byte of it up.
-   *
-   * Counts a shadowed own row too: losing the newest-wins collision does not
-   * make the caller's own copy stop existing on the server.
+   * How many files of this game the caller has backed up themselves. Equal
+   * to `fileCount` now that reads are per user; kept because older clients
+   * count this rather than `fileCount`.
    */
   ownCount: number;
   /** Sum of the caller's own files' sizes, on the same rule as `ownCount`. */
@@ -104,8 +94,8 @@ export function summariseByGame(
       lastUploaded = Math.max(lastUploaded, winner.uploadedAt.getTime());
       lastModified = Math.max(lastModified, winner.clientModifiedAt.getTime());
       if (winner.userId !== userId) sharedCount++;
-      // The caller's own row for this filename, whether it won the collision
-      // or was shadowed by a housemate's newer copy.
+      // The caller's own row for this filename (always the winner while
+      // reads are per user).
       const own = winner.userId === userId ? winner : shadowedOwn;
       if (own) {
         ownCount++;

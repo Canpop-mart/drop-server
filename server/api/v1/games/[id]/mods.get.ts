@@ -12,10 +12,12 @@ export default defineEventHandler(async (h3) => {
   if (!gameId)
     throw createError({ statusCode: 400, statusMessage: "No game ID." });
 
-  // Full rows so the web store's GameCarousel (which expects GameModel) can
-  // render mod tiles the same way it renders games.
+  // Rows shaped like the store's other game lists so GameCarousel can render
+  // mod tiles the same way it renders games, minus where the files live on
+  // the server: any store:read user can call this.
   return await prisma.game.findMany({
     where: { type: GameType.Mod, parentGameId: gameId },
     orderBy: { mName: "asc" },
+    omit: { libraryId: true, libraryPath: true, discFolders: true },
   });
 });

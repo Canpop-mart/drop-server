@@ -68,9 +68,15 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
 
   const save = revision.save;
 
-  if (save.dataHash && save.dataHash === revision.dataHash) {
+  if (
+    save.deletedAt === null &&
+    save.dataHash &&
+    save.dataHash === revision.dataHash
+  ) {
     // Already the live bytes. Report it rather than churning a duplicate
-    // revision through the history for a no-op.
+    // revision through the history for a no-op. Not for a deleted save: there
+    // the restore's job is to bring the row back, and answering "already
+    // current" would leave it deleted.
     return {
       restored: false,
       alreadyCurrent: true,
@@ -137,6 +143,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
         clientModifiedAt: source.clientModifiedAt,
         deletedAt: null,
         deletedFrom: null,
+        deletedFromClientId: null,
       },
     });
     if (updated.count === 0) {

@@ -7,8 +7,7 @@ import { isReadableSave } from "~/server/internal/cloudsaves/scope";
  * Query: ?id=xxx (cloud save ID)
  * Returns the raw binary data as base64.
  *
- * Readable if the row is yours, or if it is a PC save belonging to any
- * account on this server — see `internal/cloudsaves/scope.ts`.
+ * Readable only if the row is yours — see `internal/cloudsaves/scope.ts`.
  */
 export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const user = await fetchUser();

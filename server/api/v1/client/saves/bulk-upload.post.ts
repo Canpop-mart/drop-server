@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { type } from "arktype";
-import sanitizeFilename from "sanitize-filename";
+import {
+  MAX_SAVE_FILENAME_LEN,
+  cloudSaveFilename,
+  cloudSaveFilenameTooLong,
+} from "~/server/internal/cloudsaves/filename";
 import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
@@ -16,7 +20,6 @@ import {
 const MAX_SAVES_PER_REQUEST = 50;
 const MAX_SAVE_BYTES = 50 * 1024 * 1024; // 50MB
 const MAX_UPLOADED_FROM_LEN = 128;
-const MAX_FILENAME_LEN = 255;
 
 // Note: unlike bulk-download (which takes saveIds), bulk-upload accepts a list
 // of save BODIES. We arktype-validate the structure upfront so we never run
@@ -27,7 +30,7 @@ const BulkUploadBody = type({
   gameId: "string.uuid",
   "uploadedFrom?": `string <= ${MAX_UPLOADED_FROM_LEN}`,
   saves: type({
-    filename: `0 < string <= ${MAX_FILENAME_LEN}`,
+    filename: `0 < string <= ${MAX_SAVE_FILENAME_LEN}`,
     saveType: "'save' | 'state' | 'pc'",
     data: "string", // base64-encoded; size validated after decode
     clientModifiedAt: "string",
@@ -89,7 +92,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   // their current `size` when computing the projection. Tombstoned rows are
   // included — we'll be reviving them, so their stored bytes belong to the
   // user regardless of the `deletedAt` flag.
-  const incomingFilenames = saves.map((s) => sanitizeFilename(s.filename));
+  const incomingFilenames = saves.map((s) => cloudSaveFilename(s.filename));
   const existing = await prisma.cloudSave.findMany({
     where: {
       gameId,
@@ -114,7 +117,14 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
       // key (never used as a filesystem path), pass it through sanitize-filename
       // to strip path separators and control characters — if any downstream
       // code ever decides to use it as a filename, it won't be a traversal vector.
-      const filename = sanitizeFilename(save.filename);
+      if (cloudSaveFilenameTooLong(save.filename)) {
+        errors.push({
+          filename: save.filename,
+          error: "Filename too long (max 255 bytes)",
+        });
+        continue;
+      }
+      const filename = cloudSaveFilename(save.filename);
       if (!filename) {
         errors.push({
           filename: save.filename,
@@ -207,6 +217,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
             // Resurrect tombstoned rows on re-upload.
             deletedAt: null,
             deletedFrom: null,
+            deletedFromClientId: null,
           },
         });
       }, SAVE_WRITE_TRANSACTION_OPTIONS);

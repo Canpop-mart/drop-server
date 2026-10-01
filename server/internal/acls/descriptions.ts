@@ -7,6 +7,9 @@ type ObjectFromList<T extends ReadonlyArray<string>, V = string> = {
 export const userACLDescriptions: ObjectFromList<typeof userACLs> = {
   read: "Fetch user information like username, display name, email, etc...",
 
+  "profile:update":
+    "Change this account's display name, bio, theme, showcase and favourite games.",
+
   "store:read":
     "Fetch and search the store for games, developers and publishers.",
 

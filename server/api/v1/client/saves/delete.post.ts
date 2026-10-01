@@ -27,23 +27,16 @@ import { isReadableSave } from "~/server/internal/cloudsaves/scope";
  *
  * Re-uploads automatically clear the tombstone (see upload / bulk-upload).
  *
- * STRICTLY PER USER, and deliberately out of step with the read endpoints.
- * `list` / `sync-check` / `download` let any account read any account's
- * namespaced PC saves (`internal/cloudsaves/scope.ts`), but deleting is a
- * write and only ever touches the caller's own row.
+ * `deletedFromClientId` is the authenticated client making this request. It
+ * is what devices match their own tombstones on (the name above is only for
+ * display), because a device name can be renamed or shared.
  *
- * `id` therefore identifies the SAVE, not the row to tombstone. The read
- * endpoints hand the client the winner of a filename collision, which can
- * belong to another account; scoping the update to `{ id, userId }` then
- * matched nothing and the user was told "Save not found" while their own copy
- * sat there untouched. So we resolve `(gameId, filename)` from whatever row
- * the client names and tombstone the caller's own row for that filename.
- *
- * The consequence is unchanged and the client UI states it: deleting a shared
- * PC save removes your copy only, and if another account still holds an active
- * row for that filename the save reappears on a later sync.
+ * Strictly per user, like every save endpoint (`internal/cloudsaves/scope.ts`):
+ * `id` must name one of the caller's own rows, and only that row is
+ * tombstoned. The `noOwnedCopy` answer below is unreachable now and kept only
+ * so the response shape older clients parse stays defined.
  */
-export default defineClientEventHandler(async (h3, { fetchUser }) => {
+export default defineClientEventHandler(async (h3, { fetchUser, clientId }) => {
   const user = await fetchUser();
   const userId = user.id;
 
@@ -84,6 +77,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     data: {
       deletedAt: new Date(),
       deletedFrom,
+      deletedFromClientId: clientId,
     },
   });
 
@@ -94,10 +88,8 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     });
     // Already gone: report success so retries are idempotent.
     if (exists) return { deleted: true, alreadyTombstoned: true };
-    // The caller has no copy of this filename — they were looking at somebody
-    // else's row. Not an error, and specifically not "Save not found": there
-    // is simply nothing of theirs to delete, and saying so is the only honest
-    // answer given the dialog promised to remove their copy only.
+    // Unreachable while reads are per user (the lookup above already 404s a
+    // row that is not the caller's), kept so the answer stays well defined.
     return { deleted: false, noOwnedCopy: true };
   }
 

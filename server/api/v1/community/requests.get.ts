@@ -9,7 +9,9 @@ export default defineEventHandler(async (h3) => {
   const query = getQuery(h3);
   const sort = (query.sort as string) === "votes" ? "votes" : "newest";
 
-  // Community view: show approved + pending requests from all users
+  // Community view: pending + approved requests from all users. Denied and
+  // withdrawn ones are only shown to their requester, under "My requests"
+  // (`/api/v1/store/requests/list`).
   const requests = await prisma.gameRequest.findMany({
     where: {
       status: { in: [RequestStatus.Pending, RequestStatus.Approved] },
@@ -66,6 +68,8 @@ export default defineEventHandler(async (h3) => {
       igdbUrl: r.igdbUrl,
       steamUrl: r.steamUrl,
       status: r.status,
+      // Set once the requested game is in the library.
+      gameId: r.gameId,
       createdAt: r.createdAt,
       requester: userMap[r.requesterId] ?? null,
       votes: {

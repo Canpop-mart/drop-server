@@ -338,7 +338,23 @@
             </div>
             <!-- Mods Tab — browse only; the desktop client installs mods. -->
             <div v-if="activeTab === 'Mods'">
-              <GameCarousel :items="mods" />
+              <div
+                v-if="modsFailed"
+                class="flex flex-col items-center gap-3 py-8 text-center"
+              >
+                <p class="text-zinc-400">
+                  {{ $t("store.modsTab.loadFailed") }}
+                </p>
+                <button
+                  type="button"
+                  class="rounded-md bg-zinc-800 px-3 py-1.5 text-sm font-semibold text-zinc-100 hover:bg-zinc-700 disabled:opacity-50"
+                  :disabled="modsLoading"
+                  @click="loadMods"
+                >
+                  {{ $t("store.modsTab.retry") }}
+                </button>
+              </div>
+              <GameCarousel v-else :items="mods" />
             </div>
             <!-- Leaderboards Tab -->
             <div v-if="activeTab === 'Leaderboards'">
@@ -448,12 +464,29 @@ const tabLabels: Record<string, string> = {
 const activeTab = ref("Achievements");
 
 // Mods available for this game (browse only — installing happens in the desktop
-// client). The Mods tab only appears when the game actually has mods.
-const mods = (await $dropFetch(`/api/v1/games/${gameId}/mods`).catch(
-  () => [],
-)) as SerializeObject<GameModel>[];
+// client). The Mods tab only appears when the game actually has mods, or when
+// the list failed to load: then it shows the failure and a Retry, rather than
+// the tab silently vanishing as if there were none.
+const mods = ref<SerializeObject<GameModel>[]>([]);
+const modsFailed = ref(false);
+const modsLoading = ref(false);
+async function loadMods() {
+  modsLoading.value = true;
+  try {
+    mods.value = (await $dropFetch(
+      `/api/v1/games/${gameId}/mods`,
+    )) as SerializeObject<GameModel>[];
+    modsFailed.value = false;
+  } catch (e) {
+    console.warn("[store] failed to load mods:", e);
+    modsFailed.value = true;
+  } finally {
+    modsLoading.value = false;
+  }
+}
+await loadMods();
 const tabs = computed(() =>
-  mods.length > 0
+  mods.value.length > 0 || modsFailed.value
     ? ["Achievements", "Leaderboards", "Similar", "Mods"]
     : ["Achievements", "Leaderboards", "Similar"],
 );

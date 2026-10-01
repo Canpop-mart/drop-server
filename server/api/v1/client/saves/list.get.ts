@@ -10,15 +10,10 @@ import {
  * List cloud saves for a game. Returns metadata only (no binary data).
  * Query: ?gameId=xxx
  *
- * Same read scope as sync-check: your own saves, plus every account's
- * namespaced PC saves (`internal/cloudsaves/scope.ts`). Each row carries
- * `ownedBy`, the display name of the account it belongs to, so the panel can
- * say whose copy won when two accounts hold the same filename.
- *
- * A collision never hides the caller's own row. It comes back as
- * `shadowedSaveId` on the winner, which is the handle the panel needs to reach
- * that row's revision history, and `alsoHeldBy` names the other accounts so a
- * second copy of a save is never silently invisible.
+ * Same read scope as sync-check: the caller's own saves only
+ * (`internal/cloudsaves/scope.ts`). `ownedBy`, `shadowedSaveId` and
+ * `alsoHeldBy` are kept in the response for older clients; with per-user reads
+ * they are always the caller's name, null and empty.
  */
 export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const user = await fetchUser();
@@ -49,14 +44,11 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
     orderBy: { clientModifiedAt: "desc" },
   });
 
-  // The namespace gate the Prisma query can't express: a foreign row only
-  // counts as a shared PC save if its filename says so.
+  // Belt and braces: the query is already scoped to the caller.
   const readable = saves.filter((s) => isReadableSave(s, userId));
 
-  // The panel keys its rows on the filename, so two accounts holding the same
-  // PC filename have to collapse to one. Newest `clientModifiedAt` wins, same
-  // rule as sync-check — a listing that disagreed with the sync verdict would
-  // be worse than no listing at all.
+  // One row per filename already (the scope is one account); the collapse
+  // only shapes the response.
   return collapseByFilename(readable, userId)
     .sort(
       (a, b) =>
@@ -72,11 +64,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
       uploadedFrom: winner.uploadedFrom,
       clientModifiedAt: winner.clientModifiedAt,
       uploadedAt: winner.uploadedAt,
-      // Display name, not the user id: with PC saves shared across accounts a
-      // row can belong to someone else, and the UI has to be able to say so.
       ownedBy: winner.user.displayName,
-      // Present when the caller has their own copy of this filename that lost
-      // the collision. Without it their own save has no reachable id at all.
       shadowedSaveId: shadowedOwn?.id ?? null,
       alsoHeldBy,
     }));

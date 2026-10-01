@@ -58,19 +58,25 @@ export default defineEventHandler(async (h3) => {
   });
   const gameMap = Object.fromEntries(games.map((g) => [g.id, g]));
 
-  // Auto-close orphaned sessions (started more than 4h ago with no endedAt).
-  // If a heartbeat was received, use it as the end time for better accuracy.
+  // Auto-close orphaned sessions: started more than 4h ago with no endedAt,
+  // AND no heartbeat in the last hour. The client heartbeats every 60
+  // seconds, so a game that is still running is never closed here (same rule
+  // as the daily `cleanup:playtime-sessions` task). If a heartbeat was
+  // received, it is used as the end time for better accuracy.
+  const nowMs = Date.now();
   const orphanedSessions = recentSessions.filter(
     (s) =>
       !s.endedAt &&
-      Date.now() - new Date(s.startedAt).getTime() > 4 * 60 * 60 * 1000,
+      nowMs - new Date(s.startedAt).getTime() > 4 * 60 * 60 * 1000 &&
+      (!s.lastHeartbeatAt ||
+        nowMs - new Date(s.lastHeartbeatAt).getTime() > 60 * 60 * 1000),
   );
 
   const affectedGameIds = new Set<string>();
 
   for (const orphan of orphanedSessions) {
     // Close the orphan with a sensible endedAt:
-    // - With heartbeat: last heartbeat + 10 min grace (client heartbeats every ~5 min)
+    // - With heartbeat: last heartbeat + 10 min grace (client heartbeats every 60s)
     // - Without heartbeat: startedAt + 5 min cap (game likely crashed immediately)
     let endedAt: Date;
     if (orphan.lastHeartbeatAt) {
@@ -87,8 +93,9 @@ export default defineEventHandler(async (h3) => {
       (endedAt.getTime() - new Date(orphan.startedAt).getTime()) / 1000,
     );
 
+    // `endedAt: null` so a real stop that landed meanwhile is not replaced.
     await prisma.playSession.updateMany({
-      where: { id: orphan.id },
+      where: { id: orphan.id, endedAt: null },
       data: { endedAt, durationSeconds },
     });
 

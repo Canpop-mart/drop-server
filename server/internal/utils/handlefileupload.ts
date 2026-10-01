@@ -1,4 +1,5 @@
 import type { EventHandlerRequest, H3Event } from "h3";
+import { parse as getMimeTypeBuffer } from "file-type-mime";
 import type { Dump, Pull } from "../objects/transactional";
 import { ObjectTransactionalHandler } from "../objects/transactional";
 import {
@@ -20,6 +21,10 @@ import {
  *
  * Endpoints that have no per-class cap (legacy paths) can omit the
  * `limit` arg and behave as before.
+ *
+ * `acceptMime`, when given, rejects any file whose type sniffed from its
+ * bytes (the same sniffing the object store uses to pick the Content-Type it
+ * serves) is not in the list. The type the uploader declares is ignored.
  */
 export async function handleFileUpload(
   h3: H3Event<EventHandlerRequest>,
@@ -27,6 +32,7 @@ export async function handleFileUpload(
   permissions: Array<string>,
   max = -1,
   limit?: UploadLimitKey,
+  acceptMime?: readonly string[],
 ): Promise<[string[], { [key: string]: string }, Pull, Dump] | undefined> {
   if (limit) enforceUploadLimit(h3, limit);
 
@@ -53,6 +59,16 @@ export async function handleFileUpload(
           throw e;
         }
       }
+      if (acceptMime) {
+        const mime = getMimeTypeBuffer(new Uint8Array(entry.data).buffer)?.mime;
+        if (!mime || !acceptMime.includes(mime)) {
+          await dump();
+          throw createError({
+            statusCode: 415,
+            statusMessage: `Unsupported file type (${mime ?? "unknown"}).`,
+          });
+        }
+      }
       // Add file to transaction handler so we can void it later if we error out
       ids.push(add(entry.data));
       continue;
@@ -64,3 +80,12 @@ export async function handleFileUpload(
 
   return [ids, options, pull, dump];
 }
+
+/** Image types accepted for profile pictures and banners. */
+export const PROFILE_IMAGE_MIME_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+] as const;

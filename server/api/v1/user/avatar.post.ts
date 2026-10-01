@@ -1,6 +1,9 @@
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
-import { handleFileUpload } from "~/server/internal/utils/handlefileupload";
+import {
+  handleFileUpload,
+  PROFILE_IMAGE_MIME_TYPES,
+} from "~/server/internal/utils/handlefileupload";
 
 export default defineEventHandler(async (h3) => {
   const userId = await aclManager.getUserIdACL(h3, ["object:update"]);
@@ -12,6 +15,7 @@ export default defineEventHandler(async (h3) => {
     ["internal:read"],
     1,
     "profileAvatar",
+    PROFILE_IMAGE_MIME_TYPES,
   );
   if (!uploadResult) {
     throw createError({

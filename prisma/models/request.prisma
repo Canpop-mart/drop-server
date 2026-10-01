@@ -13,7 +13,20 @@ model GameRequest {
   steamUrl    String?
 
   status      RequestStatus @default(Pending)
+  /// Plain text shown to the requester. Today only the deny reason is
+  /// written here. Rows approved before the metadata columns existed hold a
+  /// JSON blob ({ metadata, deferred }) instead; see
+  /// server/internal/requests/matching.ts for how those are still read.
   reviewNotes String?
+
+  /// The game this request points at. Set from the requester's provider pick
+  /// on create, and overwritten by the admin's pick on approve. An approval
+  /// with no provider match stores metadataSource = Manual, metadataId = null
+  /// and the admin's title in metadataName. Used to spot duplicate requests
+  /// and to link the request to the game when it is imported.
+  metadataSource MetadataSource?
+  metadataId     String?
+  metadataName   String?
 
   requesterId String
   requester   User          @relation(fields: [requesterId], references: [id], onDelete: Cascade, name: "requestsCreated")
@@ -32,4 +45,5 @@ model GameRequest {
   @@index([status])
   @@index([requesterId])
   @@index([createdAt])
+  @@index([metadataSource, metadataId])
 }

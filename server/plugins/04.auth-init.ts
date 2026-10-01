@@ -5,6 +5,10 @@ import type { UserACL } from "../internal/acls";
 
 export const CLIENT_WEBTOKEN_ACLS: UserACL = [
   "read",
+  // Profile, showcase and favourites edits from the desktop client and Big
+  // Picture. Existing client tokens pick this up from the updateMany below at
+  // the next server start.
+  "profile:update",
   "store:read",
   "object:read",
   "object:update",
@@ -23,6 +27,11 @@ export const CLIENT_WEBTOKEN_ACLS: UserACL = [
   // The desktop client's settings page resets achievements through
   // server:// with this token.
   "achievements:reset",
+
+  // The desktop client polls for game request decisions and marks them read
+  // (main/composables/request-notifications.ts).
+  "notifications:read",
+  "notifications:mark",
 ];
 
 export default defineNitroPlugin(async () => {

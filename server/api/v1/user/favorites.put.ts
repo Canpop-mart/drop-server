@@ -2,15 +2,14 @@ import { type } from "arktype";
 import { readDropValidatedBody, throwingArktype } from "~/server/arktype";
 import aclManager from "~/server/internal/acls";
 import prisma from "~/server/internal/db/database";
-
-const MAX_FAVORITES = 10;
+import { MAX_FAVORITES } from "~/server/internal/userprofile/limits";
 
 const FavoritesBody = type({
   gameIds: "string[]",
 }).configure(throwingArktype);
 
 export default defineEventHandler(async (h3) => {
-  const userId = await aclManager.getUserIdACL(h3, ["read"]);
+  const userId = await aclManager.getUserIdACL(h3, ["profile:update"]);
   if (!userId) throw createError({ statusCode: 403 });
 
   const body = await readDropValidatedBody(h3, FavoritesBody);

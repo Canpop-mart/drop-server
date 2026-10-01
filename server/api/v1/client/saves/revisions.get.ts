@@ -8,13 +8,10 @@ import { isReadableSave } from "~/server/internal/cloudsaves/scope";
  * List the previous versions kept for one save, newest first. Metadata only —
  * blobs come back through restore, not here, so a listing stays cheap.
  *
- * Always the CALLER'S OWN history, never another account's. `id` names a save
- * the caller can read, which for a shared PC save may be a row belonging to
- * somebody else — the read endpoints hand out the winner of a filename
- * collision. Resolving that to `(gameId, userId, filename)` is what makes the
- * version history reachable for the account whose row lost; keyed on the row
- * id alone, a shadowed owner got a 404 for their own bytes and the
- * point-in-time restore behind them was unreachable.
+ * Always the CALLER'S OWN history, never another account's: `id` must name a
+ * row the caller can read, which is only their own (see
+ * `internal/cloudsaves/scope.ts`), and the history is then looked up by
+ * `(gameId, userId, filename)` for the caller.
  *
  * Tombstoned parents are still listable: a user who deleted a save and wants
  * an older version back is exactly the person this endpoint is for, and the

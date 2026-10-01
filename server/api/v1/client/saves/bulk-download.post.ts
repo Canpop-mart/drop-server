@@ -50,8 +50,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   const saves = await prisma.cloudSave.findMany({
     where: {
       id: { in: saveIds },
-      // Own rows, plus any account's PC saves — the read scope sync-check
-      // hands out ids from. See `internal/cloudsaves/scope.ts`.
+      // The caller's own rows only. See `internal/cloudsaves/scope.ts`.
       ...readableSaveScope(userId),
       deletedAt: null, // tombstoned saves are invisible to downloads
     },
@@ -66,10 +65,8 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   });
 
   return {
-    // The namespace gate Prisma can't express: a foreign row is only a shared
-    // PC save if its filename says so. This is the path that actually hands
-    // over bytes, so it repeats the check rather than trusting that the ids
-    // came from a read endpoint that already made it.
+    // This is the path that actually hands over bytes, so it repeats the
+    // ownership check rather than trusting the query alone.
     saves: saves
       .filter((s) => isReadableSave(s, userId))
       .map((s) => ({

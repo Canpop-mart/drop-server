@@ -13,6 +13,7 @@ import * as jose from "jose";
 import sessionHandler from "../../session";
 import type { SessionSearchTerms } from "../../session/types";
 import { queryParamBuilder } from "../../utils/query";
+import { initialDisplayName } from "../../userprofile/limits";
 
 // TODO: monitor https://github.com/goauthentik/authentik/issues/8751 for easier?? OIDC setup by end users
 
@@ -485,7 +486,7 @@ export class OIDCManager {
               id: userId,
               username,
               email: userinfo.email ?? "",
-              displayName: userinfo.name ?? username,
+              displayName: initialDisplayName(userinfo.name, username),
               profilePictureObjectId: profilePictureId,
               admin: isAdmin,
             },

@@ -2,18 +2,20 @@ import aclManager from "~/server/internal/acls";
 import metadataHandler from "~/server/internal/metadata";
 
 /**
- * User-facing metadata search for the game-request flow. Same providers
- * as the admin import search at `/api/v1/admin/import/game/search`, just
- * gated on `store:read` so any signed-in user can identify the game
- * they're requesting without admin rights.
+ * Metadata search for the game-request flow. Same providers as the admin
+ * import search at `/api/v1/admin/import/game/search`, gated on `store:read`
+ * so any signed-in user can identify the game they're requesting, and used by
+ * the admin request triage page too.
  *
- * Provider results are de-duplicated and ranked by fuzzy match against
- * the query inside `metadataHandler.search`. They also flow through the
- * per-provider 1h cache, so a community of users all searching for the
- * same upcoming title doesn't burn through IGDB/Steam API quota.
+ * Provider results are de-duplicated and ranked by fuzzy match against the
+ * query inside `metadataHandler.searchDetailed`. They also flow through the
+ * per-provider 1h cache.
  *
- * Returns `[]` (not 404) on no matches — the request modal renders an
- * inline empty-state and shouldn't have to interpret an error.
+ * Returns `{ results, failedProviders }`. An empty `results` with an empty
+ * `failedProviders` means no provider knows the game; a non-empty
+ * `failedProviders` means some providers could not be asked, so the pages
+ * can say so instead of showing "no matches". Provider error text is only
+ * included for admins: it can carry upstream URLs and is no use to a player.
  */
 export default defineEventHandler(async (h3) => {
   const userId = await aclManager.getUserIdACL(h3, ["store:read"]);
@@ -27,5 +29,16 @@ export default defineEventHandler(async (h3) => {
       statusMessage: "Query must be at least 2 characters.",
     });
 
-  return await metadataHandler.search(search);
+  const isAdmin = await aclManager.allowSystemACL(h3, ["import:game:read"]);
+  const { results, failedProviders } =
+    await metadataHandler.searchDetailed(search);
+
+  return {
+    results,
+    failedProviders: failedProviders.map((f) => ({
+      source: f.source,
+      name: f.name,
+      ...(isAdmin ? { error: f.error } : {}),
+    })),
+  };
 });

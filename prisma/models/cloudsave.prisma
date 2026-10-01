@@ -47,6 +47,11 @@ model CloudSave {
     /// Shown in the "deleted from <Marts Desktop>" hint in the UI.
     deletedFrom String?
 
+    /// The client registration (Client.id) that issued the delete. Lets a
+    /// device recognise its own tombstone without comparing display names,
+    /// which change and collide. Null on rows deleted before it was recorded.
+    deletedFromClientId String?
+
     /// Previous versions of this file, newest first. Capped at
     /// MAX_SAVE_REVISIONS by the writer — see internal/cloudsaves/revisions.ts.
     revisions CloudSaveRevision[]

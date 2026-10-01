@@ -461,6 +461,11 @@ const scheduledTasks: {
     description:
       "Ends co-op rooms that are more than a day old and removes their networks from the ZeroTier controller. Runs automatically every day.",
   },
+  "cleanup:archipelago": {
+    name: "Clean Up Archipelago Sessions",
+    description:
+      "Closes Archipelago sessions still in setup after 30 days with no activity, deletes sessions closed more than 30 days ago, and removes players who are no longer in an open session from the Archipelago network. Running sessions are never touched. Runs automatically every day.",
+  },
   "cleanup:objects": {
     name: t("tasks.admin.scheduled.cleanupObjectsName"),
     description: t("tasks.admin.scheduled.cleanupObjectsDescription"),
@@ -468,7 +473,12 @@ const scheduledTasks: {
   "cleanup:cloud-saves": {
     name: "Purge Deleted Cloud Saves",
     description:
-      "Hard-deletes cloud saves that were deleted more than 30 days ago, along with their version history, and trims any save holding more than 3 previous versions. Runs automatically every day.",
+      "Trims any cloud save holding more than 3 previous versions, and counts saves deleted more than 30 days ago. Those are only removed for good when the server has DROP_CLOUD_SAVE_GC=apply set. Runs automatically every day.",
+  },
+  "cleanup:playtime-sessions": {
+    name: "Close Abandoned Play Sessions",
+    description:
+      "Ends play sessions that were never stopped (for example after a crash) and recomputes playtime totals. Runs automatically every day.",
   },
   "check:update": {
     name: t("tasks.admin.scheduled.checkUpdateName"),

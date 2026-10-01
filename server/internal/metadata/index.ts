@@ -27,6 +27,7 @@ import metadataHttp from "./http";
 import metadataCache from "./cache";
 import { fetchHltbTimes } from "./hltb";
 import * as jdenticon from "jdenticon";
+import { fulfilRequestsForImportedGame } from "../requests";
 
 export class MissingMetadataProviderConfig extends Error {
   private providerName: string;
@@ -91,8 +92,22 @@ export class MetadataHandler {
   }
 
   async search(query: string) {
+    return (await this.searchDetailed(query)).results;
+  }
+
+  /**
+   * Same search as `search`, but also reports which providers failed (threw,
+   * timed out, or are misconfigured), so a caller can tell "no provider
+   * found this game" apart from "the providers could not be asked".
+   */
+  async searchDetailed(query: string): Promise<{
+    results: Array<InternalGameMetadataResult & { fuzzy: number }>;
+    failedProviders: Array<{ source: string; name: string; error: string }>;
+  }> {
     const promises: Promise<InternalGameMetadataResult[]>[] = [];
+    const searchedProviders: MetadataProvider[] = [];
     for (const provider of this.providers.values()) {
+      searchedProviders.push(provider);
       const queryTransformationPromise = new Promise<
         InternalGameMetadataResult[]
         // TODO: fix eslint error
@@ -135,6 +150,19 @@ export class MetadataHandler {
     }
 
     const results = await Promise.allSettled(promises);
+    const failedProviders = results.flatMap((result, i) => {
+      if (result.status === "fulfilled") return [];
+      // allSettled keeps input order, so index i is the i-th provider.
+      const provider = searchedProviders[i];
+      const reason: unknown = result.reason;
+      return [
+        {
+          source: provider?.source() ?? "unknown",
+          name: provider?.name() ?? "unknown",
+          error: reason instanceof Error ? reason.message : String(reason),
+        },
+      ];
+    });
     const successfulResults = results
       .filter((result) => result.status === "fulfilled")
       .map((result) => result.value)
@@ -145,7 +173,7 @@ export class MetadataHandler {
       })
       .sort((a, b) => b.fuzzy - a.fuzzy);
 
-    return successfulResults;
+    return { results: successfulResults, failedProviders };
   }
 
   /**
@@ -287,6 +315,11 @@ export class MetadataHandler {
    * `parentTask` is optional and trailing — passing it nests the import
    * under an existing task (used by the one-click "import game + first
    * version" flow). Existing callers that omit it are unaffected.
+   *
+   * `onImportFailed` runs inside the import task when the import throws
+   * (every provider failed, the game row could not be written, ...), before
+   * the task is marked failed. A throw from it is logged and does not mask
+   * the import's own error.
    */
   async createGame(
     result: { sourceId: string; id: string; name: string },
@@ -298,6 +331,7 @@ export class MetadataHandler {
     // For type=Mod games: the base game this mod overlays onto. Callers are
     // responsible for validating it points at an existing base game.
     parentGameId?: string,
+    onImportFailed?: (error: unknown, gameId: string) => Promise<void>,
   ): Promise<{ taskId: string; gameId: string } | undefined> {
     const primary = this.providers.get(result.sourceId);
     if (!primary)
@@ -337,6 +371,25 @@ export class MetadataHandler {
       }
     }
 
+    const withFailureHook =
+      (body: (context: TaskRunContext) => Promise<void>) =>
+      async (context: TaskRunContext) => {
+        try {
+          await body(context);
+        } catch (e) {
+          if (onImportFailed) {
+            try {
+              await onImportFailed(e, gameId);
+            } catch (hookErr) {
+              context.logger.warn(
+                `Clean-up after the failed import also failed: ${hookErr instanceof Error ? hookErr.message : hookErr}`,
+              );
+            }
+          }
+          throw e;
+        }
+      };
+
     const key = createGameImportTaskId(libraryId, libraryPath);
     const taskId = await taskHandler.create(
       {
@@ -344,7 +397,7 @@ export class MetadataHandler {
         key,
         taskGroup: "import:game",
         acls: ["system:import:game:read"],
-        async run(context) {
+        run: withFailureHook(async (context) => {
           const { progress, logger } = context;
 
           progress(0);
@@ -592,11 +645,35 @@ export class MetadataHandler {
           // cache so it stops appearing in the admin import picker.
           libraryManager.bustUnimportedGamesCache(libraryId);
 
+          // Link any open game requests this import satisfies and tell the
+          // requesters. Mods overlay a base game and are never what a
+          // request asked for. A failure here is logged and the import still
+          // succeeds: the game row is already written.
+          if (!parentGameId) {
+            try {
+              const linked = await fulfilRequestsForImportedGame(gameId, {
+                keys: [
+                  { source: chosen.source(), id: metadata.id },
+                  { source: result.sourceId, id: result.id },
+                ],
+                name: metadata.name,
+              });
+              if (linked > 0)
+                logger.info(
+                  `Linked ${linked} game request${linked === 1 ? "" : "s"} to this game.`,
+                );
+            } catch (e) {
+              logger.warn(
+                `Could not link game requests to this game: ${e instanceof Error ? e.message : e}`,
+              );
+            }
+          }
+
           logger.info(`Finished game import.`);
           progress(100);
 
           context.addAction(`View Game:/admin/library/${gameId}`);
-        },
+        }),
       },
       parentTask,
     );

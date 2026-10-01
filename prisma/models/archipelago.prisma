@@ -1,8 +1,11 @@
 /// Archipelago multiworld support.
 ///
 /// Unlike co-op `Room`s (see room.prisma) these are NOT ephemeral: a multiworld
-/// runs for days or weeks, so there is deliberately no `expiresAt` and nothing
-/// reaps them.
+/// runs for days or weeks, so there is deliberately no `expiresAt`. The daily
+/// `cleanup:archipelago` task only closes Setup sessions no member has used in
+/// a long while (`lastActivityAt`) and deletes sessions that have been Closed
+/// for a long while; Running sessions are never reaped. See
+/// server/internal/archipelago/index.ts.
 ///
 /// The other structural difference: co-op rooms mint one ZeroTier network each
 /// and the server never joins them. Archipelago's server runs ON our machine, so
@@ -23,10 +26,12 @@ model ArchipelagoNetwork {
   /// from co-op's 10.242.x so the two can never collide.
   subnetOctet Int
 
-  /// The server's own ZeroTier IPv4 on this network — the address players'
-  /// clients actually reach Archipelago on, and the value that goes into
-  /// Archipelago's `HOST_ADDRESS`. Null until ZeroTier assigns it (async after
-  /// join); resolved by a later poll.
+  /// The server's own ZeroTier IPv4 on this network, as the controller node
+  /// itself reports holding it after joining. It is only reachable by players
+  /// if the Archipelago server shares that node's network (see the decision
+  /// note in server/internal/archipelago/index.ts). Null until the node reports
+  /// it; resolved by a later call. Rows written before that rule may hold the
+  /// controller's intended address instead, so reads re-check it live.
   serverAddress String?
 
   createdAt DateTime @default(now())
@@ -64,6 +69,12 @@ model ArchipelagoSession {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Last time a member did something with this session through Drop: joined
+  /// or rejoined, opened or polled it, uploaded a YAML, or set the connect
+  /// address. The reaper's idle clock for Setup sessions. Opening and polling
+  /// move it forward at most once an hour, so polls don't write every time.
+  lastActivityAt DateTime @default(now())
+
   slots ArchipelagoSlot[]
 
   @@index([hostClientId])
@@ -88,8 +99,15 @@ model ArchipelagoSlot {
   slotName String?
   game     String?
 
-  /// Human-readable reason the YAML was rejected; null when it validated.
+  /// Unused: an invalid YAML is rejected at upload and never stored, so this
+  /// was only ever null. Kept so dropping it doesn't need a migration.
   validationError String?
+
+  /// This device's ZeroTier node id (10 hex), recorded at join so the server
+  /// can de-authorize it from the overlay when it leaves or the session closes.
+  /// Null on slots joined before this was recorded; backfilled the next time
+  /// that device joins or reconnects.
+  memberId String?
 
   uploadedAt DateTime?
   joinedAt   DateTime  @default(now())

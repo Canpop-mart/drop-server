@@ -18,20 +18,25 @@ export default defineEventHandler(async (h3) => {
   // Can only withdraw pending requests
   if (request.status !== RequestStatus.Pending) {
     throw createError({
-      statusCode: 400,
-      statusMessage: "Can only withdraw pending requests.",
+      statusCode: 409,
+      statusMessage: "Only pending requests can be withdrawn.",
     });
   }
 
+  // Guarded on Pending so an approval or denial that lands at the same
+  // moment is not overwritten.
   const updated = (
     await prisma.gameRequest.updateManyAndReturn({
-      where: { id },
+      where: { id, status: RequestStatus.Pending },
       data: { status: RequestStatus.Withdrawn },
     })
   ).at(0);
 
   if (!updated)
-    throw createError({ statusCode: 404, statusMessage: "Request not found." });
+    throw createError({
+      statusCode: 409,
+      statusMessage: "This request was decided before it could be withdrawn.",
+    });
 
   return updated;
 });

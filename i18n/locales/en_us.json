@@ -40,12 +40,15 @@
       "bannerUpload": "Upload Banner",
       "bio": "Bio",
       "bioPlaceholder": "Write something about yourself...",
+      "customTheme": "Custom",
       "displayName": "Display Name",
+      "profileSaveFailed": "Couldn't save your profile: {reason}",
       "profileSaved": "Profile saved!",
       "profileSection": "Edit Profile",
       "profileTheme": "Profile Theme",
       "saveProfile": "Save Profile",
-      "title": "Profile"
+      "title": "Profile",
+      "uploadFailed": "Couldn't upload the image: {reason}"
     },
     "notifications": {
       "all": "View all {arrow}",
@@ -102,6 +105,7 @@
     "showcase": {
       "achievementDescription": "Pick up to 6 achievements to feature on your profile.",
       "achievementTitle": "Achievement Showcase",
+      "achievementsLoadFailed": "Couldn't load this game's achievements.",
       "add": "Add",
       "addAchievement": "Add Achievement",
       "addGame": "Add Game",
@@ -112,8 +116,11 @@
       "full": "Your showcase is full ({max} items), including cards made in the desktop app that this page doesn't show. Remove one to add another.",
       "gameDescription": "Pick up to 6 games to feature on your profile.",
       "gameTitle": "Game Showcase",
+      "gamesLoadFailed": "Couldn't load games.",
       "loadFailed": "Couldn't load your showcase, so it can't be edited right now. Reload the page to try again.",
-      "noAchievements": "No achievements found for this game.",
+      "moreGames": "Showing {shown} of {total}. Type to search for the rest.",
+      "noAchievements": "You have not unlocked any achievements in this game yet.",
+      "retry": "Try again",
       "save": "Save Showcase",
       "saveFailed": "Couldn't save your showcase: {reason}",
       "saved": "Showcase saved!",
@@ -861,17 +868,48 @@
   },
   "options": "Options",
   "requests": {
+    "conflict": {
+      "duplicate": "This game has already been requested.",
+      "existingMatch": "Matched game:",
+      "existingTitle": "Existing request:",
+      "inLibrary": "{0} is already in the library.",
+      "similar": "A request with the same title already exists.",
+      "submitAnyway": "Submit anyway",
+      "voteInstead": "Vote for it instead",
+      "yours": "You already requested this."
+    },
+    "createFailed": "Could not create the request.",
     "createNew": "New Request",
     "createTitle": "Request a Game",
     "empty": "No requests yet. Be the first to make one!",
     "form": {
+      "clear": "Clear",
       "description": "Description",
       "descriptionPlaceholder": "Why should this be added?",
+      "findLabel": "Find on Steam / IGDB",
+      "noMatches": "No matches. You can still submit the request with just a title.",
+      "optional": "(optional)",
+      "pasteSteam": "Or paste a Steam URL directly",
+      "providersFailed": "Some providers could not be searched: {0}. Results may be incomplete.",
+      "searchFailed": "Search failed: {0}",
+      "searchPlaceholder": "Type a game name to search providers",
+      "searching": "Searching...",
       "steamUrl": "Steam URL (optional)",
       "submit": "Submit Request",
       "title": "Game Title",
       "titlePlaceholder": "The name of the game"
     },
+    "inLibrary": "In library",
+    "loadFailed": "Could not load requests: {0}",
+    "mine": {
+      "approvedWaiting": "Approved. It will be marked as in the library once it is added.",
+      "deniedNoReason": "Denied. No reason was given.",
+      "deniedWithReason": "Denied: {0}",
+      "empty": "You have not requested any games yet.",
+      "signedOut": "Sign in to see your requests.",
+      "votes": "{0} up, {1} down"
+    },
+    "retry": "Try again",
     "sortNewest": "Newest",
     "sortVotes": "Most Voted",
     "status": {
@@ -882,7 +920,15 @@
     },
     "subtitle": "Vote on games you want to see added to the library.",
     "title": "Game Requests",
-    "withdraw": "Withdraw"
+    "unknownError": "Unknown error",
+    "viewBoard": "Board",
+    "viewGame": "View game",
+    "viewMine": "My requests",
+    "voteFailed": "Vote failed: {0}",
+    "votingClosed": "Voting is closed for this request",
+    "withdraw": "Withdraw",
+    "withdrawFailed": "Could not withdraw: {0}",
+    "withdrawing": "Withdrawing..."
   },
   "selectLanguage": "Select language",
   "services": {
@@ -976,6 +1022,10 @@
       "yourRank": "Your rank:"
     },
     "lookAt": "Check it out",
+    "modsTab": {
+      "loadFailed": "Could not load the mods for this game.",
+      "retry": "Retry"
+    },
     "mostPlayedEmpty": "Nothing played recently",
     "mostPlayedEmptySub": "Play a game to start filling this out.",
     "nav": {

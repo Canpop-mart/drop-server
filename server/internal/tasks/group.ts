@@ -5,6 +5,8 @@ export const taskGroups = {
   "cleanup:compat-logs": { concurrency: false },
   "cleanup:cloud-saves": { concurrency: false },
   "cleanup:rooms": { concurrency: false },
+  "cleanup:playtime-sessions": { concurrency: false },
+  "cleanup:archipelago": { concurrency: false },
   "check:update": { concurrency: false },
 
   // ── Import (system-triggered, concurrent) ──────────────────────────

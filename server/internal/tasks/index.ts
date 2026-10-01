@@ -14,6 +14,8 @@ import cleanupObjects from "./registry/objects";
 import cleanupCompatLogs from "./registry/cleanup-compat-logs";
 import cleanupCloudSaves from "./registry/cleanup-cloud-saves";
 import cleanupRooms from "./registry/cleanup-rooms";
+import cleanupPlaytimeSessions from "./registry/cleanup-playtime-sessions";
+import cleanupArchipelago from "./registry/cleanup-archipelago";
 import checkGameUpdates from "./registry/game-update";
 import scanGoldbergReadiness from "./registry/goldberg-readiness";
 import refreshAchievementDefs from "./registry/refresh-achievement-defs";
@@ -98,15 +100,20 @@ class TaskHandler {
   // list of all clients currently connected to tasks
   private clientRegistry = new Map<string, PeerImpl>();
 
-  // `cleanup:cloud-saves` is registered below but deliberately NOT scheduled.
-  // Its tombstone purge has never run, so the first sweep would hard-delete
-  // every save any user has ever deleted, in one unattended pass, with no
-  // history behind it. Run it by hand first to see the count (it reports
-  // rather than deletes unless DROP_CLOUD_SAVE_GC=apply), then add it here.
+  // `cleanup:cloud-saves` runs daily, but its tombstone purge is still
+  // opt-in: without DROP_CLOUD_SAVE_GC=apply it only reports how many deleted
+  // saves are past retention, and trims surplus revisions (never a live
+  // save). See `registry/cleanup-cloud-saves.ts`.
+  //
+  // `cleanup:playtime-sessions` is the unattended half of "Recalculate
+  // Playtime"; see that file for why the full task is not the scheduled one.
   private dailyScheduledTasks: TaskGroup[] = [
     "cleanup:auth-records",
     "cleanup:compat-logs",
     "cleanup:rooms",
+    "cleanup:cloud-saves",
+    "cleanup:playtime-sessions",
+    "cleanup:archipelago",
     "check:update",
   ];
   private weeklyScheduledTasks: TaskGroup[] = [
@@ -122,6 +129,8 @@ class TaskHandler {
     this.saveScheduledTask(cleanupCompatLogs);
     this.saveScheduledTask(cleanupCloudSaves);
     this.saveScheduledTask(cleanupRooms);
+    this.saveScheduledTask(cleanupPlaytimeSessions);
+    this.saveScheduledTask(cleanupArchipelago);
 
     // Library maintenance (on-demand + weekly integrity audit)
     this.saveScheduledTask(checkGameUpdates);

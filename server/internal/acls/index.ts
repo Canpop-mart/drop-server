@@ -6,6 +6,8 @@ import type { MinimumRequestObject } from "~/server/h3";
 export const userACLs = [
   "read",
 
+  "profile:update",
+
   "store:read",
 
   "object:read",
@@ -284,7 +286,14 @@ class ACLManager {
       // Reject expired tokens — same rule as the other token checks above.
       if (token.expiresAt && token.expiresAt.getTime() < Date.now())
         return undefined;
-      return token.acls as GlobalACL[];
+      // Tokens store bare ACL names ("store:read"); everything this is
+      // compared against (notification and task `acls`) uses the prefixed
+      // GlobalACL form ("user:store:read"). Without the prefix a token caller
+      // could never see a notification. System tokens hold system ACLs; user
+      // and client tokens hold user ACLs.
+      const prefix =
+        token.mode === APITokenMode.System ? systemACLPrefix : userACLPrefix;
+      return token.acls.map((acl) => `${prefix}${acl}`) as GlobalACL[];
     }
 
     const user = await prisma.user.findUnique({

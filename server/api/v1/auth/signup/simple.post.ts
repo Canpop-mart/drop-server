@@ -7,6 +7,7 @@ import { type } from "arktype";
 import { randomUUID } from "node:crypto";
 import { throwingArktype } from "~/server/arktype";
 import userStatsManager from "~/server/internal/userstats";
+import { initialDisplayName } from "~/server/internal/userprofile/limits";
 
 export const SharedRegisterValidator = type({
   username: "string >= 5",
@@ -73,7 +74,7 @@ export default defineEventHandler<{
           create: {
             id: userId,
             username: user.username,
-            displayName: user.displayName ?? user.username,
+            displayName: initialDisplayName(user.displayName, user.username),
             email: user.email,
             profilePictureObjectId: profilePictureId,
             admin: invitation.isAdmin,

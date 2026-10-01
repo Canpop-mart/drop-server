@@ -76,6 +76,9 @@
                     : $t("account.home.avatarUpload")
                 }}
               </button>
+              <p v-if="avatarError" class="mt-2 text-sm text-red-400">
+                {{ avatarError }}
+              </p>
             </div>
           </div>
         </div>
@@ -112,6 +115,9 @@
                 : $t("account.home.bannerUpload")
             }}
           </button>
+          <p v-if="bannerError" class="mt-2 text-sm text-red-400">
+            {{ bannerError }}
+          </p>
         </div>
 
         <!-- Profile Theme -->
@@ -119,9 +125,9 @@
           <label class="block text-sm font-medium text-zinc-300 mb-2">
             {{ $t("account.home.profileTheme") }}
           </label>
-          <div class="grid grid-cols-4 sm:grid-cols-6 gap-2">
+          <div class="grid grid-cols-5 gap-2">
             <button
-              v-for="theme in profileThemes"
+              v-for="theme in PROFILE_THEME_PRESETS"
               :key="theme.id"
               :class="[
                 'flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all',
@@ -141,6 +147,37 @@
                 {{ theme.label }}
               </span>
             </button>
+            <!-- Custom colour -->
+            <label
+              :class="[
+                'relative flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all cursor-pointer',
+                customThemeSelected
+                  ? 'border-blue-500 bg-zinc-800'
+                  : 'border-transparent hover:border-zinc-600 bg-zinc-800/50',
+              ]"
+            >
+              <div
+                class="w-full h-6 rounded"
+                :style="{
+                  background: customThemeSelected
+                    ? `linear-gradient(135deg, ${customGradient.from}, ${customGradient.to})`
+                    : 'conic-gradient(from 0deg, #ef4444, #f59e0b, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444)',
+                }"
+              />
+              <span class="text-[10px] text-zinc-400">
+                {{
+                  customThemeSelected
+                    ? selectedTheme
+                    : $t("account.home.customTheme")
+                }}
+              </span>
+              <input
+                type="color"
+                :value="customColour"
+                class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                @input="onCustomColour"
+              />
+            </label>
           </div>
         </div>
 
@@ -153,7 +190,10 @@
           >
             {{ $t("account.home.saveProfile") }}
           </LoadingButton>
-          <span v-if="profileSaveMessage" class="text-sm text-green-400">
+          <span v-if="profileSaveError" class="text-sm text-red-400">
+            {{ profileSaveError }}
+          </span>
+          <span v-else-if="profileSaveMessage" class="text-sm text-green-400">
             {{ profileSaveMessage }}
           </span>
         </div>
@@ -363,7 +403,7 @@
                   />
                   <div class="max-h-48 overflow-y-auto space-y-1">
                     <button
-                      v-for="game in filteredGames"
+                      v-for="game in pickerGames"
                       :key="game.id"
                       :class="[
                         'flex items-center gap-2 w-full p-2 rounded text-left text-sm transition-colors',
@@ -371,7 +411,7 @@
                           ? 'bg-blue-600/20 ring-1 ring-blue-500'
                           : 'hover:bg-zinc-800',
                       ]"
-                      @click="addGameId = game.id"
+                      @click="addGame = game"
                     >
                       <img
                         v-if="game.mIconObjectId"
@@ -382,11 +422,40 @@
                         {{ game.mName }}
                       </span>
                     </button>
+                    <div
+                      v-if="pickerFailed"
+                      class="flex items-center gap-3 p-2 text-sm text-red-400"
+                    >
+                      <span>{{ $t("account.showcase.gamesLoadFailed") }}</span>
+                      <button
+                        class="text-zinc-300 underline hover:text-zinc-100"
+                        @click="loadPickerGames"
+                      >
+                        {{ $t("account.showcase.retry") }}
+                      </button>
+                    </div>
                     <p
-                      v-if="filteredGames.length === 0"
+                      v-else-if="pickerLoading && pickerGames.length === 0"
+                      class="text-sm text-zinc-500 p-2"
+                    >
+                      {{ $t("common.srLoading") }}
+                    </p>
+                    <p
+                      v-else-if="pickerGames.length === 0"
                       class="text-sm text-zinc-500 p-2"
                     >
                       {{ $t("store.search.noResults") }}
+                    </p>
+                    <p
+                      v-else-if="pickerCount > pickerGames.length"
+                      class="text-xs text-zinc-500 p-2"
+                    >
+                      {{
+                        $t("account.showcase.moreGames", {
+                          shown: pickerGames.length,
+                          total: pickerCount,
+                        })
+                      }}
                     </p>
                   </div>
                 </div>
@@ -401,6 +470,20 @@
                     class="text-sm text-zinc-500 p-2"
                   >
                     {{ $t("common.srLoading") }}
+                  </div>
+                  <div
+                    v-else-if="achievementsFailed"
+                    class="flex items-center gap-3 p-2 text-sm text-red-400"
+                  >
+                    <span>{{
+                      $t("account.showcase.achievementsLoadFailed")
+                    }}</span>
+                    <button
+                      class="text-zinc-300 underline hover:text-zinc-100"
+                      @click="loadAchievements"
+                    >
+                      {{ $t("account.showcase.retry") }}
+                    </button>
                   </div>
                   <div v-else class="max-h-48 overflow-y-auto space-y-1">
                     <button
@@ -480,6 +563,7 @@ import {
   TransitionChild,
   TransitionRoot,
 } from "@headlessui/vue";
+import type { Ref } from "vue";
 import { useObject } from "~/composables/objects";
 import { useUser, updateUser } from "~/composables/user";
 import type { ShowcaseType } from "~/prisma/client/enums";
@@ -489,6 +573,13 @@ import {
   untouchedCount,
   type ShowcaseEntry,
 } from "~/composables/showcase-merge";
+import {
+  PROFILE_THEME_PRESETS,
+  isCustomProfileTheme,
+  normalizeProfileTheme,
+  resolveAccentHex,
+  resolveThemeGradient,
+} from "~/server/internal/utils/profile-themes";
 
 const { t } = useI18n();
 useHead({ title: t("account.home.profileSection") });
@@ -503,22 +594,44 @@ const profileSaveMessage = ref("");
 const bannerUploading = ref(false);
 const avatarUploading = ref(false);
 
-const profileThemes = [
-  { id: "default", label: "Default", from: "#1e3a5f", to: "#581c87" },
-  { id: "ocean", label: "Ocean", from: "#0c4a6e", to: "#164e63" },
-  { id: "sunset", label: "Sunset", from: "#9a3412", to: "#831843" },
-  { id: "forest", label: "Forest", from: "#14532d", to: "#1a2e05" },
-  { id: "ember", label: "Ember", from: "#7c2d12", to: "#451a03" },
-  { id: "arctic", label: "Arctic", from: "#0e7490", to: "#1e40af" },
-  { id: "midnight", label: "Midnight", from: "#1e1b4b", to: "#0f172a" },
-  { id: "rose", label: "Rose", from: "#9f1239", to: "#4c0519" },
-];
+const profileSaveError = ref("");
+const avatarError = ref("");
+const bannerError = ref("");
+
+/** The server's reason for a failed $dropFetch, else the error's own text. */
+function errorReason(e: unknown): string {
+  const err = e as {
+    statusMessage?: string;
+    data?: { statusMessage?: string };
+    message?: string;
+  };
+  return (
+    err?.data?.statusMessage ?? err?.statusMessage ?? err?.message ?? String(e)
+  );
+}
+
 const selectedTheme = ref(currentUser.value?.profileTheme ?? "default");
+const customThemeSelected = computed(() =>
+  isCustomProfileTheme(selectedTheme.value),
+);
+const customGradient = computed(() =>
+  resolveThemeGradient(selectedTheme.value),
+);
+const customColour = ref(resolveAccentHex(selectedTheme.value));
+
+function onCustomColour(e: Event) {
+  const hex = normalizeProfileTheme((e.target as HTMLInputElement).value);
+  if (!hex) return;
+  customColour.value = hex;
+  selectedTheme.value = hex;
+}
 
 async function saveProfile() {
   profileSaving.value = true;
   profileSaveMessage.value = "";
+  profileSaveError.value = "";
   try {
+    // Every field is sent as-is: an empty bio is how the bio gets cleared.
     await $dropFetch("/api/v1/user/profile", {
       method: "PATCH",
       body: {
@@ -532,50 +645,95 @@ async function saveProfile() {
     setTimeout(() => {
       profileSaveMessage.value = "";
     }, 3000);
+  } catch (e) {
+    profileSaveError.value = t("account.home.profileSaveFailed", {
+      reason: errorReason(e),
+    });
   } finally {
     profileSaving.value = false;
   }
 }
 
-async function uploadAvatar(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0];
+async function uploadImage(
+  e: Event,
+  path: "/api/v1/user/avatar" | "/api/v1/user/banner",
+  uploading: Ref<boolean>,
+  error: Ref<string>,
+) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
   if (!file) return;
-  avatarUploading.value = true;
+  uploading.value = true;
+  error.value = "";
   try {
     const form = new FormData();
     form.append("file", file);
-    await $dropFetch("/api/v1/user/avatar", { method: "POST", body: form });
+    await $dropFetch(path, { method: "POST", body: form });
     await updateUser();
+  } catch (err) {
+    error.value = t("account.home.uploadFailed", { reason: errorReason(err) });
   } finally {
-    avatarUploading.value = false;
+    uploading.value = false;
+    // Let the same file be picked again after a failure.
+    input.value = "";
   }
 }
 
-async function uploadBanner(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0];
-  if (!file) return;
-  bannerUploading.value = true;
-  try {
-    const form = new FormData();
-    form.append("file", file);
-    await $dropFetch("/api/v1/user/banner", { method: "POST", body: form });
-    await updateUser();
-  } finally {
-    bannerUploading.value = false;
-  }
+function uploadAvatar(e: Event) {
+  return uploadImage(e, "/api/v1/user/avatar", avatarUploading, avatarError);
+}
+
+function uploadBanner(e: Event) {
+  return uploadImage(e, "/api/v1/user/banner", bannerUploading, bannerError);
 }
 
 // ── Shared: games for pickers ──────────────────────────────────────────────
-const allGames = await $dropFetch<{
-  results: Array<{
-    id: string;
-    mName: string;
-    mIconObjectId: string;
-    mCoverObjectId: string;
-  }>;
-}>("/api/v1/store", {
-  query: { sort: "name", order: "asc", limit: "200" },
-}).catch(() => ({ results: [] }));
+// Searched on the server, so every game in the store can be found, not just
+// the first page.
+
+type PickerGame = {
+  id: string;
+  mName: string;
+  mIconObjectId: string;
+  mCoverObjectId: string;
+};
+
+const PICKER_PAGE = 50;
+const pickerGames = ref<PickerGame[]>([]);
+const pickerCount = ref(0);
+const pickerLoading = ref(false);
+const pickerFailed = ref(false);
+let pickerSeq = 0;
+
+async function loadPickerGames() {
+  const q = gameSearch.value.trim();
+  // Newer searches win; an older response arriving late is dropped.
+  const seq = ++pickerSeq;
+  pickerLoading.value = true;
+  pickerFailed.value = false;
+  try {
+    const res = await $dropFetch<{ results: PickerGame[]; count: number }>(
+      "/api/v1/store",
+      {
+        query: {
+          sort: "name",
+          order: "asc",
+          take: String(PICKER_PAGE),
+          ...(q ? { q } : {}),
+        },
+      },
+    );
+    if (seq !== pickerSeq) return;
+    pickerGames.value = res.results ?? [];
+    pickerCount.value = res.count ?? pickerGames.value.length;
+  } catch {
+    if (seq !== pickerSeq) return;
+    pickerGames.value = [];
+    pickerFailed.value = true;
+  } finally {
+    if (seq === pickerSeq) pickerLoading.value = false;
+  }
+}
 
 // ── Showcase ────────────────────────────────────────────────────────────────
 
@@ -639,18 +797,22 @@ function applyStoredShowcase(stored: ShowcaseItem[]) {
 applyStoredShowcase((currentShowcase?.items ?? []) as ShowcaseItem[]);
 
 const gameSearch = ref("");
-const filteredGames = computed(() => {
-  const q = gameSearch.value.toLowerCase();
-  const games = allGames?.results ?? [];
-  if (!q) return games.slice(0, 20);
-  return games.filter((g) => g.mName.toLowerCase().includes(q)).slice(0, 20);
+let gameSearchTimer: ReturnType<typeof setTimeout> | null = null;
+watch(gameSearch, () => {
+  if (gameSearchTimer) clearTimeout(gameSearchTimer);
+  gameSearchTimer = setTimeout(loadPickerGames, 300);
+});
+onBeforeUnmount(() => {
+  if (gameSearchTimer) clearTimeout(gameSearchTimer);
 });
 
 // Add dialog state
 const addDialogOpen = ref(false);
 const addSlotIndex = ref(0);
 const addType = ref<ShowcaseType>("FavoriteGame");
-const addGameId = ref<string | null>(null);
+// The picked game itself, not its id: a new search replaces the list.
+const addGame = ref<PickerGame | null>(null);
+const addGameId = computed(() => addGame.value?.id ?? null);
 const addItemId = ref<string | null>(null);
 
 // Achievement picker
@@ -659,29 +821,37 @@ type AchievementOption = {
   title: string;
   description?: string;
   iconUrl?: string;
+  unlocked?: boolean;
 };
 const gameAchievements = ref<AchievementOption[]>([]);
 const achievementsLoading = ref(false);
+const achievementsFailed = ref(false);
 
-watch(
-  () => [addGameId.value, addType.value] as const,
-  async ([gameId, type]) => {
-    gameAchievements.value = [];
-    addItemId.value = null;
-    if (type !== "Achievement" || !gameId) return;
-    achievementsLoading.value = true;
-    try {
-      const data = await $dropFetch<AchievementOption[]>(
-        `/api/v1/games/${gameId}/achievements`,
-      );
-      gameAchievements.value = data ?? [];
-    } catch {
-      gameAchievements.value = [];
-    } finally {
-      achievementsLoading.value = false;
-    }
-  },
-);
+async function loadAchievements() {
+  const gameId = addGameId.value;
+  gameAchievements.value = [];
+  addItemId.value = null;
+  achievementsFailed.value = false;
+  if (addType.value !== "Achievement" || !gameId) {
+    achievementsLoading.value = false;
+    return;
+  }
+  achievementsLoading.value = true;
+  try {
+    const data = await $dropFetch<AchievementOption[]>(
+      `/api/v1/games/${gameId}/achievements`,
+    );
+    if (addGameId.value !== gameId) return;
+    // Only unlocked ones: the server refuses to showcase anything else.
+    gameAchievements.value = (data ?? []).filter((a) => a.unlocked);
+  } catch {
+    if (addGameId.value === gameId) achievementsFailed.value = true;
+  } finally {
+    if (addGameId.value === gameId) achievementsLoading.value = false;
+  }
+}
+
+watch(() => [addGameId.value, addType.value] as const, loadAchievements);
 
 // The server stores at most MAX_SHOWCASE_ITEMS, including items these slots
 // don't show. Adding past that would only fail on save.
@@ -709,22 +879,24 @@ function openGameAddDialog(idx: number) {
   if (refuseIfFull()) return;
   addSlotIndex.value = idx;
   addType.value = "FavoriteGame";
-  addGameId.value = null;
+  addGame.value = null;
   addItemId.value = null;
   gameSearch.value = "";
   gameAchievements.value = [];
   addDialogOpen.value = true;
+  loadPickerGames();
 }
 
 function openAchievementAddDialog(idx: number) {
   if (refuseIfFull()) return;
   addSlotIndex.value = idx;
   addType.value = "Achievement";
-  addGameId.value = null;
+  addGame.value = null;
   addItemId.value = null;
   gameSearch.value = "";
   gameAchievements.value = [];
   addDialogOpen.value = true;
+  loadPickerGames();
 }
 
 const canAdd = computed(() => {
@@ -736,7 +908,7 @@ const canAdd = computed(() => {
 
 function confirmAdd() {
   if (!canAdd.value) return;
-  const game = allGames?.results?.find((g) => g.id === addGameId.value) ?? null;
+  const game = addGame.value;
   const ach = gameAchievements.value.find((a) => a.id === addItemId.value);
 
   const item: ShowcaseItem = {

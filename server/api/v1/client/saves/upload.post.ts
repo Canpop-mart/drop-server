@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
-import sanitizeFilename from "sanitize-filename";
+import {
+  cloudSaveFilename,
+  cloudSaveFilenameTooLong,
+} from "~/server/internal/cloudsaves/filename";
 import { defineClientEventHandler } from "~/server/internal/clients/event-handler";
 import prisma from "~/server/internal/db/database";
 import {
@@ -12,7 +15,6 @@ import {
 } from "~/server/internal/cloudsaves/revisions";
 
 const MAX_SAVE_BYTES = 50 * 1024 * 1024; // 50MiB — matches bulk-upload
-const MAX_FILENAME_LEN = 255;
 const MAX_UPLOADED_FROM_LEN = 128;
 
 /**
@@ -63,12 +65,15 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
   // Defense-in-depth: filenames are opaque DB keys (never used as filesystem
   // paths) but sanitise anyway so a future code path can't be tricked into
   // path traversal. sanitize-filename strips separators + control chars and
-  // truncates dangerous prefixes; we then cap the length to keep it within
-  // the column constraint and DB index limits.
-  const filename = sanitizeFilename(String(rawFilename)).slice(
-    0,
-    MAX_FILENAME_LEN,
-  );
+  // blanks reserved names. A name over 255 bytes is refused rather than cut,
+  // because a cut name never matches its own row again.
+  if (cloudSaveFilenameTooLong(String(rawFilename))) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Filename too long (max 255 bytes)",
+    });
+  }
+  const filename = cloudSaveFilename(String(rawFilename));
   if (!filename) {
     throw createError({
       statusCode: 400,
@@ -191,6 +196,7 @@ export default defineClientEventHandler(async (h3, { fetchUser }) => {
         // Resurrect tombstoned rows on re-upload (user moved a save back).
         deletedAt: null,
         deletedFrom: null,
+        deletedFromClientId: null,
       },
     });
   }, SAVE_WRITE_TRANSACTION_OPTIONS);

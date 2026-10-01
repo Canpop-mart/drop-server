@@ -20,12 +20,14 @@ export default defineClientEventHandler(async (h3) => {
       mName: true,
       mShortDescription: true,
       mIconObjectId: true,
-      // Latest version's prerequisite mods, for a "Requires: X" hint and the
-      // uninstall-a-dependency warning on the client.
+      // Latest version: its id (the client offers Update when the installed
+      // copy is older) and its prerequisite mods, for a "Requires: X" hint and
+      // the uninstall-a-dependency warning on the client.
       versions: {
         orderBy: { versionIndex: "desc" },
         take: 1,
         select: {
+          versionId: true,
           requiredContent: {
             select: {
               gameId: true,
@@ -45,6 +47,7 @@ export default defineClientEventHandler(async (h3) => {
     mName: mod.mName,
     mShortDescription: mod.mShortDescription,
     mIconObjectId: mod.mIconObjectId,
+    latestVersionId: mod.versions[0]?.versionId ?? null,
     requiredMods: (mod.versions[0]?.requiredContent ?? [])
       .filter((rc) => rc.game.type === GameType.Mod)
       .map((rc) => ({ gameId: rc.gameId, name: rc.game.mName })),

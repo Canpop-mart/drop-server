@@ -160,7 +160,9 @@
             class="shrink-0 size-12 rounded-lg overflow-hidden bg-zinc-700/50 flex items-center justify-center"
           >
             <img
-              v-if="item.achievement?.iconUrl && !achievementIconErrors[item.id]"
+              v-if="
+                item.achievement?.iconUrl && !achievementIconErrors[item.id]
+              "
               :src="item.achievement.iconUrl"
               class="size-full object-cover"
               @error="achievementIconErrors[item.id] = true"
@@ -281,17 +283,7 @@ import {
 import { TrophyIcon } from "@heroicons/vue/24/solid";
 import { useObject } from "~/composables/objects";
 import { useUser } from "~/composables/user";
-
-const THEME_MAP: Record<string, { from: string; to: string }> = {
-  default: { from: "#1e3a5f", to: "#581c87" },
-  ocean: { from: "#0c4a6e", to: "#164e63" },
-  sunset: { from: "#9a3412", to: "#831843" },
-  forest: { from: "#14532d", to: "#1a2e05" },
-  ember: { from: "#7c2d12", to: "#451a03" },
-  arctic: { from: "#0e7490", to: "#1e40af" },
-  midnight: { from: "#1e1b4b", to: "#0f172a" },
-  rose: { from: "#9f1239", to: "#4c0519" },
-};
+import { resolveThemeGradient } from "~/server/internal/utils/profile-themes";
 
 function timeAgo(dateStr: string | Date): string {
   const ms = Date.now() - new Date(dateStr).getTime();
@@ -320,9 +312,7 @@ const profile = (await $dropFetch(`/api/v1/user/${id}`).catch(() => null)) as {
   bannerObjectId?: string;
   profileTheme?: string;
 } | null;
-const themeColors = computed(
-  () => THEME_MAP[profile?.profileTheme ?? "default"] ?? THEME_MAP.default,
-);
+const themeColors = computed(() => resolveThemeGradient(profile?.profileTheme));
 const userStats = await $dropFetch(`/api/v1/user/${id}/stats`).catch(
   () => null,
 );

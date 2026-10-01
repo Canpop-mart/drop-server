@@ -25,19 +25,18 @@ import {
  * Deliberately does NOT age out revisions of live saves. See
  * `gcSaveRevisions` for why.
  *
- * ## Pass 1 is opt-in, and off the daily schedule
+ * ## Pass 1 is opt-in
  *
  * The tombstone purge is the only operation in the cloud-save feature that
- * destroys bytes with no backup, no history and no undo. It has also never
- * run: `gcTombstones` had no call sites before this task, so on the first
- * execution EVERY save the user has ever deleted qualifies at once, and those
- * rows predate CloudSaveRevision so there is nothing to restore them from.
+ * destroys bytes with no backup, no history and no undo. Before this task ran
+ * daily it had never run at all, so on the first execution EVERY save the
+ * user has ever deleted qualifies at once, and those rows predate
+ * CloudSaveRevision so there is nothing to restore them from.
  *
- * So it reports by default. Set `DROP_CLOUD_SAVE_GC=apply` once you have seen
- * the count in the task log and are happy to lose those rows; only then is it
- * reasonable to add `cleanup:cloud-saves` back to `dailyScheduledTasks` in
- * `internal/tasks/index.ts`. Pass 2 always runs — it only ever removes
- * surplus copies of a version, never the live save.
+ * So it reports by default, every day, in the task log. Set
+ * `DROP_CLOUD_SAVE_GC=apply` once you have seen the count and are happy to
+ * lose those rows; from then on the daily run purges. Pass 2 always runs — it
+ * only ever removes surplus copies of a version, never the live save.
  */
 const RETENTION_DAYS = Math.round(
   TOMBSTONE_RETENTION_MS / (24 * 60 * 60 * 1000),

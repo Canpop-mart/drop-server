@@ -153,6 +153,30 @@ class ZeroTierController {
     return member.ipAssignments ?? [];
   }
 
+  /**
+   * Every member node id the controller knows on a network (authorized or
+   * not). zerotier-one answers with an object keyed by member id; an array of
+   * ids is accepted too in case a build answers that way.
+   */
+  async listMemberIds(networkId: string): Promise<string[]> {
+    const res = await this.req<Record<string, unknown> | string[]>(
+      `/controller/network/${networkId}/member`,
+    );
+    const ids = Array.isArray(res) ? res : Object.keys(res ?? {});
+    return ids.filter((id) => /^[0-9a-f]{10}$/.test(id));
+  }
+
+  /** Whether the controller currently has a member authorized. */
+  async isMemberAuthorized(
+    networkId: string,
+    memberId: string,
+  ): Promise<boolean> {
+    const member = await this.req<{ authorized?: boolean }>(
+      `/controller/network/${networkId}/member/${memberId}`,
+    );
+    return member.authorized === true;
+  }
+
   // --- This node's own membership (service API, not the controller API) ---
 
   /**
