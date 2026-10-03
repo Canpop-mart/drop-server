@@ -103,6 +103,7 @@ model Game {
   streamingSessions      StreamingSession[]
   clientInstalls         ClientInstalledGame[]
   compatibilityResults   GameCompatibilityResult[]
+  versionRevisions       GameVersionRevision[]
 
   @@unique([metadataSource, metadataId], name: "metadataKey")
   @@unique([libraryId, libraryPath], name: "libraryKey")
@@ -189,16 +190,25 @@ model GameVersion {
   fileList         String[] // List of all files, for delta updates
   negativeFileList String[] // List of files to remove, for delta updates
 
-  // Persisted FULL (no-delta) sizes in bytes. Immutable once imported, so the
-  // client version-list endpoint reads these columns instead of re-parsing the
-  // manifest on every request — that recompute raced the client's 15s timeout on
-  // a cold cache and made installs flaky. Null on rows imported before this
-  // existed; backfilled lazily the first time a size is computed for the row.
+  // Persisted FULL (no-delta) sizes in bytes. The client version-list endpoint
+  // reads these columns instead of re-parsing the manifest on every request —
+  // that recompute raced the client's 15s timeout on a cold cache and made
+  // installs flaky. Null on rows imported before this existed, and cleared
+  // whenever the manifest is rewritten (gamesize invalidateGame); filled in
+  // again the first time a size is computed for the row.
   installSize  BigInt?
   downloadSize BigInt?
 
   versionIndex Int
   delta        Boolean @default(false)
+
+  // Content revision of this version's files (in-place updates). Starts at 1;
+  // "Publish update" in the admin version editor bumps it after the folder is
+  // edited and re-hashed under the same versionId. The per-file hashes of each
+  // revision live in GameVersionRevision. Rows that existed before revisions
+  // are revision 1; their snapshot is written only when an admin presses
+  // "Record fingerprints" or "Check for changes" on the version.
+  revision Int @default(1)
 
   requiredContent  GameVersion[] @relation(name: "requiredContent")
   requiringContent GameVersion[] @relation(name: "requiredContent")
@@ -214,6 +224,43 @@ model GameVersion {
   // hot query on the client sync path.
   @@index([gameId])
   @@index([gameId, versionIndex(sort: Desc)])
+}
+
+/// Per-file content hashes of one revision of a game version: the ground truth
+/// for "what changed" between two revisions and the baseline a client compares
+/// its install against (GET /api/v1/client/game/version/files).
+///
+/// Deliberately NOT related to GameVersion: a client may still need an old
+/// revision of a version that has since been deleted, so the snapshot survives
+/// the version row. It only goes away with the whole game.
+model GameVersionRevision {
+  id String @id @default(uuid())
+
+  versionId String
+  gameId    String
+  game      Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  revision Int
+
+  /// Array of { path, size, sha256 }, sorted by path. path is relative to the
+  /// version root and equal to the manifest's filename (droplet uses the
+  /// server OS's separator, so a backslash on a Windows-hosted library; clients
+  /// normalise). sha256 is lowercase hex, or "" when it could not be
+  /// established (the folder had already changed before the first snapshot
+  /// was taken; see revisions/hash.ts).
+  files Json
+
+  /// Server-only stat cache, { [path]: [mtimeMs, ctimeMs, size, sha256] }:
+  /// what the server last saw on disk for this version while this revision
+  /// was current (written at hashing time and by "Check for changes"). A file
+  /// whose stamp and size still match is not read again. Never sent to
+  /// clients.
+  fileStats Json @default("{}")
+
+  createdAt DateTime @default(now())
+
+  @@unique([versionId, revision])
+  @@index([gameId])
 }
 
 /// Structured, queryable record of a single completed version import.

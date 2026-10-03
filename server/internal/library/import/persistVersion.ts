@@ -1,7 +1,8 @@
 /**
- * Import phase 5 — persist the version.
+ * Import phase 6 — persist the version.
  *
- * Writes the GameVersion row, clears the game's update-available flag,
+ * Writes the GameVersion row and its revision 1 file snapshot (when the hash
+ * phase produced one), clears the game's update-available flag,
  * drops the consumed UnimportedGameVersion (depot), warms the size
  * cache, fires the completion notification, and writes the structured
  * `ImportReceipt`.
@@ -20,6 +21,9 @@ import notificationSystem from "../../notifications";
 import gameSizeManager from "../../gamesize";
 import { GameType } from "~/prisma/client/enums";
 import { readGoldbergAppId } from "../../goldberg";
+import type { VerifiedSnapshot } from "../revisions/hash";
+import { serializeStatCache } from "../revisions/diff";
+import type { Prisma } from "~/prisma/client/client";
 import type {
   ImportContext,
   ManifestResult,
@@ -37,6 +41,7 @@ export async function persistVersion(
   manifestResult: ManifestResult,
   validation: ManifestValidationResult,
   emulators: EmulatorSetupResult,
+  snapshot: VerifiedSnapshot | null,
   phaseTimings: PersistArgsPhaseTimings,
 ): Promise<PersistResult> {
   const { gameId, metadata, version, logger } = ctx;
@@ -148,7 +153,32 @@ export async function persistVersion(
       logger.info(`${PHASE} Removed consumed depot version row`);
     }
 
-    // ── 4. Warm the size cache (best-effort) ───────────────────────────
+    // ── 4. Revision 1 file snapshot (in-place update baseline) ─────────
+    // Best-effort like the size cache: without it the version still works,
+    // and an admin can record the hashes later ("Record fingerprints").
+    if (snapshot) {
+      try {
+        await prisma.gameVersionRevision.create({
+          data: {
+            versionId: newVersion.versionId,
+            gameId,
+            revision: newVersion.revision,
+            files: snapshot.files as unknown as Prisma.InputJsonValue,
+            fileStats: serializeStatCache(
+              snapshot.cache,
+            ) as unknown as Prisma.InputJsonValue,
+          },
+        });
+        logger.info(
+          `${PHASE} Stored file hashes as revision ${newVersion.revision}`,
+        );
+      } catch (e) {
+        logger.warn(`${PHASE} Storing file hashes failed (non-critical): ${e}`);
+        ctx.warnings.push(`File hashes not stored: ${e}`);
+      }
+    }
+
+    // ── 5. Warm the size cache (best-effort) ───────────────────────────
     try {
       await gameSizeManager.getVersionSize(newVersion.versionId);
       logger.info(`${PHASE} Size cache warmed`);
@@ -157,7 +187,7 @@ export async function persistVersion(
       ctx.warnings.push(`Size cache warm failed: ${e}`);
     }
 
-    // ── 5. Write the structured ImportReceipt ──────────────────────────
+    // ── 6. Write the structured ImportReceipt ──────────────────────────
     await prisma.importReceipt.create({
       data: {
         gameVersion: { connect: { versionId: newVersion.versionId } },
@@ -175,7 +205,7 @@ export async function persistVersion(
         `${validation.chunkCount} chunks, dllSwap=${emulators.dllSwapApplied})`,
     );
 
-    // ── 6. Completion notification ─────────────────────────────────────
+    // ── 7. Completion notification ─────────────────────────────────────
     notificationSystem.systemPush({
       nonce: `version-create-${gameId}-${version.identifier}`,
       title: `'${ctx.gameName}' ('${version.name}') finished importing.`,
@@ -185,12 +215,17 @@ export async function persistVersion(
     });
   } catch (e) {
     // Roll back the GameVersion so a failed post-step doesn't leak a
-    // partial import. Receipt rows cascade-delete with the version.
+    // partial import. Receipt rows cascade-delete with the version; the
+    // revision snapshot has no relation to it (it outlives deleted
+    // versions on purpose), so it is removed here explicitly.
     logger.warn(
       `${PHASE} Post-insert step failed (${e}) — rolling back GameVersion ${newVersion.versionId}`,
     );
     try {
       await prisma.gameVersion.deleteMany({
+        where: { versionId: newVersion.versionId },
+      });
+      await prisma.gameVersionRevision.deleteMany({
         where: { versionId: newVersion.versionId },
       });
     } catch (rollbackErr) {

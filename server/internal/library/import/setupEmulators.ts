@@ -26,12 +26,12 @@
 import { detectCrackLoader, detectEmulator } from "../../gbe";
 import { setupGoldberg } from "../../goldberg";
 import prisma from "~/server/internal/db/database";
-import type { ImportContext, EmulatorSetupResult } from "./types";
+import type { FilePhaseContext, EmulatorSetupResult } from "./types";
 
 const PHASE = "[PHASE:emulator]";
 
 export async function setupEmulators(
-  ctx: ImportContext,
+  ctx: FilePhaseContext,
   versionDir: string | undefined,
 ): Promise<EmulatorSetupResult> {
   const { logger } = ctx;

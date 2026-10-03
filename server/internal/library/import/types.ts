@@ -65,6 +65,27 @@ export interface ImportContext {
   warnings: string[];
 }
 
+/**
+ * The parts of ImportContext the file phases (setupEmulators,
+ * generateManifest, validateManifest) read. "Publish update" builds just this
+ * for an existing version (library/revisions/publish.ts) so it runs the same
+ * phases a fresh import of the folder would.
+ */
+export type FilePhaseContext = Pick<
+  ImportContext,
+  | "gameId"
+  | "version"
+  | "library"
+  | "libraryPath"
+  | "discFolders"
+  | "isMultiDisc"
+  | "autoEmulatorSetup"
+  | "dryRun"
+  | "task"
+  | "logger"
+  | "warnings"
+>;
+
 /** Result of `prepareVersionDirectory`. */
 export interface PreparedDirectory {
   /**

@@ -16,20 +16,20 @@ export type GameSizeBreakdown = {
 };
 
 class GameSizeManager {
-  // Version sizes are effectively immutable (a version's manifest never changes,
-  // and a delta size for a fixed (version, previous) pair is stable too), so
-  // cache them for a long time rather than the default 5 minutes. Full sizes are
-  // also persisted on the GameVersion row (see getVersionSize) and survive
-  // restarts, which the in-memory cache does not.
+  // Version sizes only change when a version's manifest is rewritten (publish
+  // update, manifest regeneration), which calls invalidateGame. Otherwise they
+  // are stable, so cache them for a long time rather than the default 5
+  // minutes. Full sizes are also persisted on the GameVersion row (see
+  // getVersionSize) and survive restarts, which the in-memory cache does not.
   private gameVersionsSizesCache = cacheHandler.createCache<GameVersionSize>(
     "versionSizes",
     7 * 24 * 60 * 60 * 1000, // 7 days
   );
   private gameBreakdownCache =
     cacheHandler.createCache<GameSizeBreakdown>("gameBreakdown");
-  // Disk size is immutable per version (the manifest never changes once
-  // imported), so caching it avoids re-pulling + JSON-parsing the entire
-  // dropletManifest just to read its top-level `.size`.
+  // Disk size only changes with the manifest (see invalidateGame), so caching
+  // it avoids re-pulling + JSON-parsing the entire dropletManifest just to
+  // read its top-level `.size`.
   private gameVersionDiskSizeCache =
     cacheHandler.createCache<number>("versionDiskSizes");
 
@@ -46,8 +46,8 @@ class GameSizeManager {
     versionId: string,
     previousId?: string,
   ): Promise<GameVersionSize | null> {
-    // Full (no-delta) sizes are immutable once imported and are persisted on the
-    // row, which survives restarts and cache expiry. Prefer them so the common
+    // Full (no-delta) sizes are persisted on the row, which survives restarts
+    // and cache expiry; invalidateGame clears them when the manifest changes. Prefer them so the common
     // fresh-install case never re-parses the manifest on the request path (that
     // recompute is what raced the client's 15s timeout and made installs flaky).
     if (!previousId) {
@@ -77,7 +77,7 @@ class GameSizeManager {
         versionId,
       } satisfies GameVersionSize;
       await this.gameVersionsSizesCache.set(key, result);
-      // Backfill the immutable full size onto the row so later lookups skip the
+      // Backfill the full size onto the row so later lookups skip the
       // manifest parse entirely (self-healing for versions imported before these
       // columns existed).
       if (!previousId) {
@@ -97,6 +97,34 @@ class GameSizeManager {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Forgets every cached size of a game's versions, including the persisted
+   * full sizes on the GameVersion rows, after a version's manifest changed.
+   * Delta versions include the files of the versions below them, so the whole
+   * game is cleared. The next getVersionSize recomputes and persists again.
+   */
+  async invalidateGame(gameId: string) {
+    const versions = await prisma.gameVersion.findMany({
+      where: { gameId },
+      select: { versionId: true },
+    });
+    const ids = versions.map((v) => v.versionId);
+    await prisma.gameVersion.updateMany({
+      where: { gameId },
+      data: { installSize: null, downloadSize: null },
+    });
+    for (const key of await this.gameVersionsSizesCache.getKeys()) {
+      if (ids.some((id) => key.includes(id)))
+        await this.gameVersionsSizesCache.remove(key);
+    }
+    for (const id of ids) await this.gameVersionDiskSizeCache.remove(id);
+    // Breakdown keys are "<gameId> <versionId> <versionId>...".
+    for (const key of await this.gameBreakdownCache.getKeys()) {
+      if (key.includes(gameId)) await this.gameBreakdownCache.remove(key);
+    }
+    return ids;
   }
 
   /***

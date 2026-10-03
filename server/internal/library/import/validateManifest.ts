@@ -17,7 +17,7 @@ import path from "path";
 import { dropletInterface } from "../../services/torrential/droplet-interface";
 import {
   ManifestValidationError,
-  type ImportContext,
+  type FilePhaseContext,
   type ManifestResult,
   type ManifestValidationResult,
   type PreparedDirectory,
@@ -49,7 +49,7 @@ function declaredFileSizes(manifest: ManifestResult["manifest"]): {
 }
 
 export async function validateManifest(
-  ctx: ImportContext,
+  ctx: FilePhaseContext,
   prepared: PreparedDirectory,
   manifestResult: ManifestResult,
 ): Promise<ManifestValidationResult> {

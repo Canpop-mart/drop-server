@@ -21,6 +21,10 @@ import { Shescape } from "shescape";
 import { runVersionImport } from "./import";
 import type { ImportContext, ImportReceiptShape } from "./import/types";
 import { launchScore } from "./import/launchScore";
+import { isVersionLocked, withVersionLock } from "./versionLock";
+import { storeRegeneratedManifest } from "./revisions/store";
+import { statFolderFiles } from "./revisions/hash";
+import fs from "node:fs";
 import type {
   Prisma,
   Game,
@@ -1025,6 +1029,11 @@ class LibraryManager {
    * the on-disk files (e.g. admin-triggered GBE DLL swap) so the depot's
    * download checksums match what's actually on disk.
    *
+   * If the version has a revision snapshot and file contents changed, the
+   * new manifest is stored as the next revision, so clients see an update.
+   * Every cache of the old manifest and sizes is cleared either way
+   * (revisions/store.ts storeRegeneratedManifest).
+   *
    * Multi-disc games are currently not supported — the staging symlink
    * tree would need re-validation; callers should re-import instead.
    *
@@ -1079,7 +1088,7 @@ class LibraryManager {
     }
 
     const version = game.versions[0];
-    if (!version.versionPath) {
+    if (!version?.versionPath) {
       taskLogger.warn(
         `Manifest regen: latest version of ${game.mName} has no versionPath`,
       );
@@ -1094,36 +1103,28 @@ class LibraryManager {
       return false;
     }
 
-    // One regeneration per version at a time. A second caller (the
+    // One writer per version at a time (versionLock.ts), shared with
+    // "Publish update" and revision hashing. A second caller (the
     // "Regenerate Manifests" task and a queued per-game regeneration, say)
     // waits for the first and then hashes again, so the stored manifest
     // always reflects the files as they are after the later write.
-    const key = version.versionId;
-    while (this.manifestRegenInFlight.has(key)) {
+    if (isVersionLocked(version.versionId)) {
       taskLogger.info(
-        `Manifest regen: waiting for a regeneration of ${game.mName} already in progress`,
+        `Manifest regen: waiting for other work on ${game.mName} to finish`,
       );
-      await this.manifestRegenInFlight.get(key)!.catch(() => false);
     }
-    const run = this.runManifestRegen(
-      game as typeof game & { libraryId: string },
-      library,
-      version as { versionId: string; versionPath: string },
-      taskLogger,
+    return await withVersionLock(version.versionId, () =>
+      this.runManifestRegen(
+        { id: gameId, mName: game.mName, libraryPath: game.libraryPath },
+        library,
+        version as { versionId: string; versionPath: string },
+        taskLogger,
+      ),
     );
-    this.manifestRegenInFlight.set(key, run);
-    try {
-      return await run;
-    } finally {
-      this.manifestRegenInFlight.delete(key);
-    }
   }
 
-  /** versionId -> the regeneration currently hashing that version. */
-  private manifestRegenInFlight = new Map<string, Promise<boolean>>();
-
   private async runManifestRegen(
-    game: { mName: string; libraryPath: string },
+    game: { id: string; mName: string; libraryPath: string },
     library: LibraryProvider<unknown>,
     version: { versionId: string; versionPath: string },
     taskLogger: { info: (msg: string) => void; warn: (msg: string) => void },
@@ -1133,6 +1134,21 @@ class LibraryManager {
     );
 
     try {
+      // Stat the files before droplet reads them, so the revision store can
+      // prove none changed while the manifest was generated. Only folders
+      // can have revision snapshots; an archive version skips this.
+      const versionDir = library.resolveVersionDir(
+        game.libraryPath,
+        version.versionPath,
+      );
+      let beforeStats: Map<string, [number, number]> | null = null;
+      if (versionDir && fs.statSync(versionDir).isDirectory()) {
+        beforeStats = await statFolderFiles(
+          versionDir,
+          await library.versionReaddir(game.libraryPath, version.versionPath),
+        );
+      }
+
       const manifest = await library.generateDropletManifest(
         game.libraryPath,
         version.versionPath,
@@ -1146,19 +1162,20 @@ class LibraryManager {
         version.versionPath,
       );
 
-      const res = await prisma.gameVersion.updateMany({
-        where: { versionId: version.versionId },
-        data: {
-          dropletManifest: manifest,
-          fileList,
-        },
+      // Stores the manifest, bumps the version's revision if file contents
+      // changed (so clients are offered the change as an update), and clears
+      // the manifest, size and torrential caches that held the old one.
+      // Stores nothing if the files can't be hashed consistently.
+      const stored = await storeRegeneratedManifest({
+        gameId: game.id,
+        versionId: version.versionId,
+        versionDir,
+        manifestJson: manifest,
+        fileList,
+        beforeStats,
+        logger: taskLogger,
       });
-      if (res.count === 0) {
-        taskLogger.warn(
-          `Manifest regen: version ${version.versionId} was not found at update time`,
-        );
-        return false;
-      }
+      if (!stored) return false;
 
       taskLogger.info(`Manifest regenerated for ${game.mName}`);
       return true;

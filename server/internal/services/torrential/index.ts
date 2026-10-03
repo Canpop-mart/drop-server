@@ -194,5 +194,31 @@ export class TorrentialService extends Service<unknown> {
   }
 }
 
+/**
+ * Drops torrential's cached download context (manifest + file backend) for one
+ * version, so the next chunk request reads the version again from the
+ * database. Needed whenever a version's manifest is rewritten under the same
+ * versionId: a cached context keeps serving the old chunk ids until it has
+ * been idle for 10 minutes, which an active download never is.
+ *
+ * Only the built-in depot is reachable here; any extra depot an admin added
+ * keeps its context until it goes idle. Throws when torrential does not
+ * answer OK.
+ */
+export async function invalidateDepotContext(
+  gameId: string,
+  versionId: string,
+): Promise<void> {
+  const res = await fetch(new URL("invalidate", INTERNAL_DEPOT_URL), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ game: gameId, version: versionId }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) {
+    throw new Error(`torrential /invalidate answered HTTP ${res.status}`);
+  }
+}
+
 export const TORRENTIAL_SERVICE = new TorrentialService();
 export default TORRENTIAL_SERVICE;

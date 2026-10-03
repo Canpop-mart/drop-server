@@ -15,6 +15,10 @@ export type DownloadManifestDetails = {
   installSize: number;
   /// Size of download
   downloadSize: number;
+  /// Content revision of the requested version this manifest belongs to
+  /// (GameVersion.revision). A client applying an in-place update refuses a
+  /// manifest whose revision differs from the one it planned against.
+  revision: number;
 };
 
 function convertMap<T>(map: Map<string, T>): { [key: string]: T } {
@@ -22,6 +26,21 @@ function convertMap<T>(map: Map<string, T>): { [key: string]: T } {
 }
 const manifestCache =
   cacheHandler.createCache<DownloadManifestDetails>("manifestCache");
+
+/**
+ * Drops every cached manifest that involves any of these versions, either as
+ * the requested version or as the `previous` of a delta. Call after a
+ * version's stored manifest changes; delta versions pull in the manifests of
+ * the versions below them, so pass every version of the game.
+ */
+export async function invalidateManifestCache(versionIds: string[]) {
+  if (versionIds.length === 0) return;
+  for (const key of await manifestCache.getKeys()) {
+    if (versionIds.some((id) => key.includes(id))) {
+      await manifestCache.remove(key);
+    }
+  }
+}
 
 /**
  *
@@ -46,6 +65,7 @@ export async function createDownloadManifestDetails(
       negativeFileList: true,
       gameId: true,
       dropletManifest: true,
+      revision: true,
     },
   });
   if (!mainVersion)
@@ -151,6 +171,7 @@ export async function createDownloadManifestDetails(
     manifests: convertMap(manifests),
     installSize,
     downloadSize,
+    revision: mainVersion.revision,
   };
   await manifestCache.set(manifestKey, result);
 

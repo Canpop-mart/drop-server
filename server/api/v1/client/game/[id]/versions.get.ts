@@ -14,6 +14,9 @@ type VersionDownloadOption = {
   versionPath?: string | undefined;
   platform: Platform;
   size: GameVersionSize;
+  // Current content revision (in-place updates). Bumped when the admin
+  // publishes changed files under the same versionId.
+  revision: number;
   // Mod placement (type=Mod versions): where the mod overlays + optional launch
   // override, both relative to the base game's install dir.
   modInstallDir: string;
@@ -64,6 +67,7 @@ export default defineClientEventHandler(async (h3) => {
       displayName: true,
       versionPath: true,
       gameId: true,
+      revision: true,
       modInstallDir: true,
       launchOverride: true,
       launches: {
@@ -228,6 +232,7 @@ export default defineClientEventHandler(async (h3) => {
                 platform,
                 requiredContent,
                 size,
+                revision: v.revision,
                 modInstallDir: v.modInstallDir,
                 launchOverride: v.launchOverride,
                 requiredMods,

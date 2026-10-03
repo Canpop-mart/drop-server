@@ -6,7 +6,7 @@
  * then drives the five phases in order, emitting `ctx.markPhase()` for
  * each so the task log is phase-labelled:
  *
- *   directory → emulator → manifest → validate → persist
+ *   directory → emulator → manifest → validate → hash → persist
  *
  * Each phase lives in `server/internal/library/import/<phase>.ts` and is
  * a pure-ish function over the context.
@@ -22,6 +22,7 @@ import { prepareVersionDirectory } from "./prepareVersionDirectory";
 import { setupEmulators } from "./setupEmulators";
 import { generateManifest } from "./generateManifest";
 import { validateManifest } from "./validateManifest";
+import { hashVersionFiles } from "./hashFiles";
 import { persistVersion } from "./persistVersion";
 import type {
   ImportContext,
@@ -99,7 +100,11 @@ export async function runVersionImport(
   phases.enter("validate");
   const validation = await validateManifest(ctx, prepared, manifestResult);
 
-  // ── 5. persist (skipped entirely for dry-run) ────────────────────────
+  // ── 5. hash (revision 1 snapshot; never fails the import) ────────────
+  phases.enter("hash");
+  const snapshot = await hashVersionFiles(ctx, prepared, manifestResult);
+
+  // ── 6. persist (skipped entirely for dry-run) ────────────────────────
   let gameVersionId: string | null = null;
   if (ctx.dryRun) {
     phases.enter("persist");
@@ -115,6 +120,7 @@ export async function runVersionImport(
       manifestResult,
       validation,
       emulators,
+      snapshot,
       // Snapshot of completed spans — persist's own span is appended by
       // close() right after, but the receipt write happens inside
       // persist, so we pass spans-so-far. Good enough: persist timing is

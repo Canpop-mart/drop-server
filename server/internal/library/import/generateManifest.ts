@@ -15,12 +15,16 @@
 import { castManifest } from "../manifest/utils";
 import { dropletInterface } from "../../services/torrential/droplet-interface";
 import prisma from "../../db/database";
-import type { ImportContext, ManifestResult, PreparedDirectory } from "./types";
+import type {
+  FilePhaseContext,
+  ManifestResult,
+  PreparedDirectory,
+} from "./types";
 
 const PHASE = "[PHASE:manifest]";
 
 export async function generateManifest(
-  ctx: ImportContext,
+  ctx: FilePhaseContext,
   prepared: PreparedDirectory,
 ): Promise<ManifestResult> {
   const { version, library, logger, task } = ctx;

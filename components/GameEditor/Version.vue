@@ -114,6 +114,37 @@
                       <span class="text-xs text-zinc-500 mono">{{
                         version.versionId
                       }}</span>
+                      <span class="text-xs text-zinc-500">{{
+                        $t("library.admin.version.changes.revision", {
+                          revision: version.revision,
+                        })
+                      }}</span>
+                      <span
+                        v-if="fingerprintError[version.versionId]"
+                        class="text-xs text-red-400 whitespace-normal max-w-xs"
+                        >{{ fingerprintError[version.versionId] }}</span
+                      >
+                      <span
+                        v-if="fingerprints[version.versionId]"
+                        class="text-xs text-emerald-500"
+                        >{{
+                          $t("library.admin.version.changes.fingerprinted")
+                        }}</span
+                      >
+                      <span
+                        v-else-if="fingerprintTasks[version.versionId]"
+                        class="text-xs text-zinc-400"
+                        >{{
+                          $t("library.admin.version.changes.fingerprinting")
+                        }}</span
+                      >
+                      <button
+                        v-else-if="fingerprintsLoaded"
+                        class="text-xs text-left text-blue-400 hover:text-blue-300"
+                        @click="() => recordFingerprints(version.versionId)"
+                      >
+                        {{ $t("library.admin.version.changes.fingerprint") }}
+                      </button>
                     </div>
                   </td>
                   <td class="px-3 py-4 text-sm whitespace-nowrap text-gray-400">
@@ -154,6 +185,12 @@
                     class="py-4 pr-4 pl-3 text-right text-sm font-medium whitespace-nowrap sm:pr-0 space-x-2"
                   >
                     <button
+                      class="text-emerald-400 hover:text-emerald-300"
+                      @click="() => checkChanges(version.versionId)"
+                    >
+                      {{ $t("library.admin.version.changes.check") }}
+                    </button>
+                    <button
                       class="text-zinc-400 hover:text-zinc-200"
                       @click="() => showReceipt(version.versionId)"
                     >
@@ -185,6 +222,10 @@
         </div>
       </div>
     </div>
+
+    <p class="mt-4 text-xs text-zinc-500 max-w-3xl">
+      {{ $t("library.admin.version.changes.hintBeforeEdit") }}
+    </p>
 
     <!-- Edit panel (shown below table when editing a version) -->
     <div
@@ -466,6 +507,167 @@
       </div>
     </div>
 
+    <!-- Check for changes / Publish update panel -->
+    <div
+      v-if="changesVersionId"
+      class="mt-6 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 p-6"
+    >
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-white font-display">
+          {{ $t("library.admin.version.changes.title") }}
+          <span class="text-zinc-400 text-sm font-normal ml-2 mono">{{
+            changesVersionId
+          }}</span>
+        </h2>
+        <button
+          class="text-zinc-400 hover:text-zinc-200 text-sm"
+          @click="closeChanges"
+        >
+          {{ $t("common.close") }}
+        </button>
+      </div>
+
+      <div class="flex flex-col gap-y-4 max-w-3xl">
+        <div
+          v-if="publishOutcome"
+          class="rounded-md bg-emerald-600/10 p-3 text-sm text-emerald-400"
+        >
+          {{
+            publishOutcome.published
+              ? $t("library.admin.version.changes.published", {
+                  revision: publishOutcome.revision,
+                  added: publishOutcome.totals.addedCount,
+                  changed: publishOutcome.totals.changedCount,
+                  removed: publishOutcome.totals.removedCount,
+                })
+              : $t("library.admin.version.changes.nothingPublished", {
+                  revision: publishOutcome.revision,
+                })
+          }}
+        </div>
+
+        <div v-if="changesStarting" class="text-sm text-zinc-400">
+          {{ $t("library.admin.version.changes.loading") }}
+        </div>
+
+        <!-- The check or publish task being followed -->
+        <div
+          v-if="followedTaskId"
+          class="bg-zinc-800 p-4 rounded-xl flex flex-col gap-y-2"
+        >
+          <p class="text-sm text-zinc-200">
+            {{
+              followedKind === "publishing"
+                ? $t("library.admin.version.changes.publishing")
+                : $t("library.admin.version.changes.checking")
+            }}
+          </p>
+          <div class="h-2 w-full rounded bg-zinc-950 overflow-hidden">
+            <div
+              class="h-full bg-blue-600 transition-all"
+              :style="{ width: `${followedTask?.progress ?? 0}%` }"
+            />
+          </div>
+          <NuxtLink
+            :href="`/admin/task/${followedTaskId}`"
+            class="text-xs text-blue-400 hover:text-blue-300 w-fit"
+          >
+            {{ $t("library.admin.version.changes.viewTask") }}
+          </NuxtLink>
+        </div>
+
+        <div
+          v-if="changesError"
+          class="rounded-md bg-red-600/10 p-4 flex flex-col gap-y-2"
+        >
+          <p class="text-sm font-medium text-red-500">
+            {{ changesError }}
+          </p>
+          <button
+            class="w-fit rounded-md bg-zinc-800 px-3 py-1 text-sm font-semibold text-zinc-100 hover:bg-zinc-700"
+            @click="() => checkChanges(changesVersionId!)"
+          >
+            {{ $t("library.admin.version.changes.retry") }}
+          </button>
+        </div>
+
+        <template v-if="checkResult && !followedTaskId">
+          <p class="text-sm text-zinc-300">
+            {{
+              hasAnyChange
+                ? $t("library.admin.version.changes.comparedWith", {
+                    revision: checkResult.currentRevision,
+                  })
+                : $t("library.admin.version.changes.none", {
+                    revision: checkResult.currentRevision,
+                  })
+            }}
+          </p>
+          <p
+            v-if="checkResult.unknownInCurrent > 0"
+            class="text-xs text-yellow-300"
+          >
+            {{
+              $t("library.admin.version.changes.unknownNote", {
+                count: checkResult.unknownInCurrent,
+              })
+            }}
+          </p>
+          <p v-if="hasEmulatorEntries" class="text-xs text-zinc-400">
+            {{ $t("library.admin.version.changes.emulatorNote") }}
+          </p>
+
+          <div
+            v-for="group in changeGroups"
+            :key="group.key"
+            class="bg-zinc-800 p-4 rounded-xl"
+          >
+            <details>
+              <summary class="cursor-pointer text-sm text-zinc-100">
+                {{ group.label }}
+              </summary>
+              <ul class="mt-2 space-y-1 text-xs text-zinc-400 mono">
+                <li
+                  v-for="file in group.files.slice(0, LIST_LIMIT)"
+                  :key="file.path"
+                  class="flex justify-between gap-x-4"
+                >
+                  <span class="break-all">
+                    {{ file.path }}
+                    <span v-if="file.emulatorSetup" class="text-zinc-500">{{
+                      $t("library.admin.version.changes.emulatorTag")
+                    }}</span>
+                  </span>
+                  <span class="whitespace-nowrap">{{
+                    formatBytes(file.size)
+                  }}</span>
+                </li>
+                <li
+                  v-if="group.files.length > LIST_LIMIT"
+                  class="text-zinc-500"
+                >
+                  {{
+                    $t("library.admin.version.changes.more", {
+                      count: group.files.length - LIST_LIMIT,
+                    })
+                  }}
+                </li>
+              </ul>
+            </details>
+          </div>
+
+          <LoadingButton
+            v-if="hasAnyChange"
+            :loading="publishStarting"
+            class="w-fit"
+            @click="publishChanges"
+          >
+            {{ $t("library.admin.version.changes.publish") }}
+          </LoadingButton>
+        </template>
+      </div>
+    </div>
+
     <!-- Import receipt panel -->
     <div
       v-if="receiptVersionId"
@@ -578,6 +780,12 @@ import { TrashIcon, MinusIcon, PlusIcon } from "@heroicons/vue/20/solid";
 import { XCircleIcon } from "@heroicons/vue/16/solid";
 import { FetchError } from "ofetch";
 import type { AdminFetchGameType } from "~/server/api/v1/admin/game/[id]/index.get";
+import type {
+  VersionCheckResult,
+  VersionPublishOutcome,
+} from "~/server/internal/library/revisions/publish";
+import type { TaskMessage } from "~/server/internal/tasks";
+import { formatBytes } from "~/server/internal/utils/files";
 import type { Platform } from "~/prisma/client/enums";
 import type { VersionGuess } from "~/server/internal/library";
 
@@ -975,6 +1183,7 @@ async function deleteVersion(versionId: string) {
     if (editingVersionId.value === versionId) {
       editingVersionId.value = null;
     }
+    if (changesVersionId.value === versionId) closeChanges();
   } catch (e) {
     createModal(
       ModalType.Notification,
@@ -1035,10 +1244,13 @@ async function showReceipt(versionId: string) {
 }
 
 async function revertVersion(versionId: string) {
+  // revertImportedVersion only deletes the GameVersion row (the import
+  // receipt cascades) and re-scans the library. It does not touch files on
+  // disk or regenerate any manifest.
   const confirmed = window.confirm(
-    "Revert this version? This deletes the GameVersion and its import " +
-      "receipt, restores any .steam_backup DLL on disk, and regenerates " +
-      "the manifest for the remaining latest version.",
+    "Revert this version? This deletes the version and its import receipt " +
+      "so the folder can be imported again. Files on disk are not changed, " +
+      "so a swapped steam_api DLL stays swapped.",
   );
   if (!confirmed) return;
 
@@ -1054,6 +1266,7 @@ async function revertVersion(versionId: string) {
     hasDeleted.value = true;
     if (editingVersionId.value === versionId) editingVersionId.value = null;
     if (receiptVersionId.value === versionId) receiptVersionId.value = null;
+    if (changesVersionId.value === versionId) closeChanges();
   } catch (e) {
     createModal(
       ModalType.Notification,
@@ -1066,4 +1279,293 @@ async function revertVersion(versionId: string) {
     );
   }
 }
+
+// ── Record fingerprints ─────────────────────────────────────────────
+// Versions imported before revisions existed have no file hashes until an
+// admin records them here (nothing does it automatically). Done before the
+// folder is edited, players get exact conflict detection on the next update.
+const fingerprints = ref<Record<string, { revision: number; unknown: number }>>(
+  {},
+);
+const fingerprintsLoaded = ref(false);
+const fingerprintError = ref<Record<string, string | undefined>>({});
+// Task being followed per version, while fingerprints are being recorded.
+const fingerprintTasks = ref<Record<string, string | undefined>>({});
+
+async function loadFingerprints() {
+  try {
+    fingerprints.value = await $dropFetch(
+      "/api/v1/admin/game/:id/versions/fingerprints",
+      { params: { id: game.value.id } },
+    );
+    fingerprintsLoaded.value = true;
+  } catch (e) {
+    // Without the list the button would show for every version; leave it
+    // hidden and say why on the first row's error line instead.
+    fingerprintsLoaded.value = false;
+    const first = game.value.versions[0]?.versionId;
+    if (first)
+      fingerprintError.value = {
+        ...fingerprintError.value,
+        [first]: t("library.admin.version.changes.fingerprintListError", {
+          error: fetchErrorMessage(e),
+        }),
+      };
+  }
+}
+onMounted(loadFingerprints);
+
+async function recordFingerprints(versionId: string) {
+  fingerprintError.value = {
+    ...fingerprintError.value,
+    [versionId]: undefined,
+  };
+  try {
+    const res = await $dropFetch(
+      "/api/v1/admin/game/:id/versions/:versionId/fingerprint",
+      { method: "POST", params: { id: game.value.id, versionId } },
+    );
+    if (res.status === "ready") {
+      await loadFingerprints();
+      return;
+    }
+    fingerprintTasks.value = {
+      ...fingerprintTasks.value,
+      [versionId]: res.taskId,
+    };
+    const task = useTask(res.taskId);
+    const stop = watch(
+      task,
+      (msg) => {
+        if (!msg || (!msg.success && !msg.error)) return;
+        stop();
+        fingerprintTasks.value = {
+          ...fingerprintTasks.value,
+          [versionId]: undefined,
+        };
+        if (msg.error) {
+          fingerprintError.value = {
+            ...fingerprintError.value,
+            [versionId]: t("library.admin.version.changes.fingerprintError", {
+              error: `${msg.error.title}: ${msg.error.description}`,
+            }),
+          };
+        }
+        void loadFingerprints();
+      },
+      { deep: true },
+    );
+  } catch (e) {
+    fingerprintError.value = {
+      ...fingerprintError.value,
+      [versionId]: t("library.admin.version.changes.fingerprintError", {
+        error: fetchErrorMessage(e),
+      }),
+    };
+  }
+}
+
+// ── Check for changes / Publish update ──────────────────────────────
+// Both run as server tasks (server/internal/library/revisions/publish.ts);
+// the panel follows the task, then fetches its result.
+const LIST_LIMIT = 500;
+
+const changesVersionId = ref<string | null>(null);
+const changesStarting = ref(false);
+const changesError = ref<string | undefined>();
+const checkResult = ref<VersionCheckResult | null>(null);
+const publishOutcome = ref<VersionPublishOutcome | null>(null);
+const publishStarting = ref(false);
+
+// The check or publish task being followed, if any.
+const followedTaskId = ref<string | null>(null);
+const followedKind = ref<"checking" | "publishing" | null>(null);
+// Wrapped in an object so the shallowRef holds the task's Ref itself.
+const followedTaskRef = shallowRef<{
+  task: Ref<TaskMessage | undefined>;
+} | null>(null);
+const followedTask = computed(() => followedTaskRef.value?.task.value);
+
+function fetchErrorMessage(e: unknown): string {
+  if (e instanceof FetchError) {
+    return e.data?.statusMessage ?? e.data?.message ?? e.message;
+  }
+  return (e as Error)?.message ?? t("errors.unknown");
+}
+
+const hasAnyChange = computed(() => {
+  const d = checkResult.value;
+  if (!d) return false;
+  return d.added.length + d.changed.length + d.removed.length > 0;
+});
+
+const hasEmulatorEntries = computed(() => {
+  const d = checkResult.value;
+  if (!d) return false;
+  return [...d.added, ...d.changed, ...d.removed].some((f) => f.emulatorSetup);
+});
+
+const changeGroups = computed(() => {
+  const d = checkResult.value;
+  if (!d) return [];
+  return [
+    {
+      key: "added",
+      files: d.added,
+      label: t("library.admin.version.changes.added", {
+        count: d.totals.addedCount,
+        size: formatBytes(d.totals.addedBytes),
+      }),
+    },
+    {
+      key: "changed",
+      files: d.changed,
+      label: t("library.admin.version.changes.changed", {
+        count: d.totals.changedCount,
+        size: formatBytes(d.totals.changedBytes),
+      }),
+    },
+    {
+      key: "removed",
+      files: d.removed,
+      label: t("library.admin.version.changes.removed", {
+        count: d.totals.removedCount,
+        size: formatBytes(d.totals.removedBytes),
+      }),
+    },
+  ];
+});
+
+function stopFollowing() {
+  followedTaskId.value = null;
+  followedKind.value = null;
+  followedTaskRef.value = null;
+}
+
+function follow(taskId: string, kind: "checking" | "publishing") {
+  followedTaskId.value = taskId;
+  followedKind.value = kind;
+  followedTaskRef.value = { task: useTask(taskId) };
+}
+
+function closeChanges() {
+  changesVersionId.value = null;
+  checkResult.value = null;
+  publishOutcome.value = null;
+  changesError.value = undefined;
+  stopFollowing();
+}
+
+/** Starts a check (or attaches to the check or publish already running). */
+async function checkChanges(versionId: string) {
+  if (changesVersionId.value !== versionId) publishOutcome.value = null;
+  changesVersionId.value = versionId;
+  changesStarting.value = true;
+  changesError.value = undefined;
+  checkResult.value = null;
+  stopFollowing();
+  try {
+    const res = await $dropFetch(
+      "/api/v1/admin/game/:id/versions/:versionId/changes",
+      { method: "POST", params: { id: game.value.id, versionId } },
+    );
+    // The admin may have moved on to another version meanwhile.
+    if (changesVersionId.value !== versionId) return;
+    follow(res.taskId, res.status);
+  } catch (e) {
+    if (changesVersionId.value !== versionId) return;
+    changesError.value = t("library.admin.version.changes.error", {
+      error: fetchErrorMessage(e),
+    });
+  } finally {
+    changesStarting.value = false;
+  }
+}
+
+async function publishChanges() {
+  const versionId = changesVersionId.value;
+  const data = checkResult.value;
+  if (!versionId || !data) return;
+  const confirmed = window.confirm(
+    t("library.admin.version.changes.publishConfirm", {
+      revision: data.currentRevision + 1,
+    }),
+  );
+  if (!confirmed) return;
+
+  publishStarting.value = true;
+  publishOutcome.value = null;
+  changesError.value = undefined;
+  try {
+    const res = await $dropFetch(
+      "/api/v1/admin/game/:id/versions/:versionId/publish",
+      { method: "POST", params: { id: game.value.id, versionId } },
+    );
+    if (changesVersionId.value !== versionId) return;
+    checkResult.value = null;
+    follow(res.taskId, "publishing");
+  } catch (e) {
+    changesError.value = t("library.admin.version.changes.error", {
+      error: fetchErrorMessage(e),
+    });
+  } finally {
+    publishStarting.value = false;
+  }
+}
+
+async function onTaskFinished(
+  versionId: string,
+  kind: "checking" | "publishing",
+) {
+  // Both record the version's fingerprints first if it had none.
+  void loadFingerprints();
+  try {
+    if (kind === "checking") {
+      const res = await $dropFetch(
+        "/api/v1/admin/game/:id/versions/:versionId/changes",
+        { params: { id: game.value.id, versionId } },
+      );
+      if (changesVersionId.value === versionId) checkResult.value = res;
+      return;
+    }
+    const outcome = await $dropFetch(
+      "/api/v1/admin/game/:id/versions/:versionId/publish",
+      { params: { id: game.value.id, versionId } },
+    );
+    if (changesVersionId.value === versionId) publishOutcome.value = outcome;
+    // Reload so the version list shows the new revision.
+    const { game: freshGame } = await $dropFetch("/api/v1/admin/game/:id", {
+      params: { id: game.value.id },
+    });
+    game.value = freshGame;
+  } catch (e) {
+    if (changesVersionId.value !== versionId) return;
+    changesError.value = t("library.admin.version.changes.error", {
+      error: fetchErrorMessage(e),
+    });
+  }
+}
+
+watch(
+  followedTask,
+  (task) => {
+    if (!task || !followedTaskId.value || task.id !== followedTaskId.value) {
+      return;
+    }
+    const versionId = changesVersionId.value;
+    const kind = followedKind.value;
+    if (!versionId || !kind) return;
+    if (task.error) {
+      stopFollowing();
+      changesError.value = t("library.admin.version.changes.error", {
+        error: `${task.error.title}: ${task.error.description}`,
+      });
+      return;
+    }
+    if (!task.success) return;
+    stopFollowing();
+    void onTaskFinished(versionId, kind);
+  },
+  { deep: true },
+);
 </script>
