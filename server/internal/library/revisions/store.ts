@@ -116,6 +116,8 @@ export async function writeCurrentSnapshot(args: {
  * snapshot, in one transaction. Clears the persisted sizes (they are
  * recomputed from the new manifest). Throws if the version was deleted or its
  * revision moved on in the meantime.
+ *
+ * `mirrorFolders`, when given, is stored in the same transaction.
  */
 export async function commitNewRevision(args: {
   gameId: string;
@@ -126,6 +128,7 @@ export async function commitNewRevision(args: {
   fileList: string[];
   files: RevisionFile[];
   cache: StatCache;
+  mirrorFolders?: string[];
 }): Promise<number> {
   const next = args.fromRevision + 1;
   await prisma.$transaction(
@@ -138,6 +141,9 @@ export async function commitNewRevision(args: {
           revision: next,
           installSize: null,
           downloadSize: null,
+          ...(args.mirrorFolders !== undefined
+            ? { mirrorFolders: args.mirrorFolders }
+            : {}),
         },
       });
       if (res.count !== 1) {

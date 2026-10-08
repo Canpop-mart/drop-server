@@ -210,6 +210,14 @@ model GameVersion {
   // "Record fingerprints" or "Check for changes" on the version.
   revision Int @default(1)
 
+  // Mirrored folders (in-place updates): folders, relative to the version
+  // root with "/" separators, that players' installs are made to match
+  // exactly on update. The client lists any other file in them for the player
+  // to keep or remove. Set in the admin version editor; the PUT normalizes it
+  // (revisions/mirror.ts). Served to clients by the version files endpoint.
+  // Empty = no mirroring.
+  mirrorFolders String[] @default([])
+
   requiredContent  GameVersion[] @relation(name: "requiredContent")
   requiringContent GameVersion[] @relation(name: "requiredContent")
 

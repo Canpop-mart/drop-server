@@ -23,7 +23,7 @@ import { setupEmulators } from "../import/setupEmulators";
 import { generateManifest } from "../import/generateManifest";
 import { validateManifest } from "../import/validateManifest";
 import type { FilePhaseContext, PreparedDirectory } from "../import/types";
-import { withVersionLock } from "../versionLock";
+import { tryWithVersionLock, withVersionLock } from "../versionLock";
 import { ensureBaseline } from "./baseline";
 import {
   diffRevisionFiles,
@@ -46,7 +46,12 @@ import {
   readSnapshot,
   saveStatCache,
 } from "./store";
-import { RevisionTargetError, resolveRevisionTarget } from "./target";
+import {
+  RevisionTargetError,
+  resolveRevisionTarget,
+  type RevisionTargetRefusal,
+} from "./target";
+import { logger as serverLogger } from "../../logging";
 
 /** POST .../changes and POST .../publish answer with this. */
 export type VersionTaskStarted = {
@@ -518,4 +523,168 @@ async function runPublish(
   markPhase("caches");
   await invalidateVersionCaches(target.gameId, versionId, log);
   progress(100);
+}
+
+/** What saving a version's mirrored folders did (PUT .../versions/:id). */
+export type MirrorFoldersSaved = {
+  /** The list as stored now, in its stored order. */
+  mirrorFolders: string[];
+} & (
+  | {
+      revisionPublished: true;
+      revision: number;
+      /** Set when the revision was stored but clearing caches failed. */
+      warning?: string;
+    }
+  | {
+      revisionPublished: false;
+      /**
+       * "unchanged": the stored list already had these folders; nothing was
+       * written. Otherwise the list was saved without a new revision:
+       * "no-fingerprints" when the current revision has no snapshot,
+       * "unknown-hashes" when its snapshot has files with an unknown hash,
+       * or why "Publish update" would refuse this version.
+       */
+      reason:
+        | "unchanged"
+        | "no-fingerprints"
+        | "unknown-hashes"
+        | RevisionTargetRefusal;
+      /** The refusal's text, for a RevisionTargetRefusal reason. */
+      message?: string;
+    }
+);
+
+/** Same folders, order aside. Both lists are normalized (no duplicates). */
+export function sameMirrorFolders(a: readonly string[], b: readonly string[]) {
+  const set = new Set(a);
+  return a.length === b.length && b.every((f) => set.has(f));
+}
+
+/**
+ * Saves a version's mirrored folders (already normalized). The version PUT
+ * only calls this when they differ from the stored list, so a save that
+ * changes nothing never touches the lock.
+ *
+ * Takes the version lock WITHOUT waiting, and returns `{ busy: true }`,
+ * having written nothing, if a check, publish, fingerprint run, manifest
+ * regeneration or another save holds or waits for it. Inside the lock it
+ * runs `writeOtherFields` first (the request's other fields: whether the
+ * version can be published depends on `delta`), then:
+ *
+ * - the stored list already has these folders (another save got there
+ *   first): nothing more is written ("unchanged");
+ * - "Publish update" would refuse the version (resolveRevisionTarget
+ *   forPublish), or its current revision has no snapshot, or the snapshot
+ *   has files with an unknown hash: the list is saved on its own. Clients
+ *   treat an unknown hash as never matching, so a revision copied from such
+ *   a snapshot would make them re-download or raise conflicts for those
+ *   files. Players get the list with the next update published for the
+ *   version that changes files.
+ * - otherwise: a new revision with exactly the current files is committed
+ *   together with the list (clients only fetch mirrored folders as part of
+ *   an update), and the version's caches are cleared as publish does.
+ *
+ * Throws RevisionTargetError "not-found" (404) if the version is gone.
+ */
+export async function saveMirrorFolders(
+  gameId: string,
+  versionId: string,
+  folders: string[],
+  writeOtherFields: () => Promise<void>,
+): Promise<MirrorFoldersSaved | { busy: true }> {
+  const attempt = await tryWithVersionLock(
+    versionId,
+    async (): Promise<MirrorFoldersSaved> => {
+      await writeOtherFields();
+
+      const version = await prisma.gameVersion.findFirst({
+        where: { versionId, gameId },
+        select: {
+          revision: true,
+          mirrorFolders: true,
+          dropletManifest: true,
+          fileList: true,
+        },
+      });
+      if (!version)
+        throw new RevisionTargetError("not-found", "Version not found.", 404);
+      if (sameMirrorFolders(version.mirrorFolders, folders))
+        return {
+          mirrorFolders: version.mirrorFolders,
+          revisionPublished: false,
+          reason: "unchanged",
+        };
+
+      const saveAlone = async (
+        reason: "no-fingerprints" | "unknown-hashes" | RevisionTargetRefusal,
+        message?: string,
+      ): Promise<MirrorFoldersSaved> => {
+        const res = await prisma.gameVersion.updateMany({
+          where: { versionId, gameId },
+          data: { mirrorFolders: folders },
+        });
+        if (res.count === 0)
+          throw new RevisionTargetError("not-found", "Version not found.", 404);
+        return {
+          mirrorFolders: folders,
+          revisionPublished: false,
+          reason,
+          ...(message !== undefined ? { message } : {}),
+        };
+      };
+
+      try {
+        await resolveRevisionTarget(versionId, gameId, true);
+      } catch (e) {
+        if (!(e instanceof RevisionTargetError) || e.kind === "not-found")
+          throw e;
+        return await saveAlone(e.kind, e.message);
+      }
+
+      const snapshot = await readSnapshot(versionId, version.revision);
+      // The manifest column holds droplet's JSON string (castManifest), which
+      // is stored back unchanged. Every import writes a string; anything else
+      // can't be carried over as is, so it is handled like a version without
+      // fingerprints rather than rewritten.
+      if (!snapshot || typeof version.dropletManifest !== "string")
+        return await saveAlone("no-fingerprints");
+      if (countUnknown(snapshot.files) > 0)
+        return await saveAlone("unknown-hashes");
+
+      const revision = await commitNewRevision({
+        gameId,
+        versionId,
+        fromRevision: version.revision,
+        manifestJson: version.dropletManifest,
+        fileList: version.fileList,
+        files: snapshot.files,
+        cache: snapshot.cache,
+        mirrorFolders: folders,
+      });
+      // A check result names the old revision; publish drops it the same way.
+      checkResults.delete(versionId);
+      serverLogger.info(
+        `[REVISIONS] Mirrored folders of version ${versionId} changed: published revision ${revision} with the same files`,
+      );
+      try {
+        await invalidateVersionCaches(gameId, versionId, serverLogger);
+      } catch (e) {
+        const warning = `Published revision ${revision}, but clearing this version's cached data failed: ${e}`;
+        serverLogger.warn(`[REVISIONS] ${warning}`);
+        return {
+          mirrorFolders: folders,
+          revisionPublished: true,
+          revision,
+          warning,
+        };
+      }
+      return {
+        mirrorFolders: folders,
+        revisionPublished: true,
+        revision,
+      };
+    },
+  );
+  return attempt.acquired ? attempt.value : { busy: true };
 }

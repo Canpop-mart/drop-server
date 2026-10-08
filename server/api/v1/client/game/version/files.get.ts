@@ -13,7 +13,12 @@ const Query = type({
  *
  * The per-file hashes of one revision of a version, the baseline and target
  * of a client's in-place update:
- *   { versionId, revision, files: [{ path, size, sha256 }] }
+ *   { versionId, revision, files: [{ path, size, sha256 }], mirrorFolders }
+ *
+ * `mirrorFolders` is the version's CURRENT setting whichever revision was
+ * asked for (GameVersion.mirrorFolders, normalized when an admin saves it),
+ * and [] once the version row is deleted. Clients use the value from their
+ * target fetch.
  *
  * - `revision` omitted: the version's current revision.
  * - `revision=earliest`: the lowest revision stored for the version.
@@ -30,12 +35,13 @@ export default defineClientEventHandler(async (h3) => {
   if (query instanceof ArkErrors)
     throw createError({ statusCode: 400, statusMessage: query.summary });
 
+  const version = await prisma.gameVersion.findUnique({
+    where: { versionId: query.version },
+    select: { revision: true, mirrorFolders: true },
+  });
+
   let which: number | "earliest";
   if (query.revision === undefined) {
-    const version = await prisma.gameVersion.findUnique({
-      where: { versionId: query.version },
-      select: { revision: true },
-    });
     if (!version)
       throw createError({
         statusCode: 404,
@@ -64,5 +70,6 @@ export default defineClientEventHandler(async (h3) => {
     versionId: snapshot.versionId,
     revision: snapshot.revision,
     files: snapshot.files,
+    mirrorFolders: version?.mirrorFolders ?? [],
   };
 });

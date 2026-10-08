@@ -120,6 +120,15 @@
                         })
                       }}</span>
                       <span
+                        v-if="version.mirrorFolders?.length"
+                        class="text-xs text-zinc-500"
+                        >{{
+                          $t("library.admin.version.mirror.count", {
+                            count: version.mirrorFolders.length,
+                          })
+                        }}</span
+                      >
+                      <span
                         v-if="fingerprintError[version.versionId]"
                         class="text-xs text-red-400 whitespace-normal max-w-xs"
                         >{{ fingerprintError[version.versionId] }}</span
@@ -225,6 +234,19 @@
 
     <p class="mt-4 text-xs text-zinc-500 max-w-3xl">
       {{ $t("library.admin.version.changes.hintBeforeEdit") }}
+    </p>
+
+    <p
+      v-if="mirrorOutcome"
+      :class="[
+        'mt-2 text-sm max-w-3xl',
+        mirrorOutcome.published ? 'text-emerald-400' : 'text-yellow-300',
+      ]"
+    >
+      {{ mirrorOutcome.text }}
+      <span v-if="mirrorOutcome.detail" class="block text-xs text-zinc-400">{{
+        mirrorOutcome.detail
+      }}</span>
     </p>
 
     <!-- Edit panel (shown below table when editing a version) -->
@@ -478,6 +500,82 @@
             />
           </Switch>
         </SwitchGroup>
+
+        <!-- Mirrored folders -->
+        <div class="bg-zinc-800 p-4 rounded-xl flex flex-col gap-y-2">
+          <label
+            for="mirror-folder-input"
+            class="block text-sm font-medium leading-6 text-zinc-100"
+            >{{ $t("library.admin.version.mirror.title") }}</label
+          >
+          <p class="text-zinc-400 text-xs">
+            {{ $t("library.admin.version.mirror.desc") }}
+          </p>
+          <ul
+            v-if="editForm.mirrorFolders.length > 0"
+            class="divide-y divide-zinc-700"
+          >
+            <li
+              v-for="folder in editForm.mirrorFolders"
+              :key="folder"
+              class="py-1.5 flex items-center justify-between gap-x-2"
+            >
+              <span class="text-sm text-zinc-200 mono break-all"
+                >{{ folder }}
+                <span
+                  v-if="isMirrorFolderUnknown(folder)"
+                  class="text-xs text-yellow-300 font-sans"
+                  >{{ $t("library.admin.version.mirror.notInFiles") }}</span
+                ></span
+              >
+              <button
+                type="button"
+                class="transition rounded p-1 bg-zinc-900/30 group hover:bg-red-600/30"
+                :title="$t('common.remove')"
+                @click="() => removeMirrorFolder(folder)"
+              >
+                <TrashIcon
+                  class="transition size-5 text-zinc-700 group-hover:text-red-700"
+                />
+              </button>
+            </li>
+          </ul>
+          <span
+            v-else
+            class="text-sm text-zinc-700 uppercase font-display font-bold"
+          >
+            {{ $t("library.admin.version.mirror.none") }}
+          </span>
+          <div class="flex items-center gap-x-2">
+            <input
+              id="mirror-folder-input"
+              v-model="mirrorInput"
+              type="text"
+              list="mirror-folder-suggestions"
+              class="min-w-48 block w-full rounded-md bg-zinc-950 px-3 py-1.5 text-white outline-1 -outline-offset-1 outline-zinc-800 placeholder:text-zinc-500 focus:outline-1 focus:-outline-offset-1 focus:outline-blue-500 sm:text-sm/6 mono"
+              :placeholder="$t('library.admin.version.mirror.placeholder')"
+              @keydown.enter.prevent="addMirrorFolder"
+            />
+            <datalist id="mirror-folder-suggestions">
+              <option
+                v-for="folder in mirrorSuggestions"
+                :key="folder"
+                :value="folder"
+              />
+            </datalist>
+            <LoadingButton
+              :loading="false"
+              :disabled="mirrorInput.trim() === ''"
+              class="w-fit"
+              @click="addMirrorFolder"
+            >
+              {{ $t("common.add") }}
+            </LoadingButton>
+          </div>
+          <p v-if="mirrorMessage" class="text-xs text-yellow-300">
+            {{ mirrorMessage }}
+          </p>
+        </div>
 
         <!-- Save / Cancel buttons -->
         <div class="flex items-center gap-x-3 justify-end">
@@ -781,6 +879,7 @@ import { XCircleIcon } from "@heroicons/vue/16/solid";
 import { FetchError } from "ofetch";
 import type { AdminFetchGameType } from "~/server/api/v1/admin/game/[id]/index.get";
 import type {
+  MirrorFoldersSaved,
   VersionCheckResult,
   VersionPublishOutcome,
 } from "~/server/internal/library/revisions/publish";
@@ -788,6 +887,13 @@ import type { TaskMessage } from "~/server/internal/tasks";
 import { formatBytes } from "~/server/internal/utils/files";
 import type { Platform } from "~/prisma/client/enums";
 import type { VersionGuess } from "~/server/internal/library";
+import {
+  foldersFromFileList,
+  normalizeMirrorFolders,
+  MIRROR_FOLDER_MAX_LENGTH,
+  MIRROR_FOLDERS_MAX,
+  type MirrorFolderProblem,
+} from "~/server/internal/library/revisions/mirror";
 
 const props = defineProps<{ unimportedVersions: string[] }>();
 
@@ -940,12 +1046,14 @@ const editForm = ref<{
   delta: boolean;
   launches: EditLaunchForm[];
   setups: EditSetupForm[];
+  mirrorFolders: string[];
 }>({
   displayName: "",
   onlySetup: false,
   delta: false,
   launches: [],
   setups: [],
+  mirrorFolders: [],
 });
 
 const editVersionGuesses = computed<VersionGuess[]>(() => {
@@ -959,15 +1067,152 @@ const editVersionGuesses = computed<VersionGuess[]>(() => {
   );
 });
 
+// ── Mirrored folders ────────────────────────────────────────────────
+// Saved with the version's other metadata; the PUT replaces the whole list
+// and normalizes it the same way addMirrorFolder does here.
+const mirrorInput = ref("");
+const mirrorMessage = ref<string | undefined>();
+// What the last save did with a changed list (shown under the table, since
+// the edit panel closes on save).
+type MirrorOutcome = { published: boolean; text: string; detail?: string };
+const mirrorOutcome = ref<MirrorOutcome | null>(null);
+
+function mirrorOutcomeText(saved: MirrorFoldersSaved): MirrorOutcome | null {
+  if (saved.revisionPublished)
+    return {
+      published: true,
+      text: t("library.admin.version.mirror.published", {
+        revision: saved.revision,
+      }),
+      // Server text: the revision is stored, but a cache clear failed.
+      detail: saved.warning,
+    };
+  if (saved.reason === "unchanged") return null;
+  // Saved without a new revision (no fingerprints, unknown hashes, or a
+  // version publish refuses); the server's refusal text says why, if any.
+  return {
+    published: false,
+    text: t("library.admin.version.mirror.savedNoRevision"),
+    detail: saved.message,
+  };
+}
+
+const editVersionFolders = computed<string[]>(() => {
+  if (!editingVersionId.value) return [];
+  const version = game.value.versions.find(
+    (v) => v.versionId === editingVersionId.value,
+  );
+  if (!version || !("fileList" in version)) return [];
+  return foldersFromFileList(
+    (version as VersionType & { fileList: string[] }).fileList ?? [],
+  );
+});
+
+const editVersionFolderSet = computed(() => new Set(editVersionFolders.value));
+
+/**
+ * True when the version's file list is known and has no folder spelled
+ * exactly `folder`: likely a typo or a case the server couldn't fix, since
+ * mirroring a folder the version doesn't ship only asks players about their
+ * own files there. Exact on purpose: Linux clients compare case-sensitively.
+ */
+function isMirrorFolderUnknown(folder: string) {
+  return (
+    editVersionFolderSet.value.size > 0 &&
+    !editVersionFolderSet.value.has(folder)
+  );
+}
+
+const MIRROR_SUGGESTION_LIMIT = 50;
+const mirrorSuggestions = computed<string[]>(() => {
+  const typed = mirrorInput.value.trim().replace(/\\/g, "/").toLowerCase();
+  const chosen = new Set(
+    editForm.value.mirrorFolders.map((f) => f.toLowerCase()),
+  );
+  return editVersionFolders.value
+    .filter((f) => {
+      const lower = f.toLowerCase();
+      return !chosen.has(lower) && lower.includes(typed);
+    })
+    .slice(0, MIRROR_SUGGESTION_LIMIT);
+});
+
+function mirrorProblemText(problem: MirrorFolderProblem, folder: string) {
+  switch (problem) {
+    case "empty":
+      return t("library.admin.version.mirror.errorEmpty", { folder });
+    case "dot":
+      return t("library.admin.version.mirror.errorDot", { folder });
+    case "trailing":
+      return t("library.admin.version.mirror.errorTrailing", { folder });
+    case "reserved":
+      return t("library.admin.version.mirror.errorReserved", { folder });
+    case "tooLong":
+      return t("library.admin.version.mirror.errorTooLong", {
+        max: MIRROR_FOLDER_MAX_LENGTH,
+      });
+    case "tooMany":
+      return t("library.admin.version.mirror.errorTooMany", {
+        max: MIRROR_FOLDERS_MAX,
+      });
+    case "absolute":
+      return t("library.admin.version.mirror.errorAbsolute", { folder });
+    case "drive":
+      return t("library.admin.version.mirror.errorDrive", { folder });
+    case "invalid":
+      return t("library.admin.version.mirror.errorInvalid", { folder });
+  }
+}
+
+function addMirrorFolder() {
+  const entry = mirrorInput.value;
+  if (entry.trim() === "") return;
+  // Same rules as the PUT, including the case fix from the file list.
+  const result = normalizeMirrorFolders(
+    [...editForm.value.mirrorFolders, entry],
+    editVersionFolders.value,
+  );
+  if (!result.ok) {
+    mirrorMessage.value = mirrorProblemText(
+      result.error.problem,
+      result.error.entry,
+    );
+    return;
+  }
+  editForm.value.mirrorFolders = result.folders;
+  mirrorInput.value = "";
+  // The list was normalized when it was saved or added to, so whatever is
+  // left out now is normally either the new entry (covered by an existing
+  // one) or existing entries inside the new one, all with the same
+  // coveredBy. The message names the first coveredBy only.
+  mirrorMessage.value = result.dropped.length
+    ? t("library.admin.version.mirror.covered", {
+        folders: result.dropped.map((d) => d.entry).join(", "),
+        parent: result.dropped[0].coveredBy,
+      })
+    : undefined;
+}
+
+function removeMirrorFolder(folder: string) {
+  editForm.value.mirrorFolders = editForm.value.mirrorFolders.filter(
+    (f) => f !== folder,
+  );
+  mirrorMessage.value = undefined;
+}
+
 function startEditing(version: VersionType) {
   editingVersionId.value = version.versionId;
   editError.value = undefined;
+  mirrorInput.value = "";
+  mirrorMessage.value = undefined;
+  mirrorOutcome.value = null;
 
   // Populate form from current version data
   editForm.value = {
     displayName: version.displayName ?? "",
     onlySetup: version.onlySetup,
     delta: version.delta,
+    mirrorFolders: [...(version.mirrorFolders ?? [])],
     setups: version.setups.map((s) => ({
       launch: s.command,
       platform: s.platform,
@@ -992,6 +1237,11 @@ function cancelEditing() {
 
 async function saveEditing() {
   if (!editingVersionId.value) return;
+  // A folder typed but not added yet is saved too, rather than dropped.
+  if (mirrorInput.value.trim() !== "") {
+    addMirrorFolder();
+    if (mirrorInput.value.trim() !== "") return;
+  }
   editSaving.value = true;
   editError.value = undefined;
 
@@ -999,15 +1249,25 @@ async function saveEditing() {
   const gameId = game.value.id;
 
   try {
-    // 1. Update metadata
-    await $fetch(`/api/v1/admin/game/${gameId}/versions/${versionId}`, {
-      method: "PUT",
-      body: {
-        displayName: editForm.value.displayName || undefined,
-        onlySetup: editForm.value.onlySetup,
-        delta: editForm.value.delta,
+    // 1. Update metadata. A changed mirrored-folder list may also publish
+    //    a new revision; say what happened.
+    const saved = await $fetch<Partial<MirrorFoldersSaved>>(
+      `/api/v1/admin/game/${gameId}/versions/${versionId}`,
+      {
+        method: "PUT",
+        body: {
+          displayName: editForm.value.displayName || undefined,
+          onlySetup: editForm.value.onlySetup,
+          delta: editForm.value.delta,
+          mirrorFolders: editForm.value.mirrorFolders,
+        },
       },
-    });
+    );
+    mirrorOutcome.value =
+      saved.revisionPublished !== undefined
+        ? mirrorOutcomeText(saved as MirrorFoldersSaved)
+        : null;
+    if (saved.revisionPublished) void loadFingerprints();
 
     // 2. Update setups
     await $fetch(`/api/v1/admin/game/${gameId}/versions/${versionId}/setups`, {
